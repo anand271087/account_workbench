@@ -1,0 +1,53 @@
+name: web-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/web-ci.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter @beroe/web lint
+
+      - name: Type check
+        run: pnpm --filter @beroe/web type-check
+
+      - name: Test
+        run: pnpm --filter @beroe/web test
+
+      - name: Build
+        run: pnpm --filter @beroe/web build
+        env:
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder
+          VITE_API_BASE_URL: http://localhost:8000
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
+        continue-on-error: false

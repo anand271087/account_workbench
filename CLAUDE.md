@@ -1,0 +1,257 @@
+# Beroe AWB — Build Log
+
+> Living context for any Claude Code session. Updated at the end of every milestone. Source of truth for "what's built, what's next, what we decided."
+
+---
+
+## Project at a glance
+
+- **Repo:** beroe-awb (monorepo)
+- **Hosts:** Frontend → Vercel · Backend → Render · DB/Auth/Storage → Supabase
+- **Tech:** React + Vite + TS + Tailwind + shadcn/ui (web) · FastAPI + Python 3.11 + SQLAlchemy + Pydantic v2 (api) · Supabase Postgres + RLS · Anthropic Claude · Celery + Redis
+- **Sprint scope (frozen):** F01 (Auth), F02 (RBAC), AK01 (Account List), AK02 (Account Profile shell), AK03 (Pre-Sales & Solutioning: Engagement Info + Client Contacts + Documents)
+- **Build plan:** `~/.claude/plans/i-want-to-build-memoized-pie.md`
+- **Source of truth — BRD:** `/Users/anandkaliappan/Desktop/Beroe/BRD/Account_Kit_Requirements_Reviewed_05072026.docx`
+- **Source of truth — Roles & Access:** `/Users/anandkaliappan/Desktop/Beroe/BRD/Roles_Access_Matrix_Reviewed_05072026.xlsx` (overrides BRD §3.2 narrative when they conflict)
+- **Source of truth — Tech stack:** `/Users/anandkaliappan/Desktop/Beroe/BRD/Tech_Stack_and_Environment__Reviewed_05072026.docx`
+- **Visual reference:** `prototype/beroe_awb_v20.html` (read-only — DO NOT modify)
+
+---
+
+## Conventions
+
+### Code style
+- **Python:** ruff (formatter + linter). Line length 100. Type hints required.
+- **TypeScript:** prettier + eslint with `@typescript-eslint`. Strict mode on. No `any` without comment justification.
+- **Imports:** absolute paths via `@/` alias (web) and full module paths (api).
+- **No comments** unless explaining a non-obvious WHY (constraint, invariant, workaround).
+
+### Branch & commit
+- Branches: `feat/M<n>-<short>`, `fix/<short>`, `docs/<short>`, `chore/<short>`.
+- Commits: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`). One logical change per commit.
+- PRs require: ✅ CI green, ✅ FUNCTIONAL.md + TECHNICAL.md updated, ✅ OWASP checklist signed off.
+
+### Local dev
+```bash
+pnpm install
+pnpm docker:up    # Postgres + Redis (local)
+pnpm dev          # web + api + worker
+```
+
+### Adding a feature
+1. Create branch `feat/<id>-<short>`.
+2. Create folder `docs/features/<id>/` with empty `FUNCTIONAL.md` + `TECHNICAL.md`.
+3. Build feature.
+4. Fill both docs.
+5. Tick OWASP checklist.
+6. Open PR; reference BRD section number in description.
+7. Update CLAUDE.md (move from 🚧 to ✅, log decisions).
+
+---
+
+## Architecture summary
+
+Two-app monorepo with a shared types package. Frontend uses Supabase JS client only for auth (obtaining JWT) and direct Storage URLs; all business logic goes through FastAPI. FastAPI verifies JWT (HS256, no DB hop), enforces RBAC via decorator + RLS at DB level (defense-in-depth). Long-running AI tasks dispatched to Celery workers (Redis-backed). Audit log written automatically by SQLAlchemy event listeners on every UPDATE/DELETE.
+
+See [`docs/architecture/overview.md`](./docs/architecture/overview.md) for the diagram + data flow.
+
+---
+
+## Current state
+
+### ✅ Built
+- **M9 — Admin: Account creation + User management (2026-05-08)** ([FUNC](./docs/features/M9-admin/FUNCTIONAL.md) · [TECH](./docs/features/M9-admin/TECHNICAL.md))
+  - **Backend:**
+    - `POST /api/v1/accounts` — admin/cs_director/vp_csm; `_slugify` + `_unique_slug` (`-2`/`-3` on collision); CSM-role validation; uses existing audit listener
+    - `POST /api/v1/users` — admin invites via Supabase Auth `invite_user_by_email`; mirrors into `public.users` with `status='pending'`, `invited_at`, `invited_by`
+    - `PATCH /api/v1/users/:id` — admin edits role/team/full_name; **self-demote guard**; calls `invalidate_user_cache(id)` so the 60s perf cache doesn't paper over a role change
+    - `DELETE /api/v1/users/:id` — soft-deactivate; **self-deactivate guard**
+    - `POST /api/v1/users/:id/resend-invite` — re-trigger email (only when status=pending)
+    - `0015_users_invite_status.sql` — `user_status` ENUM (`pending`/`active`/`deactivated`) + `invited_at`/`invited_by` columns
+  - **Frontend:**
+    - AK01 `+ New account` CTA + `CreateAccountModal` — required fields surfaced, optional under "Add more details" toggle, CSM dropdown filtered to csm+cs_team_manager, on save → `navigate('/accounts/:id/overview')`
+    - `/admin/users` page — table + role filter + show-deactivated toggle + Invite/Edit/Deactivate/Resend actions
+    - Sidebar Admin section (admin-only); active-route highlight on Accounts + Users
+    - `RequireAdmin` route guard wired into `App.tsx`
+  - **Phase-2 SSO compatibility:** the admin user-management UI doesn't change when SSO replaces the password step. Email is the link key; SSO login matches to `public.users` row pre-provisioned by admin and flips status `pending → active` automatically.
+  - **Tests:** 10 new pytest cases (97 total) — admin/non-admin RBAC, slug-collision, self-demote/deactivate guards, invite happy path with real Supabase `admin.create_user` stub
+- **BRD audit pass — five M-prime milestones (2026-05-08)** (driven by gap audit; closes critical Sprint-1 gaps before sign-off)
+  - **M6.5 — AK03.b Contacts schema realigned to BRD table 12** (`0011_contacts_brd_realign.sql`):
+    new ENUMs `contact_function`, `contact_seniority`, `contact_decision_power`; `notes` text (≤500); name ≥3 chars; per-account email uniqueness via `ux_client_contacts_account_email`. Backfilled from legacy `role`/`influence` then dropped them. `is_spoc`/`is_sponsor` retained for SPOC-pinned UX.
+  - **M7.1 — Document AI-tag lifecycle + aggregate risks section** (`0012_documents_ai_edited.sql`):
+    `documents.ai_edited` + `ai_edited_by` + `ai_edited_at`. New `PATCH /api/v1/documents/:id/summary` flips the flag; rerun-ai resets it. UI shows **AI-generated** vs **AI-assisted** pill with edit-summary inline. Aggregate Sales Discovery Summary prompt restructured to "Narrative / Decisions / Action items / Risks & concerns" (BRD §4.3.c logic).
+  - **M2.5 — F01 lockout + forgot-password** (`0013_login_attempts.sql`):
+    `login_attempts` table; new endpoints `POST /auth/login-status` + `/auth/login-record-failure`. 5 fails / 15 min window enforced server-side (BRD AC-3). Login UI: counter, "Forgot password?" link, 30-min reset flow via Supabase + new `/reset-password` page (BRD AC-4).
+  - **M3.5 — AK01 enhancements**:
+    `?renewal_within_days` filter, page-size picker (25/50/100), `/accounts/export.csv` (CSV stream, ≤10k rows, respects filters), `POST /accounts/bulk/reassign-owner`, search extended to CSM email + primary contact name. UI: bulk-select column + bulk reassign modal + CSV download button.
+  - **M7.5 — AK03.d Solutioning / VPD structured fields + Handover action** (`0014_solutioning.sql`):
+    `account_solutioning` (proposed_solution / engagement_type / engagement_duration_months / value_themes[] / value_definition / estimated_value_musd / `ai_extracted_*` / `ai_edited`). New `engagement_type` ENUM. `accounts.handed_off_to_solutioning` + `_at` + `_by` flags. New routes `GET/PATCH /accounts/:id/solutioning` + `POST /accounts/:id/handover-to-solutioning`. Worker: VPD uploads run `extract_vpd_fields()` (Claude + stub fallback) and write candidate values; never overwrites user-edited fields. Frontend: new `SolutioningTab` with AI-tag pill + value-themes chips + sticky save bar; "Hand over to Solutioning" CTA on Pre-Sales tab. AK02 sub-nav now shows Overview / Pre-Sales / Contacts / Documents / **Solutioning** / Value Def / Goals.
+  - **Cross-cutting**:
+    - 403 → `/access-denied` redirect from `lib/api.ts`; AccessDenied page reads `?from=` + `?detail=`.
+    - Per-user/day Claude rate-limit (matrix Q5) — `services/ai_quota.py`, in-memory counter, wired into `/ai/quality-check` + document re-runs. 200 calls/UTC-day default.
+    - Documents tab: drag-drop multi-file upload, rerun-AI confirmation, inline summary edit.
+    - Sortable Client Contacts columns (`?sort_by=name|title|function|seniority|decision_power|email|created_at`).
+    - Prototype HTML copied into `prototype/beroe_awb_v20.html` (was empty dir) + `prototype/README.md`.
+    - Value Definition + Goals & Initiatives placeholder tabs (BRD §4.2 sub-nav completion).
+  - **Tests:** 87/87 green (no test count change — schema migration didn't break the existing suite; engagement audit test made re-run-safe with a per-run suffix)
+
+- **M7 — AK03.c Documents + Celery AI pipeline** ([FUNC](./docs/features/AK03c-documents/FUNCTIONAL.md) · [TECH](./docs/features/AK03c-documents/TECHNICAL.md))
+  - `Document`, `Job`, `AccountDiscoverySummary` ORMs (`apps/api/app/models/document.py`) + Pydantic schemas (`schemas/document.py`)
+  - 7 endpoints across 3 routers (`apps/api/app/routes/documents.py`):
+    - `GET /api/v1/accounts/:id/documents` (with `?include_deleted` admin-only + optional `?kind` filter)
+    - `POST /api/v1/accounts/:id/documents` — multipart upload, hash-dedup, kind-aware RBAC, returns 202 + job_id
+    - `GET /api/v1/documents/:id` + `/download-url` (5-min signed)
+    - `POST /api/v1/documents/:id/rerun-ai`
+    - `DELETE /api/v1/documents/:id` (soft)
+    - `GET /api/v1/accounts/:id/discovery-summary`
+    - `GET /api/v1/jobs/:id`
+  - **Storage** (`services/files.py`): Supabase Storage helpers via service-role key (RLS-bypassing). Naming: `<account_id>/<doc_id>__<sanitised>`. Buckets `meeting_records`, `vpd`, `contracts` created in `0010_storage_buckets.sql` with RLS = service-role + admin only
+  - **Extract** (`services/extract.py`): `.docx` (python-docx, paragraphs + tables), `.pdf` (pypdf, page-by-page), `.vtt` (strips cues + timestamps), `.txt` (utf-8). Audio/video raises explicit "v1.1" error
+  - **AI** (`services/claude.py`): `summarise_document(text, kind)` → 200-word summary + entities (people, decisions, action_items, dates) with **stub fallback** when key isn't real, 24h TTL cache, one retry on transient errors. `aggregate_account_summary(per_doc_summaries)` → ≤300-word account-level rollup. Both stay within budget — Celery task never re-raises so retries don't bill the API repeatedly
+  - **Celery** (`workers/celery_app.py` + `workers/tasks.py`): single task `process_document(job_id)` — load → mark running → download → extract → summarise → regen aggregate → mark complete. Uses `asyncio.run()` to drive existing async clients
+  - Pytest: 17 new tests (87 total) — extract unit tests + RBAC matrix (CSM forbidden on VPD; solutioning_manager allowed) + dedup + soft delete + rerun + jobs/:id auth
+  - Frontend: `DocumentsTab` with Sales Discovery Summary card on top, kind picker + file input, list with status pills + stub-AI tag + summary expand + entity chips, 2-second job polling for active uploads, rerun + soft delete actions, 100 MB / extension client-side validation
+  - Wired into `App.tsx` at `/accounts/:id/documents` (replaces M7 placeholder)
+- **M6 — AK03.b Client Contacts** ([FUNC](./docs/features/AK03b-client-contacts/FUNCTIONAL.md) · [TECH](./docs/features/AK03b-client-contacts/TECHNICAL.md))
+  - `ClientContact` ORM (`apps/api/app/models/contact.py`) + Pydantic v2 schemas (`schemas/contact.py`) — `ContactOut`, `ContactListResponse`, `ContactCreate`, `ContactUpdate`
+  - 5 endpoints (`apps/api/app/routes/contacts.py`):
+    - `GET /api/v1/accounts/:id/contacts` — `is_editable` flag + admin-only `?include_deleted=true` (only deletions within 30 days)
+    - `POST /api/v1/accounts/:id/contacts` — matrix-aware (`can_write_contacts`)
+    - `PATCH /api/v1/contacts/:id` — partial update via `model_dump(exclude_unset=True)`
+    - `DELETE /api/v1/contacts/:id` — soft delete (sets `deleted_at`)
+    - `POST /api/v1/contacts/:id/restore` — admin-only, 30-day window enforced
+  - **Audit auto-capture extended to ClientContact**: `AUDITED_MODELS` now includes contacts; `row_id` resolution generalized to all audited models (was Account-only). `new_value`/`old_value` carry `account_id` so contact edits surface on the account's Overview activity feed via JSONB containment
+  - `0009_seed_contacts_demo.sql` — 12 demo contacts across the 4 accounts (Siemens=4, Mondelēz=3, Sanofi=3, Novo Nordisk=2; each has 1 SPOC + 1 sponsor)
+  - Pytest: 12 new tests (70 total) — RBAC matrix coverage incl. solutioning has F all (matrix Q3), audit-log capture verification, full soft-delete + restore lifecycle
+  - Frontend: `ContactsTab` with list (SPOC + sponsor pinned to top), influence pill (color-coded), add/edit modal with email validation, soft-delete with confirm, admin "Show deleted" toggle + Restore action
+  - Wired into `App.tsx` at `/accounts/:id/contacts` (replaces M6 placeholder)
+- **M1 — Repo skeleton + dev loop + safety rails** ([FUNCTIONAL](./docs/features/M1-skeleton/FUNCTIONAL.md) · [TECHNICAL](./docs/features/M1-skeleton/TECHNICAL.md))
+  - Monorepo wired (`apps/web`, `apps/api`, `packages/shared`)
+  - `apps/web` scaffolded: Vite + React + TS + Tailwind + shadcn config + auth provider abstraction
+  - `apps/api` scaffolded: FastAPI + uv + Pydantic settings + `/health` endpoint + Dockerfile
+  - `supabase/` config (8h JWT expiry, signup disabled), migrations folder, seed placeholder
+  - `docker-compose.yml` for local dev (Postgres + Redis + api + worker)
+  - GitHub Actions: `web-ci`, `api-ci`, `security` (gitleaks + block-tracked-`.env`)
+  - Pre-commit: gitleaks + standard hygiene
+  - `.env.example` files at root + apps/web + apps/api; gitignore excludes `.env` and `.claude/settings.local.json`
+  - Full `docs/` skeleton (architecture, security, features)
+- **M5 — AK03.a Engagement Info + audit-log auto-writer** ([FUNC](./docs/features/AK03a-engagement-info/FUNCTIONAL.md) · [TECH](./docs/features/AK03a-engagement-info/TECHNICAL.md))
+  - `account_engagement` ORM + Pydantic schemas
+  - **SQLAlchemy `before_flush` listener** auto-writes one `audit_log` row per changed field, transactionally with the data change. JSONB `new_value`/`old_value` always carry parent `account_id` so the AK02 activity feed picks up child-row edits automatically
+  - Per-request `current_user_id_var` ContextVar wired in `core/deps.py` so the listener can attribute writes
+  - `GET/PATCH /api/v1/accounts/:id/engagement` (matrix-aware: solutioning_manager view-only per Q3)
+  - `POST /api/v1/ai/quality-check` — Claude-backed scoring (1–5) with **stub fallback** when `ANTHROPIC_API_KEY` isn't configured. LRU cache for repeat calls.
+  - `GET/POST /api/v1/lookups/categories` — propose-new flow (lands as `approved=false`); admin approval endpoint
+  - `GET /api/v1/lookups/geographies`
+  - AK01 search now also matches `slug` (so `?q=mondelez` finds Mondelēz)
+  - `0008_seed_engagement_demo.sql` — engagement rows for the 4 demo accounts (varied quality so the AI button shows different scores per row)
+  - Pytest: 18 new tests (58 total, 75% coverage) — incl. audit-writer verification, AI stub scoring, category approval flow
+  - Frontend: `PreSalesTab` with engagement objective + AI button + word counter, multi-select categories with propose-new pills, geographies, profile, origin, stakeholders, sticky save bar with dirty tracking + diff PATCH
+- **M4 — AK02 Account Profile shell + Overview** ([FUNC](./docs/features/AK02-account-profile/FUNCTIONAL.md) · [TECH](./docs/features/AK02-account-profile/TECHNICAL.md))
+  - `GET /api/v1/accounts/:id` — single-account detail with `is_editable` and `can_view_*` capability flags (drives sub-nav visibility)
+  - `GET /api/v1/accounts/:id/activity` — paged audit-log feed scoped to the account; captures direct edits + child-row JSONB containment (`account_engagement`, `client_contacts`, `documents`, `account_assignments`)
+  - `AuditLog` ORM (`apps/api/app/models/audit.py`)
+  - `0007_seed_audit_demo.sql` — 5 demo audit entries so the feed isn't empty
+  - Frontend: `AccountProfileLayout` (breadcrumb + header with brand stats + sub-nav), `OverviewTab` (metrics + engagement context + activity feed), `PlaceholderTab` for Pre-Sales/Contacts/Documents (M5/M6/M7 banners)
+  - Nested routes: `/accounts/:accountId/{overview,pre-sales,contacts,documents}` — each bookmarkable
+  - Row click in AK01 navigates to AK02 (with `stopPropagation` on Reassign so the modal still works)
+  - Pytest: 8 new tests (40 total), 75% coverage
+- **M3 — AK01 Account List** ([FUNC](./docs/features/AK01-account-list/FUNCTIONAL.md) · [TECH](./docs/features/AK01-account-list/TECHNICAL.md))
+  - 4 demo accounts seeded (Siemens, Mondelēz, Sanofi, Novo Nordisk) with assignments — `0004_seed_demo_accounts.sql`
+  - `Account` ORM + Pydantic schemas (`AccountListItem`, `AccountListResponse`)
+  - `GET /api/v1/accounts` with search (name/country/industry), filters (industry/tier/region/csm/category), sort (5 columns × asc/desc), pagination (1..200), per-row `is_editable`
+  - `require_account_access(write=...)` factory ready for M4+
+  - `can_view_account` / `can_edit_account` / `can_*` per-function helpers in `rbac.py`
+  - **Matrix realign** (2026-05-08): RLS policies + RBAC re-aligned to `Roles_Access_Matrix_Reviewed_05072026.xlsx` (`0005_realign_rls_per_matrix.sql`)
+  - 2 additional users + APAC team seeded (`0006_seed_team.sql`); Sanofi reassigned to `csm2`
+  - `PATCH /api/v1/accounts/:id/owner` (admin only) + `GET /api/v1/users` (admin only) endpoints
+  - Frontend: `AppShell` (sidebar + brand), `/accounts` page (search + filters + sortable headers + pagination + URL state), admin-only `ReassignOwnerModal`
+  - Pytest: 32 tests pass (24 new in M3), 74% coverage
+  - End-to-end: 7/7 pass against live Supabase
+  - **DB gotcha discovered + fixed**: Supabase direct DB is IPv6-only; switched to transaction-mode pooler (`aws-1-ap-northeast-1.pooler.supabase.com:6543`) with statement cache disabled
+- **M2 — Auth + RBAC (F01 + F02)** ([F01-FUNC](./docs/features/F01-auth/FUNCTIONAL.md) · [F01-TECH](./docs/features/F01-auth/TECHNICAL.md) · [F02-FUNC](./docs/features/F02-rbac/FUNCTIONAL.md) · [F02-TECH](./docs/features/F02-rbac/TECHNICAL.md))
+  - Supabase project `Account_workbench` (id `fclkazponiwvmvzgvwei`) wired
+  - Schema: 14 tables, 7 enums, indexes, soft deletes (`supabase/migrations/0001_init_schema.sql`)
+  - RLS: policies on every table, helper fns `current_user_role`, `user_assigned_to_account`, role-group helpers (`0002_rls_policies.sql`)
+  - Lookups seeded: 11 roles, 5 geos, 10 categories (`0003_seed_lookups.sql`)
+  - 5 placeholder users seeded via `scripts/seed_users.mjs` (idempotent)
+  - FastAPI auth: ES256 + HS256 dispatcher, JWKS cache, `get_current_user`, `require_role`, `permissions_for`
+  - `GET /api/v1/me` returns `{ user, permissions }`
+  - Pytest: 11 tests pass (auth + RBAC matrix), 92% coverage on auth modules
+  - End-to-end verified: 5 real Supabase logins → /me round-trip → correct role + permissions
+  - Frontend: `AuthProvider`, `RequireAuth`, login screen, role-aware home page
+  - Beroe SSO swap path documented (Phase 2 — `auth-sso.ts` is one import change)
+
+### 🚧 In progress
+_(none — awaiting M8 kickoff)_
+
+### ⏳ Up next
+- **M8 — Scaffold remaining HTML tabs + production cutover** (Home, Leadership, Success Mgmt, Growth, Intel as routed shells with `v1.1` banners; Render + Vercel deploy; smoke tests)
+
+---
+
+## Decisions log
+
+> Append-only. Date — decision — reason. Link to discussion or doc when relevant.
+
+- **2026-05-08** — Stack locked: React + Vite + TS (web), FastAPI (api), Supabase (DB/auth/storage), Anthropic Claude (AI), Celery+Redis (jobs), Vercel + Render (hosting). Reason: BRD-allowed; user preference for Python over Node on backend.
+- **2026-05-08** — Audio/video transcription deferred to v1.1. Reason: keeps Sprint 1 deliverable; BRD says budget allows but we ship text-only first.
+- **2026-05-08** — Supabase MCP used for schema management. Reason: scripts schema changes; avoids manual SQL paste.
+- **2026-05-08** — Two-doc policy per feature (FUNCTIONAL + TECHNICAL). Reason: stakeholders need plain-English; engineers need detail.
+- **2026-05-08** — All secrets in `.env` only; gitleaks pre-commit + GitHub Secret Scanning enforced. Reason: zero tolerance for credential leaks.
+- **2026-05-08** — Auth provider abstraction (`AuthProvider` interface) so Beroe SSO is a config swap when ready. Reason: BRD says Phase 2 SSO; don't paint into a corner.
+- **2026-05-08** — JWT verifier dispatches on `alg`: ES256 (asymmetric, JWKS) for real Supabase user tokens; HS256 (symmetric, JWT secret) for tests. Reason: new Supabase projects sign with ES256 — discovered during M2 e2e test. JWKS cached 1h with self-healing rotation.
+- **2026-05-08** — RLS as third wall + FastAPI `require_role` as second wall + frontend gating as first. App role lives in `public.users.role`, NOT in JWT claims. Reason: defense-in-depth + can't be elevated by tampering with JWT.
+- **2026-05-08** — Seeded 5 placeholder users (anand=admin, santosh=vp_sales, megha=cs_director, harish=csm, purnima=solutioning_manager) via `scripts/seed_users.mjs`. Reason: M2 test users; will be replaced when Beroe shares production list.
+- **2026-05-08** — Migration application path: raw SQL via Supabase Management API (Supabase MCP not registered in this Claude Code session). Reason: same outcome, no manual paste; SQL files committed to `supabase/migrations/` for reproducibility.
+- **2026-05-08** — DATABASE_URL switched from direct host (IPv6-only `db.<ref>.supabase.co`) to transaction-mode pooler (`aws-1-ap-northeast-1.pooler.supabase.com:6543`). Reason: direct host unreachable from IPv4-only networks (CI, Render). Pooler also requires asyncpg `statement_cache_size=0` — set in `app/db/session.py`.
+- **2026-05-08** — `is_editable` flag computed server-side per row using `can_edit_account(role, is_assigned)` so the frontend never has to derive permissions itself. Reason: keep capability logic in one place; frontend just renders.
+- **2026-05-08** — **Matrix realign**: `Roles_Access_Matrix_Reviewed_05072026.xlsx` is the canonical source for RBAC. When BRD §3.2 narrative conflicts with the matrix, **matrix wins** (confirmed by stakeholder). Concrete shifts:
+  - `vp_sales` is **not** a global admin — read-only across most functions; can view audit log.
+  - `solutioning_manager` **cannot** edit `account_engagement` (matrix Q3: "Only sol. Sections").
+  - `commercial_owner` Account List scope is **own portfolio only** (`accounts.co_user_id == auth.uid()`).
+  - Audit Log viewable by all VPs + CS Director + Admin (matrix Q6: "All").
+  - Re-assign owner is **admin only**.
+  - CSM/CS Team Manager see ALL accounts in the list (read-only on non-own/non-team).
+- **2026-05-08** — Seeded 2 more placeholder users + APAC team: `team.lead@beroe-inc.com` (cs_team_manager) and `csm2@beroe-inc.com` (csm). Sanofi reassigned to csm2 to exercise the read-only-on-other-CSMs path. Reason: enables CS Team Manager scope tests + cross-CSM read-only verification.
+- **2026-05-08** — `User.role` mapped to Postgres `role_key` ENUM (was `String`). Reason: filtering by enum required automatic SQLA cast; the `String` mapping caused `operator does not exist: role_key = character varying`.
+- **2026-05-08** — Audit-writer `row_id` resolution generalized: was `getattr(obj, "id", None) if isinstance(obj, Account) else None` (Account-only); now `getattr(obj, "id", None)` for every model in `AUDITED_MODELS`. Reason: M6 added `ClientContact` to audited set — without the generalization, contact-level edits would have logged with `row_id=null` and broken the per-row audit trail.
+- **2026-05-08** — Soft-delete + 30-day restore window enforced server-side in `/restore` (not just hidden in UI). Restore requires admin role. Reason: defense-in-depth — UI hiding is a usability nicety, not a security boundary.
+- **2026-05-08** — M7 storage policy: all three buckets (`meeting_records`, `vpd`, `contracts`) are private; only the FastAPI process (service-role key) and admins can touch objects directly. Regular users get 5-minute signed URLs minted by the API on demand. Reason: defense-in-depth — RLS on `storage.objects` plus FastAPI scope checks make a leaked anon key insufficient to exfiltrate uploads.
+- **2026-05-08** — Celery `process_document` never re-raises — failures are written to `jobs.error` and the task returns. Reason: Celery's default retry behaviour would burn the Anthropic budget on persistent failures; user can manually click Rerun.
+- **2026-05-08** — Per-account dedup on `documents` keyed on `(account_id, sha256(file))`. Returns the existing row with `duplicate=true` instead of inserting. Reason: avoids accidental double-billing on AI summarisation when the same MOM is uploaded twice.
+- **2026-05-08** — Worker uses `asyncio.run()` to drive the existing async SQLAlchemy + Supabase clients from inside Celery's sync task model. Reason: avoids adding `psycopg2` and a parallel sync engine; one DB driver, one Storage client.
+- **2026-05-08** — BRD audit pass identified ~20 gaps; bundled into 5 M-prime milestones (M2.5/M3.5/M6.5/M7.1/M7.5) and shipped together. Reason: pre-stakeholder-sign-off correctness pass; the audit report (see chat log) is the canonical baseline.
+- **2026-05-08** — AK03.b vocabulary realigned to BRD table 12 verbatim: `function` (procurement / supply_chain / finance / operations / it / other), `seniority` (cxo / vp / director / manager / other), `decision_power` (executive_sponsor / influencer / champion / detractor / unknown), plus `notes` (≤500). Legacy `role`/`influence` dropped; data backfilled deterministically. Reason: stakeholder UAT will compare field-by-field against the BRD spec; vocabulary mismatch would fail.
+- **2026-05-08** — AI-tag lifecycle: `ai_generated` → `ai_assisted` flips on user edit (`Document.ai_edited`, `AccountSolutioning.ai_edited`). Reason: BRD §4.3.c/d traceability — readers need to know whether a summary they're quoting was reviewed by a human.
+- **2026-05-08** — VPD candidate writes never overwrite user-edited Solutioning fields (`AccountSolutioning.ai_edited` gates wholesale refresh; only empty fields are filled). Reason: re-uploading a refreshed VPD shouldn't blow away handcrafted edits.
+- **2026-05-08** — Per-user/day Claude rate-limit (`services/ai_quota.py`, default 200) in-memory only for Sprint 1. Reason: single-process API today; swap to Redis INCR on horizontal scale. Matrix Q5 answer was "yes — cap usage".
+- **2026-05-08** — Login lockout window keyed on `(lower(email), 15-min sliding window)` via DB table, not in-memory. Reason: must survive API restarts and remain consistent across multi-process workers; Supabase's own rate-limit is internal and not user-visible.
+- **2026-05-08** — Bulk reassign endpoint admin-only (matches `can_reassign_account_owner`). BRD open-Q answer ("Both — admin or CS Director") stays unresolved pending stakeholder confirmation; matrix wins per project rule. Reason: tightening is reversible; loosening leaves an audit hole.
+- **2026-05-08** — M9 perf pass: switched DATABASE_URL to **session-mode pooler (port 5432)** with `statement_cache_size=200`; turned off `pool_pre_ping` (saves a SELECT 1 per checkout); added 60s `_USER_CACHE` in `core/deps.py` and 30s/60s `_CACHE`/`_TEAM_CACHE` in new `core/scope.py`. Reason: 800–1500 ms per endpoint over 150 ms RTT was unacceptable. Now `/me` is ~2 ms warm, account-scoped endpoints ~240 ms (5× faster). Caches are immutable snapshots so write paths can't accidentally write through detached objects.
+- **2026-05-08** — Account creation = admin / cs_director / vp_csm (`can_create_account` predicate). Slug auto-generated via `_slugify(name)` + `_unique_slug` (numeric suffix on collision). Reason: matches "Manage Accounts = F" cluster in matrix; keeps slug deterministic and human-readable.
+- **2026-05-08** — User invite uses Supabase Auth `invite_user_by_email` with service-role key. `public.users.id` is the same UUID as `auth.users.id` (FK constraint), pre-provisioned by admin so role+team are set *before* first login. Re-invite same email is idempotent: resets status to `pending`, refreshes role, re-sends link. Reason: Phase-2 SSO will swap the email step for SSO email-match; the data model + admin UI stays identical.
+- **2026-05-08** — Admin self-protection: cannot demote self out of admin (PATCH /users/:id with role!=admin → 400) and cannot deactivate self (DELETE /users/:id → 400). Reason: prevents workspace lockout via single accidental click.
+- **2026-05-08** — `invalidate_user_cache(user_id)` called explicitly after every user PATCH/DELETE so the 60s identity-cache TTL doesn't delay a role change taking effect. Reason: defense-in-depth on role demotions — if you remove someone's admin perms, they should stop being admin on the next request, not 60s later.
+
+---
+
+## Known issues / pinned bugs
+_(none yet)_
+
+---
+
+## Stakeholder notes
+_(reserved for manual notes from product/business stakeholders — not auto-edited)_
+
+---
+
+## How to update this file
+
+Updated at the end of every milestone by Claude Code. Steps:
+1. Move completed items from 🚧 → ✅ with link to FUNCTIONAL.md.
+2. Add the next milestone to ⏳.
+3. Append any new decisions made during this milestone (chronological).
+4. Add any new known issues.
+
+Never delete history. The decisions log is append-only.

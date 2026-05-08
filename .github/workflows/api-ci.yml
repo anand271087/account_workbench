@@ -1,0 +1,55 @@
+name: api-ci
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/api-ci.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install deps
+        run: |
+          uv pip install --system -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check app tests
+
+      - name: Format check (ruff)
+        run: ruff format --check app tests
+
+      - name: Type check (mypy)
+        run: mypy app
+        continue-on-error: true # M1: tighten in M2
+
+      - name: Test
+        env:
+          SUPABASE_URL: http://test
+          SUPABASE_SERVICE_ROLE_KEY: test
+          SUPABASE_JWT_SECRET: test
+          DATABASE_URL: postgresql+asyncpg://test:test@localhost/test
+          ANTHROPIC_API_KEY: test
+        run: pytest
+
+      - name: Audit dependencies
+        run: pip-audit --strict
+        continue-on-error: false

@@ -1,0 +1,43 @@
+# Supabase project config — used by `supabase` CLI and Supabase MCP.
+# Real project ref lives in /.env (SUPABASE_PROJECT_REF) — never hardcoded here.
+
+project_id = "beroe-awb"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[storage]
+enabled = true
+file_size_limit = "100MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["https://*.vercel.app"]
+jwt_expiry = 28800       # 8 hours per BRD F01
+enable_signup = false    # Admin-only user creation
+enable_confirmations = false
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+enable_confirmations = false
+
+[edge_functions]
+enabled = false
+
+[analytics]
+enabled = false

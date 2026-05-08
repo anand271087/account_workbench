@@ -1,0 +1,3 @@
+# Migration files land here in M2 (auth/RBAC schema) and onwards.
+# Naming: NNNN_short_description.sql (e.g. 0001_init_schema.sql).
+# All migrations are also applied via Supabase MCP from Claude Code.
