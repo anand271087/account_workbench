@@ -21,26 +21,40 @@ from app.core.config import get_settings
 
 _settings = get_settings()
 
-# Session-mode pooler (port 5432) lets asyncpg keep server-side prepared
-# statements across queries — roughly halves per-query cost vs the
-# transaction-mode pooler (port 6543) which forced statement_cache_size=0.
-#
+
+def _is_transaction_mode_pooler(url: str) -> bool:
+    """Supabase ships two poolers on the same hostname:
+      - port 5432 = session mode (15-client cap on Free; allows prepared stmts)
+      - port 6543 = transaction mode (~200-client cap; pgbouncer rotates the
+        backend per transaction, so server-side prepared statements break)
+
+    We detect the URL and adjust asyncpg's prepared-statement cache so the
+    same code works against either pooler — flip DATABASE_URL on the host
+    and we DTRT.
+    """
+    return ":6543/" in url
+
+
+_tx_mode = _is_transaction_mode_pooler(_settings.database_url)
+_stmt_cache = 0 if _tx_mode else 200
+
 # pool_pre_ping costs an extra "SELECT 1" round-trip per checkout. With ~150ms
 # RTT to the regional pooler that's a free 150ms tax on every API request.
 # We rely on pool_recycle + the pooler's own health checks instead.
+#
+# Pool sizing:
+#   - Session mode (:5432): cap is 15. Stay small (3+7=10).
+#   - Transaction mode (:6543): cap is ~200. Can comfortably go higher.
 engine = create_async_engine(
     _settings.database_url,
     pool_pre_ping=False,
     pool_recycle=180,           # recycle conns every 3 min so stale ones don't pile up
-    # Supabase's session-mode pooler caps at 15 clients per project. We share
-    # those 15 with the Celery worker (NullPool, ~2 conns) and any local dev
-    # processes. Keep the API at 3 + 7 = 10 max to leave room.
-    pool_size=3,
-    max_overflow=7,
+    pool_size=10 if _tx_mode else 3,
+    max_overflow=20 if _tx_mode else 7,
     echo=False,
     connect_args={
-        "statement_cache_size": 200,
-        "prepared_statement_cache_size": 200,
+        "statement_cache_size": _stmt_cache,
+        "prepared_statement_cache_size": _stmt_cache,
     },
 )
 
