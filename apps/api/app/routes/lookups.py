@@ -113,6 +113,62 @@ async def approve_category(
     return CategoryOut.model_validate(dict(row))
 
 
+@router.delete(
+    "/categories/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin())],
+)
+async def reject_category(
+    category_id: UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    reason: str | None = None,
+) -> None:
+    """Reject (delete) a proposed category. Admin only.
+
+    Only PENDING (approved=false) categories can be deleted — approved ones
+    are referenced by `account_engagement.target_categories` and shouldn't
+    silently disappear.
+
+    The optional `reason` query param is written to `audit_log` so admins can
+    later see why a proposal was killed (and who did it).
+    """
+    row = (
+        await db.execute(
+            select(lookup_categories).where(lookup_categories.c.id == category_id)
+        )
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Category not found")
+    if row["approved"]:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Approved categories cannot be deleted (engagement rows may reference them).",
+        )
+    # Audit the rejection before we drop the row.
+    from app.models.audit import AuditLog
+
+    db.add(
+        AuditLog(
+            table_name="lookup_categories",
+            row_id=category_id,
+            action="delete",
+            changed_by_user_id=user.id,
+            field_name=None,
+            old_value={"name": row["name"], "approved": False},
+            new_value={
+                "rejected": True,
+                "name": row["name"],
+                "reason": (reason or "").strip()[:500] or None,
+            },
+        )
+    )
+    await db.execute(
+        lookup_categories.delete().where(lookup_categories.c.id == category_id)
+    )
+    await db.commit()
+
+
 @router.get("/geographies", response_model=list[GeographyOut])
 async def list_geographies(
     _user: CurrentUser,

@@ -16,13 +16,15 @@ const config: Config = {
         mono: ['"DM Mono"', "monospace"],
       },
       colors: {
-        // Beroe brand palette
+        // Beroe brand palette — mirrors prototype `:root` block verbatim
         beroe: {
           bg: "#EAF1F5",
           card: "#ffffff",
-          navy: "#001137",
-          "navy-2": "#001a45",
-          "navy-3": "#002050",
+          "card-border": "#e4eaf6",   // --cb
+          navy: "#001137",            // --navy
+          "navy-2": "#001a45",        // --n2
+          "navy-3": "#002050",        // --n3
+          "navy-4": "#001e52",        // --bd  (sidebar active bg, sb-btn.active)
           blue: "#4A00F8",
           teal: "#35E1D4",
           amber: "#EF9637",
@@ -76,6 +78,12 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        card: "14px",      // --rr2 prototype: rounded card
+        ctl: "10px",       // --rr  prototype: control radius
+      },
+      boxShadow: {
+        // .sub-tab.active glow from prototype
+        subtab: "0 1px 4px rgba(0,0,0,.08)",
       },
     },
   },

@@ -1,81 +1,129 @@
 import type { ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "./AuthProvider";
 import { ROLE_LABELS } from "@/types/auth";
 import { initials } from "@/lib/format";
+import { useFavoriteAccounts } from "@/lib/use-favorites";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import type { AccountListResponse } from "@/types/account";
 
 /** Common app chrome — sidebar + top bar — wraps every authenticated page. */
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
   const { me, signOut } = useAuth();
+  const fav = useFavoriteAccounts(me?.user.id);
+
+  // "My portfolio" — accounts where I'm the CSM. Skipped for global readers
+  // and admin (their dropdown is "everyone's accounts" — sidebar would be huge).
+  const ownsAPortfolio =
+    me?.user.role === "csm" || me?.user.role === "cs_team_manager";
+  const portfolio = useQuery<AccountListResponse>({
+    queryKey: ["sidebar-portfolio", me?.user.id],
+    queryFn: () =>
+      api.get<AccountListResponse>(
+        `/api/v1/accounts?csm_user_id=${me!.user.id}&page_size=10&sort=last_activity_at&sort_dir=desc`,
+      ),
+    enabled: !!me && ownsAPortfolio,
+    staleTime: 60_000,
+  });
+
   if (!me) return null;
   const isPath = (p: string) =>
     typeof window !== "undefined" && window.location.pathname.startsWith(p);
+  const currentAccountId =
+    typeof window !== "undefined"
+      ? window.location.pathname.match(/^\/accounts\/([0-9a-f-]{36})/)?.[1]
+      : undefined;
 
   return (
-    <div className="flex min-h-screen bg-beroe-bg">
-      {/* Sidebar */}
-      <aside className="w-56 bg-beroe-navy border-r border-beroe-navy-3 flex flex-col">
-        <div className="px-4 py-3 border-b border-beroe-navy-3 flex items-center gap-2">
+    <div className="flex min-h-screen bg-beroe-bg font-sans">
+      {/* Sidebar — mirrors prototype `.sb` (224px wide, navy bg) */}
+      <aside className="w-[224px] bg-beroe-navy border-r border-beroe-navy-4 flex flex-col flex-shrink-0">
+        <div className="px-4 py-3 border-b border-beroe-navy-4 flex items-center gap-2">
           <div className="w-7 h-7 bg-gradient-to-br from-beroe-blue to-[#3800CC] rounded-md flex items-center justify-center font-extrabold text-[11px] text-white">
             B
           </div>
           <div>
             <div className="text-white text-[13px] font-extrabold tracking-wider">BEROE</div>
-            <div className="text-[9px] text-[#2a4060]">Account Work Bench</div>
+            <div className="text-[10px] text-[#9bb0c8]">Account Work Bench</div>
           </div>
         </div>
-        <nav className="flex-1 px-2 pt-3">
-          <div className="text-[9px] uppercase tracking-widest text-[#1e3a6c] font-bold px-2 pb-1">
-            Workspace
-          </div>
-          <a
-            href="/accounts"
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-md text-[12px] font-bold",
-              isPath("/accounts")
-                ? "text-white bg-[#001e52]"
-                : "text-[#9eb3cc] hover:text-white",
-            )}
-          >
-            <span>📋</span> Accounts
-          </a>
+        <nav className="flex-1 px-2 pt-3 pb-2 overflow-y-auto">
+          <SbSection>Workspace</SbSection>
+          <SbBtn href="/accounts" icon="📋" active={isPath("/accounts") && !currentAccountId}>
+            All accounts
+          </SbBtn>
+
+          {/* Pinned (favourites) */}
+          <SbSection>Pinned</SbSection>
+          {fav.favorites.length === 0 ? (
+            <div className="px-2.5 py-1.5 text-[10px] text-[#5a7ea0] leading-snug">
+              ★ Star an account to pin it here.
+            </div>
+          ) : (
+            fav.favorites.map((f) => (
+              <SbAccount
+                key={f.id}
+                href={`/accounts/${f.id}/overview`}
+                name={f.name}
+                active={currentAccountId === f.id}
+              />
+            ))
+          )}
+
+          {/* My portfolio (CSMs only) */}
+          {ownsAPortfolio && (
+            <>
+              <SbSection>My portfolio</SbSection>
+              {portfolio.isLoading ? (
+                <div className="px-2.5 py-1.5 text-[10px] text-[#5a7ea0]">Loading…</div>
+              ) : (portfolio.data?.items.length ?? 0) === 0 ? (
+                <div className="px-2.5 py-1.5 text-[10px] text-[#5a7ea0] leading-snug">
+                  No accounts assigned to you yet.
+                </div>
+              ) : (
+                portfolio.data!.items.slice(0, 8).map((a) => (
+                  <SbAccount
+                    key={a.id}
+                    href={`/accounts/${a.id}/overview`}
+                    name={a.name}
+                    active={currentAccountId === a.id}
+                  />
+                ))
+              )}
+            </>
+          )}
 
           {me.permissions.is_global_admin && (
             <>
-              <div className="text-[9px] uppercase tracking-widest text-[#1e3a6c] font-bold px-2 pb-1 pt-4">
-                Admin
-              </div>
-              <a
-                href="/admin/users"
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md text-[12px] font-bold",
-                  isPath("/admin/users")
-                    ? "text-white bg-[#001e52]"
-                    : "text-[#9eb3cc] hover:text-white",
-                )}
-              >
-                <span>👥</span> Users
-              </a>
+              <SbSection>Admin</SbSection>
+              <SbBtn href="/admin/users" icon="👥" active={isPath("/admin/users")}>Users</SbBtn>
+              <SbBtn href="/admin/categories" icon="🏷️" active={isPath("/admin/categories")}>Categories</SbBtn>
             </>
           )}
         </nav>
-        <div className="border-t border-beroe-navy-3 p-3 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-beroe-blue/30 border-2 border-beroe-blue flex items-center justify-center text-[9px] font-bold text-white">
+        <div className="border-t border-beroe-navy-4 px-3 py-3 flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-beroe-blue/30 border-2 border-beroe-blue flex items-center justify-center text-[10px] font-bold text-white shrink-0">
             {initials(me.user.full_name || me.user.email)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] text-[#d0dcea] font-semibold truncate">
+            <div className="text-[12px] text-white font-semibold truncate">
               {me.user.full_name || me.user.email}
             </div>
-            <div className="text-[9px] text-[#2a4060]">{ROLE_LABELS[me.user.role]}</div>
+            <div className="text-[10px] text-[#9bb0c8]">{ROLE_LABELS[me.user.role]}</div>
           </div>
           <button
             onClick={() => signOut()}
-            className="text-[#2a4060] hover:text-white text-sm leading-none"
             title="Sign out"
+            aria-label="Sign out"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9bb0c8] hover:text-white hover:bg-beroe-navy-4 border border-beroe-navy-4 transition-colors"
           >
-            ⏻
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
           </button>
         </div>
       </aside>
@@ -83,12 +131,77 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
       {/* Main */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {title && (
-          <div className="bg-white border-b border-slate-200 px-6 py-3">
+          <div className="bg-white border-b border-beroe-card-border px-6 py-3">
             <h1 className="text-base font-bold text-text-primary">{title}</h1>
           </div>
         )}
         <div className="flex-1 overflow-auto">{children}</div>
       </main>
     </div>
+  );
+}
+
+/** Sidebar section heading. Brightened from the prototype's #1e3a6c so it
+ *  stays legible on the navy background — was unreadable in user testing. */
+function SbSection({ children }: { children: ReactNode }) {
+  return (
+    <div className="text-[10px] uppercase tracking-[0.14em] text-[#7a93b3] font-bold px-2 pt-3 pb-1.5">
+      {children}
+    </div>
+  );
+}
+
+/** Account row in the sidebar — small avatar + truncated name. */
+function SbAccount({
+  href,
+  name,
+  active,
+}: {
+  href: string;
+  name: string;
+  active: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      title={name}
+      className={cn(
+        "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] mb-px transition-colors duration-150 truncate",
+        active
+          ? "bg-beroe-navy-4 text-white font-bold"
+          : "text-[#b0c0d8] hover:bg-beroe-navy-3 hover:text-white",
+      )}
+    >
+      <div
+        className={cn(
+          "w-5 h-5 rounded text-[9px] font-extrabold flex items-center justify-center shrink-0 border",
+          active
+            ? "bg-beroe-blue/30 border-beroe-blue text-white"
+            : "bg-beroe-navy-3 border-beroe-navy-4 text-[#9bb0c8]",
+        )}
+      >
+        {initials(name)}
+      </div>
+      <span className="truncate">{name}</span>
+    </a>
+  );
+}
+
+/** Sidebar button — matches prototype `.sb-btn` with brightened idle text. */
+function SbBtn({
+  href, icon, active, children,
+}: { href: string; icon: ReactNode; active: boolean; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      className={cn(
+        "w-full flex items-center gap-2 px-2.5 py-[7px] rounded-lg text-[12px] mb-px text-left transition-colors duration-150",
+        active
+          ? "bg-beroe-navy-4 text-white font-bold shadow-sm"
+          : "text-[#b0c0d8] hover:bg-beroe-navy-3 hover:text-white",
+      )}
+    >
+      <span className="text-[13px] leading-none">{icon}</span> {children}
+    </a>
   );
 }

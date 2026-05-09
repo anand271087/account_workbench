@@ -16,6 +16,7 @@ from app.routes import auth as auth_routes
 from app.routes import contacts as contact_routes
 from app.routes import documents as document_routes
 from app.routes import engagement as engagement_routes
+from app.routes import favorites as favorite_routes
 from app.routes import lookups as lookup_routes
 from app.routes import solutioning as solutioning_routes
 from app.routes import users as user_routes
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(document_routes.document_router)
     app.include_router(document_routes.job_router)
     app.include_router(solutioning_routes.router)
+    app.include_router(favorite_routes.router)
 
     return app
 

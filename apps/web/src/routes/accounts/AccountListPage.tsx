@@ -5,7 +5,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
 import { ReassignOwnerModal } from "@/components/ReassignOwnerModal";
+import { StarButton } from "@/components/StarButton";
 import { api } from "@/lib/api";
+import { useFavoriteAccounts } from "@/lib/use-favorites";
 import { cn } from "@/lib/utils";
 import {
   formatACV,
@@ -43,6 +45,7 @@ export default function AccountListPage() {
   const navigate = useNavigate();
   const { me } = useAuth();
   const isAdmin = me?.user.role === "admin";
+  const fav = useFavoriteAccounts(me?.user.id);
   const [reassignTarget, setReassignTarget] = useState<AccountListItem | null>(null);
 
   // Read filters from URL (so they're shareable/bookmarkable)
@@ -222,10 +225,10 @@ export default function AccountListPage() {
 
         {/* Table */}
         {!isLoading && data && data.items.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-text-muted text-[11px] uppercase tracking-wider">
+                <thead className="bg-beroe-bg text-text-muted text-[11px] uppercase tracking-wider">
                   <tr>
                     {canBulkReassign && (
                       <th className="px-4 py-2.5 w-8">
@@ -277,6 +280,10 @@ export default function AccountListPage() {
                       }
                       onOpen={() => navigate(`/accounts/${it.id}`)}
                       onReassign={() => setReassignTarget(it)}
+                      pinned={fav.isFavorite(it.id)}
+                      onTogglePinned={() =>
+                        fav.toggle({ id: it.id, name: it.name, slug: it.slug })
+                      }
                     />
                   ))}
                 </tbody>
@@ -401,6 +408,8 @@ function Row({
   onToggleSelected,
   onOpen,
   onReassign,
+  pinned,
+  onTogglePinned,
 }: {
   item: AccountListItem;
   isAdmin: boolean;
@@ -409,12 +418,14 @@ function Row({
   onToggleSelected: () => void;
   onOpen: () => void;
   onReassign: () => void;
+  pinned: boolean;
+  onTogglePinned: () => void;
 }) {
   const renewal = formatRenewalDays(item.days_to_renewal);
   const health = healthBucket(item.health_score);
   return (
     <tr
-      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+      className="border-t border-beroe-card-border/60 hover:bg-slate-50 cursor-pointer"
       onClick={onOpen}
     >
       {selectable && (
@@ -429,6 +440,7 @@ function Row({
       )}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
+          <StarButton pinned={pinned} onToggle={onTogglePinned} />
           <div className="w-8 h-8 rounded-md bg-beroe-blue/10 border border-beroe-blue/30 flex items-center justify-center text-[10px] font-extrabold text-beroe-blue">
             {initials(item.name)}
           </div>
@@ -536,11 +548,11 @@ function Pill({
 
 function SkeletonRows() {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
       {[0, 1, 2, 3, 4].map((i) => (
         <div
           key={i}
-          className="h-14 border-t border-slate-100 first:border-t-0 px-4 flex items-center"
+          className="h-14 border-t border-beroe-card-border/60 first:border-t-0 px-4 flex items-center"
         >
           <div className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
         </div>
@@ -551,7 +563,7 @@ function SkeletonRows() {
 
 function EmptyState({ hasFilters }: { hasFilters: boolean }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
+    <div className="bg-white rounded-card border border-beroe-card-border p-10 text-center">
       <div className="text-3xl mb-2">📭</div>
       <div className="font-bold text-text-primary mb-1">
         {hasFilters ? "No accounts match these filters" : "No accounts assigned"}

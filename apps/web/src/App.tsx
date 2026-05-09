@@ -11,6 +11,7 @@ import ContactsTab from "@/routes/accounts/tabs/ContactsTab";
 import DocumentsTab from "@/routes/accounts/tabs/DocumentsTab";
 import SolutioningTab from "@/routes/accounts/tabs/SolutioningTab";
 import UsersPage from "@/routes/admin/UsersPage";
+import CategoriesPage from "@/routes/admin/CategoriesPage";
 import { useAuth } from "@/components/AuthProvider";
 import {
   GoalsInitiativesPlaceholder,
@@ -80,6 +81,16 @@ export default function App() {
           <RequireAuth>
             <RequireAdmin>
               <UsersPage />
+            </RequireAdmin>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/categories"
+        element={
+          <RequireAuth>
+            <RequireAdmin>
+              <CategoriesPage />
             </RequireAdmin>
           </RequireAuth>
         }

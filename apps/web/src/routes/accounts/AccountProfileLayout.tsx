@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
+import { useAuth } from "@/components/AuthProvider";
+import { StarButton } from "@/components/StarButton";
 import { api, ApiError } from "@/lib/api";
+import { useFavoriteAccounts } from "@/lib/use-favorites";
 import { cn } from "@/lib/utils";
 import {
   formatACV,
@@ -21,9 +24,9 @@ interface SubNavItem {
 const SUB_NAV: SubNavItem[] = [
   { to: "overview",     label: "Overview",      show: () => true },
   { to: "pre-sales",    label: "Pre-Sales",     show: (a) => a.can_view_pre_sales },
+  { to: "solutioning",  label: "Solutioning",   show: (a) => a.can_view_solutioning },
   { to: "contacts",     label: "Contacts",      show: (a) => a.can_view_contacts },
   { to: "documents",    label: "Documents",     show: (a) => a.can_view_documents },
-  { to: "solutioning",  label: "Solutioning",   show: (a) => a.can_view_solutioning },
   { to: "value-def",    label: "Value Def",     show: () => true },
   { to: "goals",        label: "Goals",         show: () => true },
 ];
@@ -32,6 +35,8 @@ export default function AccountProfileLayout() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
   const loc = useLocation();
+  const { me } = useAuth();
+  const fav = useFavoriteAccounts(me?.user.id);
 
   const { data, isLoading, isError, error } = useQuery<AccountDetail>({
     queryKey: ["account", accountId],
@@ -89,9 +94,9 @@ export default function AccountProfileLayout() {
 
   return (
     <AppShell>
-      <div className="bg-white border-b border-slate-200">
+      <div className="bg-white border-b border-beroe-card-border">
         {/* Breadcrumb */}
-        <div className="px-6 pt-4 pb-1 text-xs text-text-muted">
+        <div className="px-6 pt-4 pb-1 text-[11px] text-text-muted">
           <button
             onClick={() => navigate("/accounts")}
             className="hover:text-text-secondary"
@@ -103,52 +108,65 @@ export default function AccountProfileLayout() {
         </div>
 
         {/* Header */}
-        <div className="px-6 py-4 flex items-center gap-4 flex-wrap">
-          <div className="w-12 h-12 rounded-lg bg-beroe-blue/10 border border-beroe-blue/30 flex items-center justify-center text-sm font-extrabold text-beroe-blue flex-shrink-0">
+        <div className="px-6 py-4 flex items-start gap-4 flex-wrap">
+          <div className="w-12 h-12 rounded-ctl bg-beroe-blue/10 border border-beroe-blue/30 flex items-center justify-center text-sm font-extrabold text-beroe-blue flex-shrink-0">
             {initials(data.name)}
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 self-center">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-text-primary truncate">{data.name}</h1>
+              <StarButton
+                pinned={fav.isFavorite(data.id)}
+                onToggle={() =>
+                  fav.toggle({ id: data.id, name: data.name, slug: data.slug })
+                }
+                size="md"
+              />
+              <h1 className="text-[18px] font-bold truncate" style={{ color: "#003B73" }}>{data.name}</h1>
               {!data.is_editable && (
                 <span className="text-[10px] text-text-muted">(read-only)</span>
               )}
             </div>
-            <div className="text-xs text-text-secondary mt-0.5">
+            <div className="text-[11px] text-text-secondary mt-0.5">
               {data.industry ?? "—"} · {data.country ?? "—"} ·{" "}
               <span className="font-semibold">{data.csm_full_name ?? "Unassigned"}</span>{" "}
               <span className="text-text-muted">CSM</span>
             </div>
           </div>
-          <Stat label="ACV" value={formatACV(data.current_acv)} />
-          <Stat
-            label="Renewal"
-            value={renewal.label}
-            tone={renewal.tone}
-            sub={data.renewal_date ?? undefined}
-          />
-          <Stat
-            label="Health"
-            value={health.label}
-            tone={health.tone}
-            sub={data.health_score !== null ? String(data.health_score) : undefined}
-          />
-          <Stat label="Tier" value={data.tier ?? "—"} />
-          <Stat label="Category" value={data.category ?? "—"} />
+
+          {/* KPI strip — uniform cards (prototype `.kpi`), aligned baselines */}
+          <div className="flex items-stretch gap-2 flex-wrap">
+            <Stat label="ACV" value={formatACV(data.current_acv)} />
+            <Stat
+              label="Renewal"
+              value={renewal.label}
+              tone={renewal.tone}
+              alert={renewal.tone === "danger"}
+              sub={data.renewal_date ?? undefined}
+            />
+            <Stat
+              label="Health"
+              value={health.label}
+              tone={health.tone}
+              alert={health.tone === "danger"}
+              sub={data.health_score !== null ? String(data.health_score) : undefined}
+            />
+            <Stat label="Tier" value={data.tier ?? "—"} />
+            <Stat label="Category" value={data.category ?? "—"} />
+          </div>
         </div>
 
-        {/* Sub-nav */}
-        <div className="px-6 flex gap-1 -mb-px">
+        {/* Sub-nav — mirrors prototype `.tab-bar` / `.tab-b` exactly */}
+        <div className="px-6 flex border-b-[1.5px] border-beroe-card-border overflow-x-auto -mb-px">
           {SUB_NAV.filter((t) => t.show(data)).map((t) => (
             <NavLink
               key={t.to}
               to={t.to}
               className={({ isActive }) =>
                 cn(
-                  "px-3 py-2 text-sm border-b-2 -mb-px",
+                  "px-[14px] py-[9px] text-[12px] font-medium whitespace-nowrap border-b-[2.5px] -mb-[1.5px] transition-colors duration-100",
                   isActive
-                    ? "border-beroe-blue text-beroe-blue font-semibold"
-                    : "border-transparent text-text-secondary hover:text-text-primary",
+                    ? "text-beroe-blue font-bold border-beroe-blue"
+                    : "text-text-muted border-transparent hover:text-beroe-blue",
                 )
               }
             >
@@ -171,25 +189,52 @@ function Stat({
   value,
   sub,
   tone,
+  alert,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "ok" | "warn" | "danger" | "muted";
+  /** Render the value as a strong alert pill (red-tinted card + icon). */
+  alert?: boolean;
 }) {
-  const toneCls = {
+  const cardCls = alert
+    ? "border-red-300 bg-red-50/70"
+    : tone === "warn"
+      ? "border-amber-300 bg-amber-50/60"
+      : tone === "ok"
+        ? "border-green-200 bg-green-50/40"
+        : "border-beroe-card-border bg-white";
+
+  const valueTone = {
     ok: "text-green-700",
     warn: "text-amber-700",
     danger: "text-red-700",
-    muted: "text-text-muted",
+    muted: "text-text-primary",
   }[tone ?? "muted"];
+
   return (
-    <div className="text-right">
-      <div className="text-[10px] uppercase tracking-wider text-text-muted font-bold">{label}</div>
-      <div className={cn("text-sm font-semibold", tone ? toneCls : "text-text-primary")}>
-        {value}
+    <div
+      className={cn(
+        "rounded-ctl border px-3 py-2 min-w-[88px] flex flex-col justify-between",
+        cardCls,
+      )}
+    >
+      <div className="text-[9px] uppercase tracking-wider text-text-muted font-bold">
+        {label}
       </div>
-      {sub && <div className="text-[10px] text-text-muted">{sub}</div>}
+      <div className="flex items-center gap-1.5 mt-1">
+        {alert && (
+          <span aria-hidden className="text-red-600 text-sm leading-none">⚠</span>
+        )}
+        <span className={cn("text-[13px] font-bold leading-tight", valueTone)}>
+          {value}
+        </span>
+      </div>
+      {/* Reserve a slot for sub so all cards align at baseline */}
+      <div className="text-[10px] text-text-muted mt-0.5 min-h-[14px]">
+        {sub ?? " "}
+      </div>
     </div>
   );
 }

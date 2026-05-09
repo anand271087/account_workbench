@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import type {
   Engagement,
@@ -75,6 +77,16 @@ export default function PreSalesTab() {
       setAiError(null);
     },
     onError: (e: ApiError) => setAiError(e.message),
+  });
+
+  // Unsaved-changes guard — beforeunload + in-app nav intercept + Cmd/S.
+  const saveDirty = () => {
+    if (form && data) saveMutation.mutate(diff(form, data));
+  };
+  const guard = useUnsavedChangesGuard({
+    dirty,
+    isSaving: saveMutation.isPending,
+    onSaveShortcut: saveDirty,
   });
 
   if (isLoading || !form) {
@@ -303,7 +315,7 @@ export default function PreSalesTab() {
 
       {/* Handover gate */}
       {form.is_editable && (
-        <div className="lg:col-span-3 bg-slate-50 rounded-xl border border-slate-200 p-4 flex items-center gap-3 flex-wrap">
+        <div className="lg:col-span-3 bg-slate-50 rounded-card border border-beroe-card-border p-4 flex items-center gap-3 flex-wrap">
           <div className="text-sm">
             <div className="font-bold text-text-primary">Pre-Sales → Solutioning handover</div>
             <div className="text-xs text-text-muted">
@@ -333,35 +345,69 @@ export default function PreSalesTab() {
         </div>
       )}
 
-      {/* Sticky save bar */}
+      {/* Sticky save bar — pulses when dirty */}
       {form.is_editable && (
-        <div className="lg:col-span-3 sticky bottom-0 bg-white border-t border-slate-200 -mx-6 px-6 py-3 flex items-center gap-3">
+        <div
+          className={cn(
+            "lg:col-span-3 sticky bottom-0 -mx-6 px-6 py-3 flex items-center gap-3 border-t z-30 transition-colors",
+            dirty
+              ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+              : "bg-white border-beroe-card-border",
+          )}
+        >
           {savingError && (
             <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
               {savingError}
             </span>
           )}
           {!savingError && dirty && (
-            <span className="text-xs text-amber-700">Unsaved changes</span>
+            <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Unsaved changes
+              <span className="text-amber-700/70 font-normal ml-1">
+                · Cmd / Ctrl + S to save
+              </span>
+            </span>
           )}
           {!dirty && !savingError && (
-            <span className="text-xs text-text-muted">All changes saved</span>
+            <span className="text-xs text-text-muted">✓ All changes saved</span>
           )}
           <button
             onClick={() => setForm(data!)}
             disabled={!dirty || saveMutation.isPending}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50"
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
           >
             Discard
           </button>
           <button
-            onClick={() => saveMutation.mutate(diff(form, data!))}
+            onClick={saveDirty}
             disabled={!dirty || saveMutation.isPending}
             className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
           >
             {saveMutation.isPending ? "Saving…" : "Save"}
           </button>
         </div>
+      )}
+
+      {/* Unsaved-changes guard dialog */}
+      {guard.pendingHref && (
+        <UnsavedChangesDialog
+          pendingHref={guard.pendingHref}
+          saving={saveMutation.isPending}
+          onSaveAndGo={async () => {
+            try {
+              if (form && data) await saveMutation.mutateAsync(diff(form, data));
+              guard.proceed();
+            } catch {
+              /* error already surfaces in savingError; user can retry or discard */
+            }
+          }}
+          onDiscardAndGo={() => {
+            if (data) setForm(data);
+            guard.proceed();
+          }}
+          onStay={guard.stay}
+        />
       )}
     </div>
   );
@@ -379,7 +425,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
+    <div className="bg-white rounded-card border border-beroe-card-border p-5">
       <h2 className="text-sm font-bold text-text-primary">{title}</h2>
       {subtitle && <p className="text-xs text-text-muted mt-0.5 mb-3">{subtitle}</p>}
       {!subtitle && <div className="mb-2" />}
@@ -440,6 +486,7 @@ function CategoryPicker({
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["categories"],
     queryFn: () => api.get<Category[]>("/api/v1/lookups/categories"),
+    staleTime: 30_000,
   });
   const [proposeText, setProposeText] = useState("");
   const [proposeError, setProposeError] = useState<string | null>(null);

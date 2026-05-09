@@ -137,12 +137,12 @@ export default function ContactsTab() {
       </div>
 
       {visible.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-sm text-text-muted">
+        <div className="bg-white rounded-card border border-beroe-card-border p-10 text-center text-sm text-text-muted">
           No contacts yet.
           {data.is_editable && " Click + Add contact to add your first one."}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
@@ -161,7 +161,7 @@ export default function ContactsTab() {
                 <tr
                   key={c.id}
                   className={cn(
-                    "border-t border-slate-100 hover:bg-slate-50/60",
+                    "border-t border-beroe-card-border/60 hover:bg-slate-50/60",
                     c.deleted_at && "opacity-50",
                   )}
                 >

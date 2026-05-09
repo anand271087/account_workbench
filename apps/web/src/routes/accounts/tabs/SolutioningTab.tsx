@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ENGAGEMENT_TYPE_LABELS,
@@ -46,6 +48,15 @@ export default function SolutioningTab() {
       setSavingError(null);
     },
     onError: (e: ApiError) => setSavingError(e.message),
+  });
+
+  const saveDirty = () => {
+    if (form && data) saveMutation.mutate(diff(form, data));
+  };
+  const guard = useUnsavedChangesGuard({
+    dirty,
+    isSaving: saveMutation.isPending,
+    onSaveShortcut: saveDirty,
   });
 
   if (isLoading || !form) {
@@ -192,7 +203,7 @@ export default function SolutioningTab() {
           </Field>
         </Section>
 
-        <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 text-xs text-text-muted">
+        <div className="bg-slate-50 rounded-card border border-beroe-card-border p-4 text-xs text-text-muted">
           <div className="font-bold text-text-secondary mb-1">How this works</div>
           When you upload a VPD on the Documents tab, Claude reads it and proposes
           values for the fields above. Review and edit anything that's off — saving
@@ -202,23 +213,38 @@ export default function SolutioningTab() {
       </div>
 
       {form.is_editable && (
-        <div className="lg:col-span-3 sticky bottom-0 bg-white border-t border-slate-200 -mx-6 px-6 py-3 flex items-center gap-3">
+        <div
+          className={cn(
+            "lg:col-span-3 sticky bottom-0 -mx-6 px-6 py-3 flex items-center gap-3 border-t z-30 transition-colors",
+            dirty
+              ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+              : "bg-white border-beroe-card-border",
+          )}
+        >
           {savingError && (
             <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
               {savingError}
             </span>
           )}
-          {!savingError && dirty && <span className="text-xs text-amber-700">Unsaved changes</span>}
-          {!dirty && !savingError && <span className="text-xs text-text-muted">All changes saved</span>}
+          {!savingError && dirty && (
+            <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Unsaved changes
+              <span className="text-amber-700/70 font-normal ml-1">
+                · Cmd / Ctrl + S to save
+              </span>
+            </span>
+          )}
+          {!dirty && !savingError && <span className="text-xs text-text-muted">✓ All changes saved</span>}
           <button
             onClick={() => data && setForm(data)}
             disabled={!dirty || saveMutation.isPending}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50"
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
           >
             Discard
           </button>
           <button
-            onClick={() => data && saveMutation.mutate(diff(form, data))}
+            onClick={saveDirty}
             disabled={!dirty || saveMutation.isPending}
             className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
           >
@@ -226,13 +252,33 @@ export default function SolutioningTab() {
           </button>
         </div>
       )}
+
+      {guard.pendingHref && (
+        <UnsavedChangesDialog
+          pendingHref={guard.pendingHref}
+          saving={saveMutation.isPending}
+          onSaveAndGo={async () => {
+            try {
+              if (form && data) await saveMutation.mutateAsync(diff(form, data));
+              guard.proceed();
+            } catch {
+              /* error already surfaced via savingError */
+            }
+          }}
+          onDiscardAndGo={() => {
+            if (data) setForm(data);
+            guard.proceed();
+          }}
+          onStay={guard.stay}
+        />
+      )}
     </div>
   );
 }
 
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
+    <div className="bg-white rounded-card border border-beroe-card-border p-5">
       <h2 className="text-sm font-bold text-text-primary">{title}</h2>
       {subtitle && <p className="text-xs text-text-muted mt-0.5 mb-3">{subtitle}</p>}
       {!subtitle && <div className="mb-2" />}

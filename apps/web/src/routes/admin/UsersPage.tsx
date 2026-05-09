@@ -117,9 +117,9 @@ export default function UsersPage() {
         {isLoading && <div className="text-sm text-text-muted">Loading users…</div>}
 
         {data && (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-text-muted text-[11px] uppercase tracking-wider">
+              <thead className="bg-beroe-bg text-text-muted text-[11px] uppercase tracking-wider">
                 <tr>
                   <th className="text-left px-4 py-2.5 font-bold">Name</th>
                   <th className="text-left px-4 py-2.5 font-bold">Email</th>
@@ -132,7 +132,7 @@ export default function UsersPage() {
                 {data.map((u) => {
                   const isSelf = me?.user.id === u.id;
                   return (
-                    <tr key={u.id} className="border-t border-slate-100">
+                    <tr key={u.id} className="border-t border-beroe-card-border/60">
                       <td className="px-4 py-3 font-semibold text-text-primary">
                         {u.full_name ?? "—"}
                         {isSelf && <span className="ml-2 text-[10px] text-text-muted">(you)</span>}

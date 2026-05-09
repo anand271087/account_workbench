@@ -209,7 +209,7 @@ export default function DocumentsTab() {
 
       {/* Sales Discovery Summary card */}
       {discovery && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="bg-white rounded-card border border-beroe-card-border p-5">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-text-primary">Sales Discovery Summary</h2>
@@ -293,8 +293,8 @@ export default function DocumentsTab() {
       )}
 
       {/* List */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
+        <div className="px-5 py-3 border-b border-beroe-card-border/60 flex items-center justify-between">
           <h3 className="text-sm font-bold text-text-primary">Documents</h3>
           <span className="text-xs text-text-muted">{data.total} total</span>
         </div>
@@ -304,7 +304,7 @@ export default function DocumentsTab() {
             {data.is_editable && "Upload a MOM, VPD, transcript, or email to start."}
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-beroe-card-border/60">
             {data.items.map((d) => (
               <DocumentRow
                 key={d.id}
