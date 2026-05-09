@@ -431,14 +431,25 @@ function DocumentRow({
         </div>
         {isEditable && (
           <div className="flex gap-3 shrink-0">
-            <button
-              onClick={onRerun}
-              disabled={doc.ai_status === "processing" || doc.ai_status === "pending"}
-              className="text-xs text-beroe-blue hover:underline font-semibold disabled:opacity-40"
-              title="Re-run AI summary"
-            >
-              Rerun
-            </button>
+            {(() => {
+              // Disable while genuinely fresh-in-flight (uploaded < 90s ago and
+              // still pending/processing). Anything older than that is stuck —
+              // user should be able to rerun it to unstick.
+              const age = Date.now() - new Date(doc.uploaded_at).getTime();
+              const inFlight =
+                (doc.ai_status === "processing" || doc.ai_status === "pending") &&
+                age < 90_000;
+              return (
+                <button
+                  onClick={onRerun}
+                  disabled={inFlight}
+                  className="text-xs text-beroe-blue hover:underline font-semibold disabled:opacity-40"
+                  title={inFlight ? "Already in progress…" : "Re-run AI summary"}
+                >
+                  Rerun
+                </button>
+              );
+            })()}
             <button
               onClick={onDelete}
               className="text-xs text-red-700 hover:underline font-semibold"
