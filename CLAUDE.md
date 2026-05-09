@@ -60,6 +60,18 @@ See [`docs/architecture/overview.md`](./docs/architecture/overview.md) for the d
 ## Current state
 
 ### ✅ Built
+- **M10 — Production polish + deploy (2026-05-09)** ([FUNC](./docs/features/M10-production/FUNCTIONAL.md) · [TECH](./docs/features/M10-production/TECHNICAL.md))
+  - **Deployed to Render + Vercel** end-to-end. `render.yaml` Blueprint stands up FastAPI + Celery worker + managed Redis in one click; `apps/web/vercel.json` adds SPA-fallback rewrite so deep links don't 404.
+  - **Visual prototype match** — Tailwind tokens lifted from prototype `:root` (card-border #e4eaf6, navy-4 #001e52, rounded-card 14px). Sidebar restyled to `.sb-btn` with brightened text contrast; sub-nav switched from pills to underline `.tab-b` pattern; cards harmonized everywhere.
+  - **AK02 KPI strip** — uniform mini-cards with **red alert pill + ⚠** for danger renewal/health (prevents the vertical jaggedness from mixed-height stats).
+  - **Overview redesigned** — no header duplication; engagement snapshot, three-up status mini-cards (Roster / Documents / Solutioning), lifecycle progress bar with today marker, Sales Discovery summary preview.
+  - **Unsaved-changes guard** (Pre-Sales + Solutioning): sticky save bar pulses amber when dirty; navigating away pops a Save & continue / Discard / Stay dialog with prettified destination labels; `Cmd / Ctrl + S` saves; `beforeunload` for browser-close.
+  - **Persistent favourites** — new `user_favorites` table + RLS (0016); `GET / POST / DELETE /api/v1/me/favorites/{account_id}`; star toggle on AK01 row + AK02 header; sidebar **Pinned** + (CSM-only) **My portfolio** sections; one-shot localStorage→DB migration.
+  - **Categories admin** — `/admin/categories` two-column page (pending/approved) with **reject-with-reason** modal that captures ≥5-char reason and writes it to `audit_log`. Unified query key + 30s staleTime + skeleton.
+  - **Solutioning** sub-tab moved next to Pre-Sales; **Sortable Contacts columns**.
+  - **DB perf escape hatch** — auto-detects session vs transaction-mode pooler from `DATABASE_URL` port (5432 vs 6543); flips `statement_cache_size` and pool sizing accordingly. Production runs on 6543 to escape the 15-client cap.
+  - **CI fixes**: ESLint v9 flat config (was crashing on `.eslintrc.cjs`); committed `apps/api/uv.lock`; dropped duplicate pnpm version pin.
+  - **UX recovery**: Rerun button enabled on >90s-old stuck-pending docs; documents dedup now restores soft-deleted rows; `vercel.json` SPA rewrite stops deep-link 404s.
 - **M9 — Admin: Account creation + User management (2026-05-08)** ([FUNC](./docs/features/M9-admin/FUNCTIONAL.md) · [TECH](./docs/features/M9-admin/TECHNICAL.md))
   - **Backend:**
     - `POST /api/v1/accounts` — admin/cs_director/vp_csm; `_slugify` + `_unique_slug` (`-2`/`-3` on collision); CSM-role validation; uses existing audit listener
@@ -183,10 +195,11 @@ See [`docs/architecture/overview.md`](./docs/architecture/overview.md) for the d
   - Beroe SSO swap path documented (Phase 2 — `auth-sso.ts` is one import change)
 
 ### 🚧 In progress
-_(none — awaiting M8 kickoff)_
+_(none — Sprint 1 deployed and stakeholder-demo-ready)_
 
 ### ⏳ Up next
-- **M8 — Scaffold remaining HTML tabs + production cutover** (Home, Leadership, Success Mgmt, Growth, Intel as routed shells with `v1.1` banners; Render + Vercel deploy; smoke tests)
+- **M8 — Scaffold remaining HTML tabs** (Home, Leadership, Success Mgmt, Growth, Intel as routed shells with `v1.1` banners). Production cutover already happened in M10.
+- **v1.1 backlog** — flesh out Home / Success / Growth / Intel tabs with real data; bulk import for users; audio/video transcription on document upload; AI assistant side panel; PowerPoint export.
 
 ---
 
@@ -233,6 +246,21 @@ _(none — awaiting M8 kickoff)_
 - **2026-05-08** — User invite uses Supabase Auth `invite_user_by_email` with service-role key. `public.users.id` is the same UUID as `auth.users.id` (FK constraint), pre-provisioned by admin so role+team are set *before* first login. Re-invite same email is idempotent: resets status to `pending`, refreshes role, re-sends link. Reason: Phase-2 SSO will swap the email step for SSO email-match; the data model + admin UI stays identical.
 - **2026-05-08** — Admin self-protection: cannot demote self out of admin (PATCH /users/:id with role!=admin → 400) and cannot deactivate self (DELETE /users/:id → 400). Reason: prevents workspace lockout via single accidental click.
 - **2026-05-08** — `invalidate_user_cache(user_id)` called explicitly after every user PATCH/DELETE so the 60s identity-cache TTL doesn't delay a role change taking effect. Reason: defense-in-depth on role demotions — if you remove someone's admin perms, they should stop being admin on the next request, not 60s later.
+
+### M10 — Production polish + deploy (2026-05-09)
+
+- **2026-05-09** — Deployed via **Render Blueprint** (`render.yaml`) for backend + Celery + Redis, **Vercel** for frontend. Reason: Blueprint declares all three services + env wiring once; one-click reproducible setup; secrets stay out of git via `sync: false`. Manual service-by-service Render setup was 3× the work and prone to URL-copy errors on `CELERY_BROKER_URL` between web and worker.
+- **2026-05-09** — `apps/web/vercel.json` SPA fallback (`{"source": "/(.*)", "destination": "/index.html"}`). Reason: deep links like `/accounts/<id>/documents` 404'd on direct paste / browser refresh because Vercel looked for a static file at that path. The rewrite only kicks in after asset lookup fails, so JS/CSS bundles still serve correctly.
+- **2026-05-09** — DB pooler mode auto-detects from `DATABASE_URL` port (`:5432` session, `:6543` transaction). Reason: session-mode caps at 15 clients on Free tier — production hit `EMAXCONNSESSION` immediately because API+worker+local stack shared the same project. Transaction-mode raises the cap to ~200 at the cost of ~110 ms per query (no server-side prepared statements). Worth the latency to escape the cap.
+- **2026-05-09** — Production runs on transaction-mode pooler (`:6543`); local dev can stay on either since prod no longer competes for those 15 slots. Code-path single — flip the env var on the host to switch.
+- **2026-05-09** — Favourites moved from localStorage (Phase 1) to `user_favorites` Postgres table with RLS (`user_id = auth.uid()`). Hook auto-migrates Phase-1 entries on first load via POST loop, then wipes the localStorage key. Reason: cross-device sync, audit-able, and the public API of `useFavoriteAccounts` is unchanged so no caller churn.
+- **2026-05-09** — Category rejection writes the **reason** to `audit_log` before the row is deleted (route writes the audit row directly because `lookup_categories` isn't in the SQLAlchemy `before_flush` listener). Reason: governance — anyone can later see why a proposal was killed and by whom; deleting the row keeps the picker clean for everyone else.
+- **2026-05-09** — Unsaved-changes guard via click-capture + `beforeunload` (NOT React Router's `useBlocker` which requires the data router). Reason: avoids migrating `<BrowserRouter>` to `createBrowserRouter` + `RouterProvider` — much smaller change to ship guard on Pre-Sales + Solutioning tabs only.
+- **2026-05-09** — Rerun button enabled on docs that are **>90 s old AND still pending/processing**. Reason: hard-disabled state was permanent on EMAXCONNSESSION-style hangs; user couldn't self-recover. Anything older than 90s is either stuck or too far gone to interrupt — let the user re-trigger.
+- **2026-05-09** — ESLint migrated from `.eslintrc.cjs` to flat `eslint.config.js`. Reason: ESLint v9 dropped legacy config support entirely; `.eslintrc.*` makes the linter crash with no rules evaluated. Same rules + `ignoreRestSiblings: true` (for the `const {a, b, ...rest}` drop-keys pattern in `serialise()` helpers) + `react-refresh/only-export-components: off` (we deliberately export hooks alongside components).
+- **2026-05-09** — `apps/api/uv.lock` committed. Reason: Render's `uv sync --frozen` build command requires it; refusing to deploy without a lockfile is correct production behaviour (no surprise version drift).
+- **2026-05-09** — Render API pool downsized to 3 base + 7 overflow = 10 max (was 10+20=30) when on session-mode pooler. Reason: 15-client Supabase cap. Tx-mode mode bumps it back to 10+20=30 since the cap is ~200.
+- **2026-05-09** — Audited and committed pre-existing TypeScript / ESLint warnings before deploy. Reason: CI's `--max-warnings 0` flag is a hard gate; one warning blocks the entire deploy pipeline. Fixed AuthProvider's `let unsub` → `const`, useMemo deps `[authUser, meQuery]`.
 
 ---
 

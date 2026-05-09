@@ -21,6 +21,7 @@ Every feature has its own folder with two markdown files:
 | F01.x  | F01 lockout (5/15min) + forgot-password | Sprint 1 | ✅ Built (M2.5) |
 | AK01.x | AK01 page-size, renewal-window, CSV export, bulk reassign, extended search | Sprint 1 | ✅ Built (M3.5) |
 | M9 | Admin: Account creation + User management | Sprint 1 | ✅ Built (M9) |
+| M10 | Production polish + Render/Vercel deploy | Sprint 1 | ✅ Built (M10) — live on Vercel + Render |
 
 ## Definition of Done
 
