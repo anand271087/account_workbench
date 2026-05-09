@@ -1,0 +1,101 @@
+# Render Blueprint — one-click setup for the AWB backend.
+#
+# Usage:
+#   1. Push this file (you're doing it now).
+#   2. Go to https://dashboard.render.com → Blueprints → New Blueprint Instance.
+#   3. Pick this repo + branch `main`. Render reads this file and creates all
+#      three services with the right wiring (web ↔ worker ↔ redis).
+#   4. After the services are created, fill the env vars marked `sync: false`
+#      from the Render dashboard. The rest are auto-wired.
+#
+# The free tier on Render spins web services down after 15 min of inactivity
+# (cold start ≈ 30 s). Workers don't auto-spin-down. If that's a problem,
+# upgrade just the web service to Starter ($7/mo).
+
+services:
+  # -------------------- FastAPI web service --------------------
+  - type: web
+    name: beroe-awb-api
+    runtime: python
+    plan: free
+    branch: main
+    rootDir: apps/api
+    autoDeploy: true
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.10
+      - key: ENV
+        value: production
+      - key: API_PORT
+        value: "10000"
+      # Wire to the Render-managed Redis below
+      - key: REDIS_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_BROKER_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_RESULT_BACKEND
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      # Fill these from the Render dashboard (sync: false = no value in repo)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
+      - key: CORS_ORIGINS
+        # Update this to your Vercel URL once Vercel's deployed.
+        value: "http://localhost:5173"
+      - key: CLAUDE_USER_DAILY_LIMIT
+        value: "200"
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "100"
+
+  # -------------------- Celery worker --------------------
+  - type: worker
+    name: beroe-awb-worker
+    runtime: python
+    plan: starter   # workers don't have a free tier; cheapest is $7/mo
+    branch: main
+    rootDir: apps/api
+    autoDeploy: true
+    buildCommand: pip install uv && uv sync --frozen
+    # Linux doesn't have the macOS fork issue → default prefork pool is fine
+    startCommand: .venv/bin/celery -A app.workers.celery_app.celery_app worker --loglevel=INFO --concurrency=2
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.10
+      - key: ENV
+        value: production
+      - key: REDIS_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_BROKER_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_RESULT_BACKEND
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
+
+  # -------------------- Redis (broker + cache) --------------------
+  - type: redis
+    name: beroe-awb-redis
+    plan: free            # 25 MB, sufficient for Celery broker + light cache
+    ipAllowList: []       # Render-internal only (web + worker connect via fromService)
