@@ -32,8 +32,11 @@ engine = create_async_engine(
     _settings.database_url,
     pool_pre_ping=False,
     pool_recycle=180,           # recycle conns every 3 min so stale ones don't pile up
-    pool_size=10,
-    max_overflow=20,
+    # Supabase's session-mode pooler caps at 15 clients per project. We share
+    # those 15 with the Celery worker (NullPool, ~2 conns) and any local dev
+    # processes. Keep the API at 3 + 7 = 10 max to leave room.
+    pool_size=3,
+    max_overflow=7,
     echo=False,
     connect_args={
         "statement_cache_size": 200,
