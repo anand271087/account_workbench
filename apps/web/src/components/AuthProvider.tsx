@@ -24,10 +24,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initial session check + subscribe to changes.
   useEffect(() => {
-    let unsub: (() => void) | undefined;
     authProvider.getCurrentUser().then(setAuthUser);
-    unsub = authProvider.onAuthChange((u) => setAuthUser(u));
-    return () => unsub?.();
+    const unsub = authProvider.onAuthChange((u) => setAuthUser(u));
+    return () => unsub();
   }, []);
 
   // Fetch /me once we have an authUser.
@@ -53,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         meQuery.refetch();
       },
     }),
-    [authUser, meQuery.data, meQuery.isLoading],
+    [authUser, meQuery],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
