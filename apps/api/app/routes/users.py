@@ -56,6 +56,38 @@ async def list_users(
     return [UserOut.model_validate(u) for u in rows]
 
 
+@router.get("/lookup", response_model=list[UserOut])
+async def user_lookup(
+    user: CurrentUser,  # noqa: ARG001 — auth required, not used directly
+    db: Annotated[AsyncSession, Depends(get_db)],
+    role: str | None = Query(
+        None,
+        description=(
+            "Optional filter by role_key. Useful for picking SDR/Sales/Discovery "
+            "leads in Pre-Sales (use 'sales' role hint via the UI)."
+        ),
+    ),
+) -> list[UserOut]:
+    """Lightweight Beroe-staff picker — returns ACTIVE users only.
+
+    Available to any authenticated caller (non-admins need this to pick
+    teammates as engagement leads on Pre-Sales). Returns the same shape as
+    GET /users but always strips deactivated rows. No PII beyond what
+    already flows in /me payloads.
+    """
+    stmt = (
+        select(User)
+        .where(User.deleted_at.is_(None))
+        .order_by(User.full_name.asc())
+    )
+    if role:
+        if role not in ALL_ROLES:
+            return []
+        stmt = stmt.where(User.role == role)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [UserOut.model_validate(u) for u in rows]
+
+
 # ============================================================
 # POST /users — admin invites a teammate
 # ============================================================

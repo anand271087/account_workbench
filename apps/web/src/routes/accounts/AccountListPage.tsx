@@ -978,8 +978,11 @@ function CreateAccountModal({
                 <input
                   type="number"
                   step="1000"
+                  min={0}
                   value={form.current_acv}
-                  onChange={(e) => setForm({ ...form, current_acv: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, current_acv: e.target.value.replace(/^-/, "") })
+                  }
                   className={modalInputCls}
                 />
               </ModalField>
@@ -987,8 +990,11 @@ function CreateAccountModal({
                 <input
                   type="number"
                   step="1000"
+                  min={0}
                   value={form.target_acv}
-                  onChange={(e) => setForm({ ...form, target_acv: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, target_acv: e.target.value.replace(/^-/, "") })
+                  }
                   className={modalInputCls}
                 />
               </ModalField>
@@ -1023,7 +1029,16 @@ function CreateAccountModal({
                   min={0}
                   max={100}
                   value={form.health_score}
-                  onChange={(e) => setForm({ ...form, health_score: e.target.value })}
+                  onChange={(e) => {
+                    // Clamp to [0, 100] so the UI matches the server schema
+                    // (Pydantic ge=0/le=100 also rejects out-of-range).
+                    const raw = e.target.value;
+                    if (raw === "") return setForm({ ...form, health_score: "" });
+                    const n = parseInt(raw, 10);
+                    if (Number.isNaN(n)) return;
+                    const clamped = Math.max(0, Math.min(100, n));
+                    setForm({ ...form, health_score: String(clamped) });
+                  }}
                   className={modalInputCls}
                 />
               </ModalField>

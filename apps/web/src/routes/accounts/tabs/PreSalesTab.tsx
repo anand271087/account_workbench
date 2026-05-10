@@ -223,13 +223,18 @@ export default function PreSalesTab() {
               <input
                 type="number"
                 step="0.01"
+                min={0}
                 value={form.procurement_spend_musd ?? ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // Strip a leading minus on the fly so users can't even type
+                  // negatives (server enforces ge=0 too as belt-and-braces).
+                  const cleaned = v.replace(/^-/, "");
                   setForm({
                     ...form,
-                    procurement_spend_musd: e.target.value === "" ? null : e.target.value,
-                  })
-                }
+                    procurement_spend_musd: cleaned === "" ? null : cleaned,
+                  });
+                }}
                 disabled={!form.is_editable}
                 className={inputCls(form.is_editable)}
               />
@@ -242,41 +247,42 @@ export default function PreSalesTab() {
       <div className="space-y-4">
         <Section title="Origin">
           <Field label="SDR / lead source">
-            <input
-              type="text"
-              value={form.sdr_lead ?? ""}
-              onChange={(e) => setForm({ ...form, sdr_lead: e.target.value })}
+            <BeroeUserPicker
+              value={form.sdr_lead ?? null}
+              onChange={(v) => setForm({ ...form, sdr_lead: v })}
               disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
+              placeholder="Pick the SDR who sourced this account"
             />
           </Field>
           <Field label="Pre-discovery date">
             <input
               type="date"
               value={form.pre_discovery_date ?? ""}
+              max={todayISO()}
               onChange={(e) =>
                 setForm({ ...form, pre_discovery_date: e.target.value || null })
               }
               disabled={!form.is_editable}
               className={inputCls(form.is_editable)}
             />
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Must be today or earlier — pre-discovery is a past event.
+            </div>
           </Field>
           <Field label="Discovery lead">
-            <input
-              type="text"
-              value={form.discovery_lead ?? ""}
-              onChange={(e) => setForm({ ...form, discovery_lead: e.target.value })}
+            <BeroeUserPicker
+              value={form.discovery_lead ?? null}
+              onChange={(v) => setForm({ ...form, discovery_lead: v })}
               disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
+              placeholder="Pick the teammate running discovery"
             />
           </Field>
           <Field label="Sales lead">
-            <input
-              type="text"
-              value={form.sales_lead ?? ""}
-              onChange={(e) => setForm({ ...form, sales_lead: e.target.value })}
+            <BeroeUserPicker
+              value={form.sales_lead ?? null}
+              onChange={(v) => setForm({ ...form, sales_lead: v })}
               disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
+              placeholder="Pick the sales owner for this account"
             />
           </Field>
         </Section>
@@ -668,4 +674,73 @@ function diff(next: Engagement, prev: Engagement): EngagementUpdate {
 function serialise(e: Engagement): unknown {
   const { updated_at, updated_by, is_editable, ai_quality_score, ...rest } = e;
   return rest;
+}
+
+/** ISO yyyy-mm-dd for today — used as the `max` on pre_discovery_date. */
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ---------- BeroeUserPicker (SDR / Discovery / Sales lead) ----------
+//
+// Names alone aren't unique over years (many "Gauravs"), so we store the
+// canonical Beroe email address. The picker shows "Full Name (email)" so
+// the human still recognises the row; saving stores just the email.
+
+interface BeroeUserOpt {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+}
+
+function BeroeUserPicker({
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+  disabled: boolean;
+  placeholder?: string;
+}) {
+  const { data, isLoading, isError } = useQuery<BeroeUserOpt[]>({
+    queryKey: ["users-lookup"],
+    queryFn: () => api.get<BeroeUserOpt[]>("/api/v1/users/lookup"),
+    staleTime: 5 * 60_000,
+  });
+
+  // If the saved value isn't in the active-user list (e.g. a teammate left),
+  // surface the raw email so it's still visible — picker can't lose data.
+  const knownEmails = new Set((data ?? []).map((u) => u.email.toLowerCase()));
+  const valueIsStale = !!value && !knownEmails.has(value.toLowerCase());
+
+  return (
+    <div>
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        disabled={disabled || isLoading}
+        className={inputCls(!disabled)}
+      >
+        <option value="">{isLoading ? "Loading…" : (placeholder ?? "— Select —")}</option>
+        {valueIsStale && value && (
+          <option value={value}>
+            {value} (former teammate)
+          </option>
+        )}
+        {(data ?? []).map((u) => (
+          <option key={u.id} value={u.email}>
+            {u.full_name ? `${u.full_name} · ${u.email}` : u.email}
+          </option>
+        ))}
+      </select>
+      {isError && (
+        <div className="text-[10px] text-red-700 mt-0.5">
+          Could not load Beroe users — paste an @beroe-inc.com email manually if needed.
+        </div>
+      )}
+    </div>
+  );
 }
