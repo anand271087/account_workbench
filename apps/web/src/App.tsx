@@ -8,7 +8,6 @@ import AccountProfileLayout from "@/routes/accounts/AccountProfileLayout";
 import OverviewTab from "@/routes/accounts/tabs/OverviewTab";
 import PreSalesTab from "@/routes/accounts/tabs/PreSalesTab";
 import ContactsTab from "@/routes/accounts/tabs/ContactsTab";
-import DocumentsTab from "@/routes/accounts/tabs/DocumentsTab";
 import SolutioningTab from "@/routes/accounts/tabs/SolutioningTab";
 import UsersPage from "@/routes/admin/UsersPage";
 import CategoriesPage from "@/routes/admin/CategoriesPage";
@@ -107,7 +106,8 @@ export default function App() {
         <Route path="overview" element={<OverviewTab />} />
         <Route path="pre-sales" element={<PreSalesTab />} />
         <Route path="contacts" element={<ContactsTab />} />
-        <Route path="documents" element={<DocumentsTab />} />
+        {/* /documents removed in M11 — redirect any old deep links to Pre-Sales. */}
+        <Route path="documents" element={<Navigate to="../pre-sales" replace />} />
         <Route path="solutioning" element={<SolutioningTab />} />
         <Route path="value-def" element={<ValueDefinitionPlaceholder />} />
         <Route path="goals" element={<GoalsInitiativesPlaceholder />} />

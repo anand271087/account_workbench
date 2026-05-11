@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { KindUploadCard } from "@/components/KindUploadCard";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ENGAGEMENT_TYPE_LABELS,
@@ -70,7 +71,18 @@ export default function SolutioningTab() {
   const showAiBadge = aiExtracted && form.is_editable;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="space-y-4">
+      {/* VPD uploads — first thing on Solutioning so the doc that drives
+          the structured fields below is the most visible action. */}
+      <KindUploadCard
+        accountId={account.id}
+        kind="vpd"
+        title="Value Proposition Deck (VPD)"
+        description="Upload the latest VPD. Claude reads it and proposes values for the structured Solutioning fields below — review and save to keep them."
+        emptyHint="No VPDs yet. Drag a .docx, .pdf or .txt onto the card above."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
         {showAiBadge && (
           <div className={cn(
@@ -272,6 +284,7 @@ export default function SolutioningTab() {
           onStay={guard.stay}
         />
       )}
+      </div>
     </div>
   );
 }

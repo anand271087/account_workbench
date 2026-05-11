@@ -138,7 +138,7 @@ export default function OverviewTab() {
 
           <Card
             title="Documents"
-            action={{ label: "Open →", onClick: () => navigate(`/accounts/${account.id}/documents`) }}
+            action={{ label: "Open Pre-Sales →", onClick: () => navigate(`/accounts/${account.id}/pre-sales`) }}
             compact
           >
             <BigStat value={docs.data?.items.length ?? 0} label="uploaded" />
@@ -234,7 +234,7 @@ export default function OverviewTab() {
         {discovery.data?.summary_text && (
           <Card
             title="Sales Discovery Summary"
-            action={{ label: "Open Documents →", onClick: () => navigate(`/accounts/${account.id}/documents`) }}
+            action={{ label: "Open Pre-Sales →", onClick: () => navigate(`/accounts/${account.id}/pre-sales`) }}
           >
             <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap line-clamp-6">
               {discovery.data.summary_text}

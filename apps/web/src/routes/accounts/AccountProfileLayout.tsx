@@ -26,7 +26,7 @@ const SUB_NAV: SubNavItem[] = [
   { to: "pre-sales",    label: "Pre-Sales",     show: (a) => a.can_view_pre_sales },
   { to: "solutioning",  label: "Solutioning",   show: (a) => a.can_view_solutioning },
   { to: "contacts",     label: "Contacts",      show: (a) => a.can_view_contacts },
-  { to: "documents",    label: "Documents",     show: (a) => a.can_view_documents },
+  // Documents tab removed in M11 — MoMs live on Pre-Sales, VPDs on Solutioning.
   { to: "value-def",    label: "Value Def",     show: () => true },
   { to: "goals",        label: "Goals",         show: () => true },
 ];
