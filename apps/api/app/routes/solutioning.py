@@ -27,7 +27,12 @@ from app.db.session import get_db
 from app.models.account import Account
 from app.models.solutioning import AccountSolutioning
 from app.routes.accounts import _team_member_ids
-from app.schemas.solutioning import HandoverOut, SolutioningOut, SolutioningUpdate
+from app.schemas.solutioning import (
+    HandoverOut,
+    SolutioningLockOut,
+    SolutioningOut,
+    SolutioningUpdate,
+)
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["solutioning"])
 
@@ -68,7 +73,11 @@ async def get_solutioning(
         )
 
     out = SolutioningOut.model_validate(row)
-    out.is_editable = can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team)
+    # Lock is the second wall — even users with role-level write get is_editable=false
+    # while the value definition is locked for Sales Hand-off. Unlocking is its own
+    # action so an edit and a re-pass leaves an audit trail.
+    role_can_write = can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team)
+    out.is_editable = role_can_write and row.locked_at is None
     return out
 
 
@@ -94,9 +103,17 @@ async def patch_solutioning(
     if is_first_save:
         row = AccountSolutioning(account_id=account_id, value_themes=[])
         db.add(row)
+    elif row.locked_at is not None:
+        # Defense in depth — frontend disables the form too, but a stale tab
+        # mustn't be allowed to overwrite a locked record.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Solutioning is locked for Sales Hand-off — unlock before editing.",
+        )
 
     payload = body.model_dump(exclude_unset=True)
     # If the user changed any AI-extracted field, mark as AI-assisted (BRD §4.3.d).
+    # Trial fields and lock state are out of scope — they're typed by the user, not AI.
     user_touched_ai_field = any(
         k in payload
         for k in (
@@ -121,6 +138,93 @@ async def patch_solutioning(
     out = SolutioningOut.model_validate(row)
     out.is_editable = True
     return out
+
+
+# ============================================================
+# POST /accounts/:id/solutioning/lock  +  /unlock
+# ============================================================
+
+
+async def _get_or_create_solutioning_row(
+    db: AsyncSession, account_id: UUID
+) -> AccountSolutioning:
+    row = (
+        await db.execute(
+            select(AccountSolutioning).where(AccountSolutioning.account_id == account_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = AccountSolutioning(account_id=account_id, value_themes=[])
+        db.add(row)
+        await db.flush()
+    return row
+
+
+@router.post("/{account_id}/solutioning/lock", response_model=SolutioningLockOut)
+async def lock_solutioning(
+    account_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SolutioningLockOut:
+    """Solutioning → Sales Hand-off lock.
+
+    Anyone with edit on solutioning can lock. Idempotent: re-calling on a
+    locked row is a no-op (returns current state). Requires a value definition
+    so we don't hand an empty contract to Sales.
+    """
+    _, is_assigned, is_team = await _scope(db, user, account_id)
+    if not can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "You cannot lock solutioning on this account"
+        )
+
+    row = await _get_or_create_solutioning_row(db, account_id)
+    if row.locked_at is not None:
+        return SolutioningLockOut(
+            account_id=account_id, locked_at=row.locked_at, locked_by=row.locked_by
+        )
+
+    if not (row.value_definition and row.value_definition.strip()):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Cannot lock without a value definition — fill it before passing to Sales.",
+        )
+
+    row.locked_at = datetime.now(timezone.utc)
+    row.locked_by = user.id
+    row.updated_at = row.locked_at
+    row.updated_by = user.id
+    await db.commit()
+    await db.refresh(row)
+    return SolutioningLockOut(
+        account_id=account_id, locked_at=row.locked_at, locked_by=row.locked_by
+    )
+
+
+@router.post("/{account_id}/solutioning/unlock", response_model=SolutioningLockOut)
+async def unlock_solutioning(
+    account_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SolutioningLockOut:
+    """Re-open a locked solutioning record. Same write permission as lock."""
+    _, is_assigned, is_team = await _scope(db, user, account_id)
+    if not can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "You cannot unlock solutioning on this account"
+        )
+
+    row = await _get_or_create_solutioning_row(db, account_id)
+    if row.locked_at is None:
+        return SolutioningLockOut(account_id=account_id, locked_at=None, locked_by=None)
+
+    row.locked_at = None
+    row.locked_by = None
+    row.updated_at = datetime.now(timezone.utc)
+    row.updated_by = user.id
+    await db.commit()
+    await db.refresh(row)
+    return SolutioningLockOut(account_id=account_id, locked_at=None, locked_by=None)
 
 
 # ============================================================

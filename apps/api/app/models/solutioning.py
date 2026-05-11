@@ -17,6 +17,11 @@ EngagementType = ENUM(
     name="engagement_type", create_type=False,
 )
 
+TrialKind = ENUM(
+    "trial", "poc", "pilot", "demo", "none",
+    name="trial_kind", create_type=False,
+)
+
 
 class AccountSolutioning(Base):
     __tablename__ = "account_solutioning"
@@ -34,9 +39,27 @@ class AccountSolutioning(Base):
     value_definition: Mapped[str | None] = mapped_column(String, nullable=True)
     estimated_value_musd: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
 
+    # Trial / POC block — what was actually tested during pre-sales.
+    # Mirrors the v20 prototype: trial_or_poc + trial_type + duration + the
+    # qualitative narrative fields (info_tested, hypothesis_tested, summary).
+    trial_conducted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    trial_type: Mapped[str | None] = mapped_column(TrialKind, nullable=True)
+    trial_duration_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    trial_participant_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    trial_participants_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    key_users_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    info_tested: Mapped[str | None] = mapped_column(String, nullable=True)
+    hypothesis_tested: Mapped[str | None] = mapped_column(String, nullable=True)
+    trial_summary: Mapped[str | None] = mapped_column(String, nullable=True)
+
     ai_extracted_from_doc: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     ai_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ai_edited: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+    # Solutioning → Sales Hand-off lock. While locked, PATCH on structured
+    # fields is rejected; unlock first to re-pass.
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False

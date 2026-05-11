@@ -9,14 +9,19 @@ import { KindUploadCard } from "@/components/KindUploadCard";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ENGAGEMENT_TYPE_LABELS,
+  TRIAL_KIND_LABELS,
   type EngagementType,
   type Solutioning,
+  type SolutioningLockResponse,
   type SolutioningUpdate,
+  type TrialKind,
 } from "@/types/solutioning";
 
 const ENGAGEMENT_TYPE_OPTIONS: EngagementType[] = [
   "one_time", "retainer", "subscription", "pilot", "other",
 ];
+
+const TRIAL_KIND_OPTIONS: TrialKind[] = ["trial", "poc", "pilot", "demo", "none"];
 
 export default function SolutioningTab() {
   const account = useAccountFromLayout();
@@ -51,6 +56,32 @@ export default function SolutioningTab() {
     onError: (e: ApiError) => setSavingError(e.message),
   });
 
+  // Sales Hand-off lock — separate POST so the UI can render a clear
+  // "before/after locked" state independent of the regular save flow.
+  const [lockError, setLockError] = useState<string | null>(null);
+  const lockMutation = useMutation({
+    mutationFn: () =>
+      api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/lock`),
+    onSuccess: () => {
+      // The lock endpoint only returns lock metadata; refetch the whole row
+      // so `is_editable` flips and the form re-renders read-only.
+      qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
+      qc.invalidateQueries({ queryKey: ["activity", account.id] });
+      setLockError(null);
+    },
+    onError: (e: ApiError) => setLockError(e.message),
+  });
+  const unlockMutation = useMutation({
+    mutationFn: () =>
+      api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/unlock`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
+      qc.invalidateQueries({ queryKey: ["activity", account.id] });
+      setLockError(null);
+    },
+    onError: (e: ApiError) => setLockError(e.message),
+  });
+
   const saveDirty = () => {
     if (form && data) saveMutation.mutate(diff(form, data));
   };
@@ -69,6 +100,10 @@ export default function SolutioningTab() {
 
   const aiExtracted = !!form.ai_extracted_at;
   const showAiBadge = aiExtracted && form.is_editable;
+  const isLocked = !!form.locked_at;
+  // Whether *role* allows writes, regardless of lock — needed so the Unlock
+  // button can show in the Sales Hand-off card while is_editable is false.
+  const roleCanWrite = form.is_editable || isLocked;
 
   return (
     <div className="space-y-4">
@@ -84,6 +119,19 @@ export default function SolutioningTab() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
+        {isLocked && (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-xs text-green-900 flex items-center gap-2">
+            <span className="text-base">🔒</span>
+            <div className="flex-1">
+              <div className="font-bold">Locked for Sales Hand-off</div>
+              <div>
+                Value definition was passed to Sales
+                {form.locked_at && ` on ${new Date(form.locked_at).toLocaleString()}`}.
+                Unlock from the right-hand card to edit again.
+              </div>
+            </div>
+          </div>
+        )}
         {showAiBadge && (
           <div className={cn(
             "rounded-xl border p-3 text-xs",
@@ -141,6 +189,157 @@ export default function SolutioningTab() {
               />
             </Field>
           </div>
+        </Section>
+
+        <Section
+          title="Trial / POC"
+          subtitle="What was actually tested in pre-sales — the proof point Sales will reference at handoff."
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Trial conducted?">
+              <select
+                value={form.trial_conducted === null ? "" : form.trial_conducted ? "yes" : "no"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm({
+                    ...form,
+                    trial_conducted: v === "" ? null : v === "yes",
+                    // Clearing "trial conducted = no" wipes the trial type so
+                    // we don't leave inconsistent state.
+                    trial_type: v === "no" ? "none" : form.trial_type,
+                  });
+                }}
+                disabled={!form.is_editable}
+                className={inputCls(form.is_editable)}
+              >
+                <option value="">— Select —</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </Field>
+            <Field label="Type">
+              <select
+                value={form.trial_type ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, trial_type: (e.target.value || null) as TrialKind | null })
+                }
+                disabled={!form.is_editable || form.trial_conducted === false}
+                className={inputCls(form.is_editable && form.trial_conducted !== false)}
+              >
+                <option value="">— Select —</option>
+                {TRIAL_KIND_OPTIONS.map((t) => (
+                  <option key={t} value={t}>{TRIAL_KIND_LABELS[t]}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Duration">
+              <input
+                type="text"
+                value={form.trial_duration_text ?? ""}
+                onChange={(e) => setForm({ ...form, trial_duration_text: e.target.value || null })}
+                disabled={!form.is_editable || form.trial_conducted === false}
+                placeholder="e.g. 3 weeks"
+                maxLength={200}
+                className={inputCls(form.is_editable && form.trial_conducted !== false)}
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+            <Field label="Participant count">
+              <input
+                type="number"
+                min={0}
+                max={10000}
+                value={form.trial_participant_count ?? ""}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    trial_participant_count: e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+                disabled={!form.is_editable || form.trial_conducted === false}
+                className={inputCls(form.is_editable && form.trial_conducted !== false)}
+              />
+            </Field>
+            <Field label="Key user types">
+              <input
+                type="text"
+                value={form.key_users_text ?? ""}
+                onChange={(e) => setForm({ ...form, key_users_text: e.target.value || null })}
+                disabled={!form.is_editable || form.trial_conducted === false}
+                placeholder="e.g. Category managers, sourcing analysts"
+                maxLength={2000}
+                className={inputCls(form.is_editable && form.trial_conducted !== false)}
+              />
+            </Field>
+          </div>
+
+          <Field label="Participants (names & roles)">
+            <textarea
+              rows={2}
+              value={form.trial_participants_text ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, trial_participants_text: e.target.value || null })
+              }
+              disabled={!form.is_editable || form.trial_conducted === false}
+              placeholder="One per line, e.g. Jordan Mills (Dir. Procurement Strategy)"
+              maxLength={4000}
+              className={cn(
+                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
+                (!form.is_editable || form.trial_conducted === false) &&
+                  "bg-slate-50 text-text-secondary cursor-not-allowed",
+              )}
+            />
+          </Field>
+
+          <Field label="Information tested">
+            <textarea
+              rows={3}
+              value={form.info_tested ?? ""}
+              onChange={(e) => setForm({ ...form, info_tested: e.target.value || null })}
+              disabled={!form.is_editable || form.trial_conducted === false}
+              placeholder="Which categories, modules, or data points were put in front of them?"
+              maxLength={4000}
+              className={cn(
+                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
+                (!form.is_editable || form.trial_conducted === false) &&
+                  "bg-slate-50 text-text-secondary cursor-not-allowed",
+              )}
+            />
+          </Field>
+
+          <Field label="Hypothesis tested">
+            <textarea
+              rows={3}
+              value={form.hypothesis_tested ?? ""}
+              onChange={(e) => setForm({ ...form, hypothesis_tested: e.target.value || null })}
+              disabled={!form.is_editable || form.trial_conducted === false}
+              placeholder="What did we need to validate? What would success look like?"
+              maxLength={4000}
+              className={cn(
+                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
+                (!form.is_editable || form.trial_conducted === false) &&
+                  "bg-slate-50 text-text-secondary cursor-not-allowed",
+              )}
+            />
+          </Field>
+
+          <Field label="Trial summary">
+            <textarea
+              rows={4}
+              value={form.trial_summary ?? ""}
+              onChange={(e) => setForm({ ...form, trial_summary: e.target.value || null })}
+              disabled={!form.is_editable || form.trial_conducted === false}
+              placeholder="What happened. What worked, what didn't. The narrative Sales will quote."
+              maxLength={4000}
+              className={cn(
+                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
+                (!form.is_editable || form.trial_conducted === false) &&
+                  "bg-slate-50 text-text-secondary cursor-not-allowed",
+              )}
+            />
+          </Field>
         </Section>
 
         <Section title="Value themes" subtitle="Short tags — what kinds of value the engagement will deliver.">
@@ -213,6 +412,79 @@ export default function SolutioningTab() {
               className={inputCls(form.is_editable)}
             />
           </Field>
+        </Section>
+
+        <Section title="Sales Hand-off">
+          {isLocked ? (
+            <>
+              <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-900 mb-3">
+                <div className="font-bold flex items-center gap-1">🔒 Locked</div>
+                {form.locked_at && (
+                  <div className="text-[11px] mt-0.5">
+                    Passed to Sales on {new Date(form.locked_at).toLocaleString()}.
+                  </div>
+                )}
+              </div>
+              {roleCanWrite && (
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Unlock solutioning? This re-opens the value definition for edits and the activity log will record it.",
+                      )
+                    ) {
+                      unlockMutation.mutate();
+                    }
+                  }}
+                  disabled={unlockMutation.isPending}
+                  className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs font-semibold disabled:opacity-50"
+                >
+                  {unlockMutation.isPending ? "Unlocking…" : "Unlock to edit & re-pass"}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="text-xs text-text-muted mb-3">
+                Once the value definition is final, lock it and pass to Sales Hand-off.
+                Requires a value definition.
+              </div>
+              {roleCanWrite && (
+                <button
+                  onClick={() => {
+                    if (dirty) {
+                      alert("Save your edits first — lock works against the saved value definition.");
+                      return;
+                    }
+                    if (
+                      !form.value_definition ||
+                      !form.value_definition.trim()
+                    ) {
+                      alert("Fill in the value definition before locking.");
+                      return;
+                    }
+                    if (
+                      confirm(
+                        "Lock the value definition and pass to Sales Hand-off? Unlock will be required for further edits.",
+                      )
+                    ) {
+                      lockMutation.mutate();
+                    }
+                  }}
+                  disabled={lockMutation.isPending || dirty}
+                  className="w-full px-3 py-1.5 rounded-lg bg-beroe-blue text-white text-xs font-semibold disabled:opacity-50"
+                  title={dirty ? "Save changes before locking" : ""}
+                >
+                  {lockMutation.isPending ? "Locking…" : "🔒 Lock & pass to Sales →"}
+                </button>
+              )}
+            </>
+          )}
+          {lockError && (
+            <div className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1">
+              {lockError}
+            </div>
+          )}
         </Section>
 
         <div className="bg-slate-50 rounded-card border border-beroe-card-border p-4 text-xs text-text-muted">
@@ -334,6 +606,9 @@ function diff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
   const keys: (keyof SolutioningUpdate)[] = [
     "proposed_solution", "engagement_type", "engagement_duration_months",
     "value_themes", "value_definition", "estimated_value_musd",
+    "trial_conducted", "trial_type", "trial_duration_text",
+    "trial_participant_count", "trial_participants_text", "key_users_text",
+    "info_tested", "hypothesis_tested", "trial_summary",
   ];
   for (const k of keys) {
     if (JSON.stringify(next[k]) !== JSON.stringify(prev[k])) out[k] = next[k];
@@ -342,6 +617,17 @@ function diff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
 }
 
 function serialise(s: Solutioning): unknown {
-  const { updated_at, updated_by, is_editable, ai_extracted_at, ai_extracted_from_doc, ai_edited, ...rest } = s;
+  // Strip volatile + server-owned fields. `locked_at` / `locked_by` are
+  // mutated by the lock/unlock POSTs, not by the form, so they shouldn't
+  // count toward dirtiness.
+  const {
+    updated_at, updated_by, is_editable,
+    ai_extracted_at, ai_extracted_from_doc, ai_edited,
+    locked_at, locked_by,
+    ...rest
+  } = s;
+  void updated_at; void updated_by; void is_editable;
+  void ai_extracted_at; void ai_extracted_from_doc; void ai_edited;
+  void locked_at; void locked_by;
   return rest;
 }
