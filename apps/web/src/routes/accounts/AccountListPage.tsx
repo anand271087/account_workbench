@@ -174,7 +174,7 @@ export default function AccountListPage() {
           />
           <Select value={industry} onChange={(v) => setParam("industry", v)} label="Industry" options={facets.industries} />
           <Select value={tier} onChange={(v) => setParam("tier", v)} label="Tier" options={facets.tiers} />
-          <Select value={region} onChange={(v) => setParam("region", v)} label="Region" options={facets.regions} />
+          <Select value={region} onChange={(v) => setParam("region", v)} label="Region" options={REGION_OPTIONS} />
           <RenewalSelect value={renewalWithin} onChange={(v) => setParam("renewal_within_days", v)} />
           {(industry || tier || region || renewalWithin || q) && (
             <button
@@ -774,7 +774,14 @@ interface CreateAccountForm {
 }
 
 const TIER_OPTIONS = ["Strategic", "Enterprise", "Growth", "Emerging"];
-const REGION_OPTIONS = ["AMER", "EMEA", "APAC", "LATAM"];
+const REGION_OPTIONS = [
+  "North America",
+  "Europe",
+  "APAC",
+  "MEA",
+  "Rest of the World",
+  "LATAM",
+];
 const ACCOUNT_TYPE_OPTIONS = ["New Logo", "Existing", "Renewal", "Pilot"];
 
 function CreateAccountModal({
