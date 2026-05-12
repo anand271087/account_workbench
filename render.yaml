@@ -58,6 +58,8 @@ services:
         value: "200"
       - key: MAX_UPLOAD_SIZE_MB
         value: "100"
+      - key: ALLOWED_DOC_EXTENSIONS
+        value: ".docx,.doc,.pdf,.txt,.vtt,.eml"
 
   # -------------------- Celery worker --------------------
   - type: worker
