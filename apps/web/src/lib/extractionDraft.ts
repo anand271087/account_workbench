@@ -19,6 +19,7 @@ import type {
   ExtractedBrief,
   ExtractedEngagement,
 } from "@/types/mom_extraction";
+import type { ExtractedVpd } from "@/types/vpd_extraction";
 
 const PREFIX = "awb:extraction-draft";
 export const EXTRACTION_APPLIED_EVENT = "awb:extraction-applied";
@@ -28,6 +29,7 @@ export interface ExtractionDraft {
   appliedAt: string; // ISO timestamp
   engagement?: ExtractedEngagement;
   brief?: ExtractedBrief;
+  solutioning?: ExtractedVpd;
 }
 
 function key(accountId: string): string {
@@ -69,14 +71,14 @@ export function consumeExtractionDraft(accountId: string): ExtractionDraft | nul
   return draft;
 }
 
-/** Read + clear ONLY the engagement slice (brief stays for the Brief tab to consume). */
+/** Read + clear ONLY the engagement slice (other slices stay for their tabs to consume). */
 export function consumeEngagementSlice(accountId: string): ExtractedEngagement | null {
   const draft = peekExtractionDraft(accountId);
   if (!draft?.engagement) return null;
   const remaining: ExtractionDraft = { ...draft };
   delete remaining.engagement;
   try {
-    if (remaining.brief) {
+    if (remaining.brief || remaining.solutioning) {
       localStorage.setItem(key(accountId), JSON.stringify(remaining));
     } else {
       localStorage.removeItem(key(accountId));
@@ -94,7 +96,7 @@ export function consumeBriefSlice(accountId: string): ExtractedBrief | null {
   const remaining: ExtractionDraft = { ...draft };
   delete remaining.brief;
   try {
-    if (remaining.engagement) {
+    if (remaining.engagement || remaining.solutioning) {
       localStorage.setItem(key(accountId), JSON.stringify(remaining));
     } else {
       localStorage.removeItem(key(accountId));
@@ -103,4 +105,22 @@ export function consumeBriefSlice(accountId: string): ExtractedBrief | null {
     /* swallow */
   }
   return draft.brief;
+}
+
+/** Read + clear ONLY the solutioning slice. */
+export function consumeSolutioningSlice(accountId: string): ExtractedVpd | null {
+  const draft = peekExtractionDraft(accountId);
+  if (!draft?.solutioning) return null;
+  const remaining: ExtractionDraft = { ...draft };
+  delete remaining.solutioning;
+  try {
+    if (remaining.engagement || remaining.brief) {
+      localStorage.setItem(key(accountId), JSON.stringify(remaining));
+    } else {
+      localStorage.removeItem(key(accountId));
+    }
+  } catch {
+    /* swallow */
+  }
+  return draft.solutioning;
 }

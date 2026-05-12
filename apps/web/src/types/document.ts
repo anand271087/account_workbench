@@ -29,6 +29,8 @@ export interface Document {
   ai_edited_at: string | null;
   mom_extracted_fields: Record<string, unknown> | null;
   mom_extracted_at: string | null;
+  vpd_extracted_fields: Record<string, unknown> | null;
+  vpd_extracted_at: string | null;
   deleted_at: string | null;
 }
 

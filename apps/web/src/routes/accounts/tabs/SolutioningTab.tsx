@@ -6,6 +6,10 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { KindUploadCard } from "@/components/KindUploadCard";
+import {
+  EXTRACTION_APPLIED_EVENT,
+  consumeSolutioningSlice,
+} from "@/lib/extractionDraft";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ENGAGEMENT_TYPE_LABELS,
@@ -14,6 +18,7 @@ import {
   type SolutioningLockResponse,
   type SolutioningUpdate,
 } from "@/types/solutioning";
+import type { ExtractedVpd } from "@/types/vpd_extraction";
 
 const ENGAGEMENT_TYPE_OPTIONS: EngagementType[] = [
   "one_time", "retainer", "subscription", "pilot", "other",
@@ -33,8 +38,25 @@ export default function SolutioningTab() {
   const [valueThemeInput, setValueThemeInput] = useState("");
 
   useEffect(() => {
-    if (data && !form) setForm(data);
-  }, [data, form]);
+    if (data && !form) {
+      const draft = consumeSolutioningSlice(account.id);
+      setForm(draft ? mergeSolutioningDraft(data, draft) : data);
+    }
+  }, [data, form, account.id]);
+
+  // Live event — fires when the user uploads a VPD while this tab is
+  // already mounted. Mid-page extraction lands on the form as dirty.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ accountId: string }>).detail;
+      if (!detail || detail.accountId !== account.id) return;
+      const draft = consumeSolutioningSlice(account.id);
+      if (!draft) return;
+      setForm((prev) => (prev ? mergeSolutioningDraft(prev, draft) : prev));
+    };
+    window.addEventListener(EXTRACTION_APPLIED_EVENT, handler);
+    return () => window.removeEventListener(EXTRACTION_APPLIED_EVENT, handler);
+  }, [account.id]);
 
   const dirty = !!form && data
     ? JSON.stringify(serialise(form)) !== JSON.stringify(serialise(data))
@@ -472,4 +494,21 @@ function serialise(s: Solutioning): unknown {
   void ai_extracted_at; void ai_extracted_from_doc; void ai_edited;
   void locked_at; void locked_by;
   return rest;
+}
+
+/** Apply a VPD-extracted slice over the live solutioning form. AI values
+ *  override base when present; arrays REPLACE wholesale (same as PATCH
+ *  semantic). Empty/null AI values keep the base. */
+function mergeSolutioningDraft(base: Solutioning, draft: ExtractedVpd): Solutioning {
+  return {
+    ...base,
+    proposed_solution: draft.proposed_solution || base.proposed_solution,
+    engagement_type: draft.engagement_type || base.engagement_type,
+    engagement_duration_months:
+      draft.engagement_duration_months ?? base.engagement_duration_months,
+    value_themes: draft.value_themes?.length ? draft.value_themes : base.value_themes,
+    value_definition: draft.value_definition || base.value_definition,
+    estimated_value_musd:
+      draft.estimated_value_musd !== null ? draft.estimated_value_musd : base.estimated_value_musd,
+  };
 }

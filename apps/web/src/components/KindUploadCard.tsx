@@ -27,6 +27,7 @@ import {
 } from "@/types/document";
 import type { ContactCreate } from "@/types/contact";
 import type { ExtractedContact, MomExtractionResult } from "@/types/mom_extraction";
+import type { ExtractedVpd } from "@/types/vpd_extraction";
 
 const ALLOWED_EXT = ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml";
 const MAX_MB = 100;
@@ -71,14 +72,9 @@ export function KindUploadCard({
     data?.items.filter((d) => {
       if (d.deleted_at) return false;
       if (d.ai_status === "pending" || d.ai_status === "processing") return true;
-      if (
-        kind === "mom" &&
-        d.ai_status === "complete" &&
-        !d.mom_extracted_at &&
-        Date.now() - new Date(d.uploaded_at).getTime() < EXTRACTION_WINDOW_MS
-      ) {
-        return true;
-      }
+      const recent = Date.now() - new Date(d.uploaded_at).getTime() < EXTRACTION_WINDOW_MS;
+      if (kind === "mom" && d.ai_status === "complete" && !d.mom_extracted_at && recent) return true;
+      if (kind === "vpd" && d.ai_status === "complete" && !d.vpd_extracted_at && recent) return true;
       return false;
     }).length ?? 0;
 
@@ -130,6 +126,40 @@ export function KindUploadCard({
       qc.invalidateQueries({ queryKey: ["meeting-brief", accountId] });
       qc.invalidateQueries({ queryKey: ["contacts", accountId] });
     }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.items, kind, accountId]);
+
+  // Auto-apply VPD extraction — same shape as the MoM block above. Writes
+  // the structured Solutioning candidate values as a dirty draft on the
+  // Solutioning form. User reviews + clicks Save to persist.
+  useEffect(() => {
+    if (kind !== "vpd" || !data?.items) return;
+    const pending = data.items.filter(
+      (d) =>
+        !d.deleted_at &&
+        d.vpd_extracted_fields &&
+        !sessionStorage.getItem(appliedKey(d.id)) &&
+        !localStorage.getItem(appliedKey(d.id)),
+    );
+    if (pending.length === 0) return;
+    pending.forEach((d) => sessionStorage.setItem(appliedKey(d.id), "1"));
+    pending.forEach((d) => {
+      const v = d.vpd_extracted_fields as unknown as ExtractedVpd;
+      if (!hasAnyVpd(v)) {
+        localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+        return;
+      }
+      saveExtractionDraft(accountId, {
+        filename: d.filename,
+        appliedAt: new Date().toISOString(),
+        solutioning: v,
+      });
+      localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+      setExtractionToast(
+        `Populated Solutioning fields from "${d.filename}". Review on the Solutioning tab and click Save.`,
+      );
+      qc.invalidateQueries({ queryKey: ["solutioning", accountId] });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.items, kind, accountId]);
 
@@ -428,24 +458,27 @@ function StatusPill({ status }: { status: AiStatus }) {
   );
 }
 
-/** MoM-only extraction state.
+/** Extraction state for MoM (kind='mom') and VPD (kind='vpd') docs.
  *
- *  Hidden for non-MoM docs and while AI summary is still running. Once
+ *  Hidden for other kinds and while AI summary is still running. Once
  *  ai_status flips to "complete":
- *    - mom_extracted_at set     → "Fields populated" (violet, success)
+ *    - <kind>_extracted_at set  → "Fields populated" (violet, success)
  *    - within 2 min of upload   → "Extracting fields…" (blue, animated)
- *    - >2 min and still no data → silent (something blocked extraction;
- *                                  the Rerun button is the fix)
+ *    - >2 min and still no data → silent (the Rerun button is the fix)
  *  The 2-min window matches the polling-loop liveCount logic above so the
  *  card keeps refetching exactly as long as this pill is "Extracting…". */
 function MomExtractionPill({ doc }: { doc: Document }) {
-  if (doc.kind !== "mom") return null;
+  if (doc.kind !== "mom" && doc.kind !== "vpd") return null;
   if (doc.ai_status !== "complete") return null;
-  if (doc.mom_extracted_at) {
+  const extractedAt = doc.kind === "mom" ? doc.mom_extracted_at : doc.vpd_extracted_at;
+  const targetCopy = doc.kind === "mom"
+    ? "Pre-Sales + Brief"
+    : "the Solutioning tab";
+  if (extractedAt) {
     return (
       <span
         className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800"
-        title={`Fields auto-populated on ${new Date(doc.mom_extracted_at).toLocaleString()} — review and Save on Pre-Sales + Brief`}
+        title={`Fields auto-populated on ${new Date(extractedAt).toLocaleString()} — review and Save on ${targetCopy}`}
       >
         Fields populated
       </span>
@@ -456,7 +489,7 @@ function MomExtractionPill({ doc }: { doc: Document }) {
   return (
     <span
       className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 animate-pulse"
-      title="Claude is extracting structured fields from this MoM — Pre-Sales + Brief will pre-fill in a moment."
+      title={`Claude is extracting structured fields from this ${doc.kind === "mom" ? "MoM" : "VPD"} — ${targetCopy} will pre-fill in a moment.`}
     >
       Extracting fields…
     </span>
@@ -481,6 +514,15 @@ function hasAnyEngagement(e: MomExtractionResult["engagement"] | undefined): boo
   return Boolean(
     e.engagement_objective || e.spoc_text || e.sponsor_text || e.procurement_maturity ||
     e.meeting_type || (e.target_categories?.length ?? 0) > 0 || (e.geographies?.length ?? 0) > 0,
+  );
+}
+
+function hasAnyVpd(v: ExtractedVpd | undefined): boolean {
+  if (!v) return false;
+  return Boolean(
+    v.proposed_solution || v.engagement_type || v.engagement_duration_months ||
+    v.value_definition || v.estimated_value_musd !== null ||
+    (v.value_themes?.length ?? 0) > 0,
   );
 }
 

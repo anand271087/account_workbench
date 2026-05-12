@@ -53,6 +53,10 @@ class Document(Base):
     mom_extracted_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     mom_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # VPD field extraction — populated by the worker only when kind='vpd'.
+    vpd_extracted_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    vpd_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

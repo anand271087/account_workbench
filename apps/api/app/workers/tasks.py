@@ -28,7 +28,6 @@ from sqlalchemy import select
 
 from app.db.session import new_worker_engine, new_worker_session
 from app.models.document import AccountDiscoverySummary, Document, Job
-from app.models.solutioning import AccountSolutioning
 from app.services import files as storage_svc
 from app.services.claude import (
     aggregate_account_summary,
@@ -120,13 +119,18 @@ async def _process(job_id: UUID) -> dict:
         job.progress = 75
         await db.commit()
 
-        # VPD-only: pull structured Solutioning candidates and store them.
-        # We DO NOT overwrite user-edited values (ai_edited=true).
+        # VPD-only: pull structured Solutioning candidates and persist them
+        # on the document row. The frontend polling loop picks this up and
+        # one-shot applies the values as a dirty draft on the Solutioning
+        # form — user reviews, then clicks Save.
         if doc.kind == "vpd":
             try:
-                await _upsert_vpd_candidates(db, doc, text)
+                vpd_extracted = extract_vpd_fields(text)
+                doc.vpd_extracted_fields = vpd_extracted
+                doc.vpd_extracted_at = datetime.now(timezone.utc)
+                await db.commit()
             except Exception:
-                logger.exception("VPD candidate extraction failed (non-fatal)")
+                logger.exception("VPD field extraction failed (non-fatal)")
 
         # MoM-only: extract structured fields (engagement / brief / contacts)
         # and persist on the document row. The frontend polling loop picks
@@ -150,51 +154,6 @@ async def _process(job_id: UUID) -> dict:
         job.result = {"document_id": str(doc.id), "is_stub": doc.extracted_entities.get("is_stub", True)}
         await db.commit()
         return {"ok": True, "document_id": str(doc.id)}
-
-
-async def _upsert_vpd_candidates(db, doc: Document, text: str) -> None:
-    """Run VPD field extraction and write candidate values to account_solutioning.
-
-    If the user has already touched the row (ai_edited=true), we don't blow
-    away their work — we only fill fields that are still null.
-    """
-    extracted = extract_vpd_fields(text)
-    existing = (
-        await db.execute(
-            select(AccountSolutioning).where(AccountSolutioning.account_id == doc.account_id)
-        )
-    ).scalar_one_or_none()
-    is_new = existing is None
-    if is_new:
-        existing = AccountSolutioning(account_id=doc.account_id, value_themes=[])
-        db.add(existing)
-
-    user_edited = bool(existing.ai_edited)
-    fields = (
-        "proposed_solution",
-        "engagement_type",
-        "engagement_duration_months",
-        "value_themes",
-        "value_definition",
-        "estimated_value_musd",
-    )
-    for f in fields:
-        new_val = extracted.get(f)
-        if new_val is None or new_val == "" or new_val == []:
-            continue
-        cur = getattr(existing, f)
-        empty = cur is None or cur == "" or cur == []
-        if user_edited:
-            # User has touched the record — only fill in still-empty slots.
-            if empty:
-                setattr(existing, f, new_val)
-        else:
-            # Never edited — refresh from latest VPD wholesale.
-            setattr(existing, f, new_val)
-
-    existing.ai_extracted_from_doc = doc.id
-    existing.ai_extracted_at = datetime.now(timezone.utc)
-    await db.commit()
 
 
 async def _regenerate_aggregate(db, account_id: UUID, job_id: UUID) -> None:
