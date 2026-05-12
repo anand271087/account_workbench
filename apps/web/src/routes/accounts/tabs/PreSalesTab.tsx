@@ -20,7 +20,6 @@ import type {
 } from "@/types/engagement";
 import type { ExtractedEngagement } from "@/types/mom_extraction";
 import type { Category, Geography } from "@/types/lookup";
-import type { DiscoverySummary } from "@/types/document";
 
 const MIN_OBJECTIVE_WORDS = 120;
 
@@ -136,8 +135,8 @@ export default function PreSalesTab() {
         accountId={account.id}
         kind="mom"
         title="Meeting minutes (MoM)"
-        description="Upload discovery / kick-off / cadence MoMs. Claude will summarise each and roll them into the Sales Discovery Summary below."
-        emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt or .vtt onto the card above."
+        description="Upload discovery / kick-off / cadence MoMs. Claude will summarise each and auto-extract structured fields into Engagement, Brief, and Contacts."
+        emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt, .vtt or .eml onto the card above."
       />
 
       {/* Pre-Meeting Brief shortcut — the editor itself lives on its own
@@ -472,41 +471,6 @@ export default function PreSalesTab() {
         />
       )}
       </div>
-
-      {/* Rolled-up summary of MoM + VPD content for this account. */}
-      <SalesDiscoverySummary accountId={account.id} />
-    </div>
-  );
-}
-
-// ---------- Sales Discovery Summary (rollup of MoM + VPD content) ----------
-
-function SalesDiscoverySummary({ accountId }: { accountId: string }) {
-  const { data } = useQuery<DiscoverySummary>({
-    queryKey: ["discovery-summary", accountId],
-    queryFn: () =>
-      api.get<DiscoverySummary>(`/api/v1/accounts/${accountId}/discovery-summary`),
-  });
-  if (!data) return null;
-  return (
-    <div className="bg-white rounded-card border border-beroe-card-border p-5">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-bold text-text-primary">Sales Discovery Summary</h2>
-        <span className="text-[11px] text-text-muted">
-          {data.generated_at
-            ? `${data.source_document_ids.length} source doc${data.source_document_ids.length === 1 ? "" : "s"} · regenerated ${new Date(data.generated_at).toLocaleString()}`
-            : "No documents processed yet"}
-        </span>
-      </div>
-      {data.summary_text ? (
-        <div className="text-sm text-text-primary whitespace-pre-wrap leading-relaxed">
-          {data.summary_text}
-        </div>
-      ) : (
-        <p className="text-xs text-text-muted italic">
-          Upload a MoM above (or a VPD on the Solutioning tab) and Claude will roll up the discovery story here.
-        </p>
-      )}
     </div>
   );
 }
