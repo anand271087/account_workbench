@@ -367,6 +367,17 @@ async def get_account(
         handed_off_to_solutioning=a.handed_off_to_solutioning,
         handed_off_at=a.handed_off_at,
         handed_off_by=a.handed_off_by,
+        # Signing gate snapshot — surfaced on AccountDetail so the frontend
+        # nav can render the signed-or-not state without a second call.
+        gate_signed=a.gate_signed,
+        gate_signed_date=a.gate_signed_date,
+        gate_renewal_date=a.gate_renewal_date,
+        gate_bvd_due_date=a.gate_bvd_due_date,
+        can_view_sales_handoff=True,
+        # CS Onboarding (M14) — entry type drives the inner view; the tab
+        # itself is always visible so the picker is reachable.
+        cs_entry_type=a.cs_entry_type,
+        can_view_cs_onboarding=True,
     )
 
 

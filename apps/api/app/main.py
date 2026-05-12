@@ -17,8 +17,11 @@ from app.routes import contacts as contact_routes
 from app.routes import documents as document_routes
 from app.routes import engagement as engagement_routes
 from app.routes import favorites as favorite_routes
+from app.routes import cs_goals as cs_goals_routes
+from app.routes import cs_onboarding as cs_onboarding_routes
 from app.routes import lookups as lookup_routes
 from app.routes import meeting_brief as meeting_brief_routes
+from app.routes import signing as signing_routes
 from app.routes import solutioning as solutioning_routes
 from app.routes import users as user_routes
 # Importing audit_writer triggers @event.listens_for registration.
@@ -67,6 +70,10 @@ def create_app() -> FastAPI:
     app.include_router(document_routes.document_router)
     app.include_router(document_routes.job_router)
     app.include_router(solutioning_routes.router)
+    app.include_router(signing_routes.router)
+    app.include_router(cs_onboarding_routes.router)
+    app.include_router(cs_goals_routes.account_router)
+    app.include_router(cs_goals_routes.goal_router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)
 

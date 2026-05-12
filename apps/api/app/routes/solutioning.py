@@ -73,11 +73,17 @@ async def get_solutioning(
         )
 
     out = SolutioningOut.model_validate(row)
-    # Lock is the second wall — even users with role-level write get is_editable=false
-    # while the value definition is locked for Sales Hand-off. Unlocking is its own
-    # action so an edit and a re-pass leaves an audit trail.
-    role_can_write = can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team)
-    out.is_editable = role_can_write and row.locked_at is None
+    # Two paths to is_editable: pre-lock solutioning write, or Sales Hand-off
+    # write (sh_* fields). Front-end uses is_editable as a coarse signal;
+    # the PATCH handler enforces per-field permission for the strict cut.
+    from app.core.rbac import can_write_sales_handoff
+    role_can_write_sol = can_write_solutioning(
+        user.role, is_assigned=is_assigned, is_team=is_team
+    )
+    role_can_write_sh = can_write_sales_handoff(
+        user.role, is_assigned=is_assigned, is_team=is_team
+    )
+    out.is_editable = (role_can_write_sol and row.locked_at is None) or role_can_write_sh
     return out
 
 
@@ -89,10 +95,6 @@ async def patch_solutioning(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SolutioningOut:
     _, is_assigned, is_team = await _scope(db, user, account_id)
-    if not can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Your role cannot edit solutioning fields on this account"
-        )
 
     row = (
         await db.execute(
@@ -103,40 +105,87 @@ async def patch_solutioning(
     if is_first_save:
         row = AccountSolutioning(account_id=account_id, value_themes=[])
         db.add(row)
-    elif row.locked_at is not None:
-        # Defense in depth — frontend disables the form too, but a stale tab
-        # mustn't be allowed to overwrite a locked record.
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Solutioning is locked for Sales Hand-off — unlock before editing.",
-        )
 
     payload = body.model_dump(exclude_unset=True)
-    # If the user changed any AI-extracted field, mark as AI-assisted (BRD §4.3.d).
-    # Trial fields and lock state are out of scope — they're typed by the user, not AI.
-    user_touched_ai_field = any(
-        k in payload
-        for k in (
-            "proposed_solution",
-            "engagement_type",
-            "engagement_duration_months",
-            "value_themes",
-            "value_definition",
-            "estimated_value_musd",
+
+    # Split the payload by ownership:
+    #   * Solutioning fields — the value definition itself. Locked once
+    #     sales hand-off begins; only solutioning_manager + admins write
+    #     these pre-lock.
+    #   * Sales hand-off fields (sh_*) — filled in by Sales / CO AFTER lock.
+    #     A different RBAC predicate (can_write_sales_handoff) gates them.
+    SH_FIELDS = {
+        "sh_value_validation",
+        "sh_validation_notes",
+        "sh_go_live_date",
+        "sh_first_checkpoint",
+        "sh_stakeholder_signoff",
+        "sh_commercial_context",
+        "sales_watchouts",
+        "handoff_file_name",
+    }
+    sol_fields = {k: v for k, v in payload.items() if k not in SH_FIELDS}
+    sh_fields = {k: v for k, v in payload.items() if k in SH_FIELDS}
+
+    # ---- Solutioning fields: lock-aware, solutioning-write permission ----
+    if sol_fields:
+        if not can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Your role cannot edit solutioning fields on this account",
+            )
+        if row.locked_at is not None and not is_first_save:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Solutioning is locked for Sales Hand-off — unlock before editing.",
+            )
+        # Mark as AI-assisted when an AI-extracted field is touched.
+        from app.core.rbac import can_write_sales_handoff  # local import to avoid cycle
+        user_touched_ai_field = any(
+            k in sol_fields
+            for k in (
+                "proposed_solution",
+                "engagement_type",
+                "engagement_duration_months",
+                "value_themes",
+                "value_definition",
+                "estimated_value_musd",
+            )
         )
-    )
-    for field, value in payload.items():
-        setattr(row, field, value)
-    if user_touched_ai_field and row.ai_extracted_at is not None:
-        row.ai_edited = True
+        for field, value in sol_fields.items():
+            setattr(row, field, value)
+        if user_touched_ai_field and row.ai_extracted_at is not None:
+            row.ai_edited = True
+        # silence unused-import linter
+        _ = can_write_sales_handoff
+
+    # ---- sh_* fields: separate permission, no lock check ----
+    if sh_fields:
+        from app.core.rbac import can_write_sales_handoff
+        if not can_write_sales_handoff(
+            user.role, is_assigned=is_assigned, is_team=is_team
+        ):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Your role cannot edit Sales Hand-off fields on this account",
+            )
+        for field, value in sh_fields.items():
+            setattr(row, field, value)
+
     row.updated_at = datetime.now(timezone.utc)
     row.updated_by = user.id
-
     await db.commit()
     await db.refresh(row)
 
     out = SolutioningOut.model_validate(row)
-    out.is_editable = True
+    # Compute is_editable from the union — if either side can edit, true.
+    from app.core.rbac import can_write_sales_handoff
+    out.is_editable = (
+        can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team)
+        and row.locked_at is None
+    ) or can_write_sales_handoff(
+        user.role, is_assigned=is_assigned, is_team=is_team
+    )
     return out
 
 
@@ -190,9 +239,20 @@ async def lock_solutioning(
             "Cannot lock without a value definition — fill it before passing to Sales.",
         )
 
-    row.locked_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    row.locked_at = now
     row.locked_by = user.id
-    row.updated_at = row.locked_at
+    # Snapshot the value definition + themes into the sh_* fields so Sales
+    # sees exactly what Solutioning passed at lock-time. Don't overwrite if
+    # they've already been populated (re-lock after unlock leaves the prior
+    # snapshot in place — Sales's edits to sh_* shouldn't be clobbered).
+    if not row.sh_value_from_solutioning:
+        row.sh_value_from_solutioning = row.value_definition
+    if not row.sh_value_themes_from_solutioning:
+        row.sh_value_themes_from_solutioning = ", ".join(row.value_themes or [])
+    if not row.sh_value_received_at:
+        row.sh_value_received_at = now
+    row.updated_at = now
     row.updated_by = user.id
     await db.commit()
     await db.refresh(row)

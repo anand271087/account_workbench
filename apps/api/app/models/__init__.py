@@ -2,6 +2,7 @@ from app.models.account import Account
 from app.models.audit import AuditLog
 from app.models.contact import ClientContact
 from app.models.document import AccountDiscoverySummary, Document, Job
+from app.models.cs_goal import CSGoal
 from app.models.engagement import AccountEngagement
 from app.models.meeting_brief import MeetingBrief
 from app.models.solutioning import AccountSolutioning
@@ -15,6 +16,7 @@ __all__ = [
     "AccountSolutioning",
     "AuditLog",
     "ClientContact",
+    "CSGoal",
     "Document",
     "Job",
     "MeetingBrief",

@@ -60,6 +60,21 @@ class AccountDetail(BaseModel):
     handed_off_at: datetime | None = None
     handed_off_by: UUID | None = None
 
+    # Sales signing gate (M13) — surfaced on AccountDetail so the frontend
+    # can render the right banner / nav state without a second call.
+    gate_signed: bool = False
+    gate_signed_date: date | None = None
+    gate_renewal_date: date | None = None
+    gate_bvd_due_date: date | None = None
+
+    # New top-level tabs (M13)
+    can_view_sales_handoff: bool = True
+
+    # CS Onboarding (M14) — entry type drives nav visibility; the tab
+    # itself shows whenever gate_signed OR cs_entry_type='B'.
+    cs_entry_type: str | None = None
+    can_view_cs_onboarding: bool = True
+
     model_config = {"from_attributes": True}
 
 

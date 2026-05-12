@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { KindUploadCard } from "@/components/KindUploadCard";
-import { MeetingBriefEditor } from "@/components/MeetingBriefEditor";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import type {
   Engagement,
@@ -117,20 +116,24 @@ export default function PreSalesTab() {
         emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt or .vtt onto the card above."
       />
 
-      {/* Pre-Meeting Brief (MOM) — collapsed by default. Sits right below
-          the MoM uploads because the brief is what the next meeting will
-          run from; the uploaded MoMs are the historical record. */}
-      <details className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
-        <summary className="px-5 py-3 cursor-pointer text-sm font-bold text-text-primary hover:bg-slate-50 transition-colors flex items-center gap-2">
-          <span>Pre-Meeting Brief</span>
-          <span className="text-[11px] font-normal text-text-muted">
-            · Call info, attendees, objectives, minefields, cheat sheet
-          </span>
-        </summary>
-        <div className="px-5 pb-5 pt-2">
-          <MeetingBriefEditor accountId={account.id} />
-        </div>
-      </details>
+      {/* Pre-Meeting Brief shortcut — the editor itself lives on its own
+          top-level tab (Brief) now. Keep a slim pointer here so people
+          coming from MoM uploads still find their way. */}
+      <button
+        type="button"
+        onClick={() => navigate(`/accounts/${account.id}/brief`)}
+        className="w-full bg-white rounded-card border border-beroe-card-border px-5 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-2"
+      >
+        <span className="text-sm font-bold text-text-primary">
+          Pre-Meeting Brief
+        </span>
+        <span className="text-[11px] text-text-muted">
+          · Call info, attendees, objectives, minefields, cheat sheet
+        </span>
+        <span className="ml-auto text-xs text-beroe-blue font-semibold">
+          Open Brief →
+        </span>
+      </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">

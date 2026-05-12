@@ -64,6 +64,15 @@ export interface AccountDetail {
   handed_off_to_solutioning: boolean;
   handed_off_at: string | null;
   handed_off_by: string | null;
+  // Signing gate snapshot (M13)
+  gate_signed: boolean;
+  gate_signed_date: string | null;
+  gate_renewal_date: string | null;
+  gate_bvd_due_date: string | null;
+  can_view_sales_handoff: boolean;
+  // CS Onboarding (M14)
+  cs_entry_type: "A" | "B" | null;
+  can_view_cs_onboarding: boolean;
 }
 
 export interface ActivityItem {

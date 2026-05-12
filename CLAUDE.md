@@ -60,6 +60,44 @@ See [`docs/architecture/overview.md`](./docs/architecture/overview.md) for the d
 ## Current state
 
 ### ✅ Built
+- **M15 — CS Goal Validation & Alignment (2026-05-12)** ([FUNC](./docs/features/M15-cs-goals/FUNCTIONAL.md) · [TECH](./docs/features/M15-cs-goals/TECHNICAL.md))
+  - New `cs_goals` table — id, account_id, title, category (enum: cost_savings / base_rationalization / risk_mitigation / adoption / other), target_value, target_date, owner, alignment_status (enum), phase_a/b/c (jsonb), initiatives (jsonb), history (jsonb), soft-delete fields, audit fields. `0024_cs_goals.sql`.
+  - Two routers: `account_router` (list + create) and `goal_router` (get / patch / delete / restore). PATCH auto-derives `alignment_status` from the three `*_complete` flags unless the caller sets it explicitly; soft-delete requires a reason (5–600 chars); restore is `is_global_admin` only.
+  - Pydantic `PhaseA / PhaseB / PhaseC / Initiative / HistoryAction` use `model_config(extra="allow")` so per-category fields flow through without churn.
+  - History feed appended server-side on every meaningful action (`created` / `phase_a_completed` / `phase_b_completed` / `phase_c_completed` / `updated` / `soft_deleted` / `restored`). Distinct from `audit_log` (field-level mechanical capture).
+  - Frontend: `GoalsTab.tsx` (~750 lines) — list + alignment-dot indicator + show-deleted toggle + add-goal modal + per-goal expand with `PhaseAEditor` / `PhaseBEditor` / `PhaseCEditor` (category-aware fields) + `InitiativeList` (with category-specific value stages) + `HistoryFeed`. Sticky save bar + soft-delete prompt + admin restore.
+  - `api.delete()` extended to accept an optional body (for the mandatory delete reason).
+  - Replaces the existing `/goals` placeholder tab; CSOnboardingTab now links here via "Manage Goals →".
+  - Tests: 10 new pytest cases (`test_cs_goals.py`) — full CRUD + alignment derivation + initiative roundtrip + soft-delete + restore RBAC + 409 on patch-of-deleted + CSM RBAC.
+  - **Deferred to follow-up:** AI VDD extraction (needs Claude wiring + extraction prompt + review modal).
+
+- **M14 — CS Onboarding: Entry + Stakeholders (2026-05-12)** ([FUNC](./docs/features/M14-cs-onboarding/FUNCTIONAL.md) · [TECH](./docs/features/M14-cs-onboarding/TECHNICAL.md))
+  - Five new columns on `accounts`: `cs_entry_type` enum (A / B), `cs_entry_b_context`, `cs_entry_b_goals`, `cs_handover_checklist` (jsonb — CSM-side), `cs_stakeholders` (jsonb — `{commercial, champion, category}` × `{name, email, phone}`). `0023_cs_onboarding.sql`.
+  - New `can_write_cs_onboarding` predicate (same write set as engagement); new GET + PATCH routes that MERGE the jsonb columns on partial updates so concurrent role-edits don't race.
+  - Frontend `CSOnboardingTab.tsx`: Entry picker (instant-save) + handover checklist (Entry A) OR baseline context (Entry B) + 3-role stakeholder map with coverage banner. `activated = gate_signed || cs_entry_type='B'` hides inner content for fresh accounts.
+  - `AccountDetail` exposes `cs_entry_type` + `can_view_cs_onboarding` so the nav doesn't need a second call.
+  - Tests: 9 new pytest cases — blank GET, Entry B activation, invalid enum 422, checklist + stakeholder merge semantics across roles, RBAC (CSM own / CSM other / solutioning view-only), AccountDetail surfaces cs_entry_type.
+
+- **M13 — Sales Hand-off & Signing (2026-05-12)** ([FUNC](./docs/features/M13-sales-handoff/FUNCTIONAL.md) · [TECH](./docs/features/M13-sales-handoff/TECHNICAL.md))
+  - 18 `gate_*` columns on `accounts` (signing date, ACV, term, derived renewal + VDD due dates, confirmed_by/_at, unlock metadata, contract doc, modules, tier, segment, subscribers) + `handover_quality_check` jsonb. 11 `sh_*` columns on `account_solutioning` (sales-side validation + engagement timeline + watch-outs + handoff doc). `0022_sales_handoff_signing.sql`.
+  - New routes: `GET / POST /sign`, `POST /sign/unlock`, `PATCH /handover-checklist`, `PATCH /contract-doc`. Renewal + VDD due dates derived from `signed_date + term_years` (Feb-29 falls back to Feb-28; VDD pulled to renewal − 30 days if 6-month default overshoots).
+  - Solutioning lock endpoint now auto-snapshots `value_definition` + themes into `sh_value_from_solutioning` / `sh_value_themes_from_solutioning` / `sh_value_received_at`. Re-lock preserves prior snapshot (doesn't clobber Sales's edits during unlock window).
+  - Solutioning PATCH split by field ownership: `sol_fields` gated by lock + `can_write_solutioning`; `sh_*` fields editable post-lock by `can_write_sales_handoff`. `is_editable` is now a coarse OR; per-field RBAC enforced in PATCH handler.
+  - New RBAC: `can_sign_account` (admin / VP Sales / VP Inside Sales / CO assigned / ISM assigned), `can_unlock_signing` (admin only — every unlock lands under a director-grade user in the audit trail), `can_write_sales_handoff` (joint Sales + Solutioning write).
+  - Frontend `SalesHandoffTab.tsx`: Sales Hand-off card with sticky save bar + CLIENT SIGNED stage gate (pending → live → unlocked states) + Handover Quality Check (4 items).
+  - Tests: 10 new pytest cases (`test_signing.py`) — visibility / capability flags, sign with date derivation, 409 on double-sign, CSM forbidden, unlock + re-sign cycle clears unlocked flag, reason ≥10 chars enforced, unlock admin-only, checklist merge, lock auto-snapshot, sh-fields editable while locked / value_definition blocked.
+
+- **M12 — Pre-Meeting Brief on Pre-Sales (2026-05-11)** ([FUNC](./docs/features/AK03a-engagement-info/FUNCTIONAL.md) — covered in engagement work · [TECH](./docs/features/AK03a-engagement-info/TECHNICAL.md))
+  - New `meeting_briefs` table — one per account, scalar call info + 14 JSONB collections (attendees, minefields, objectives, discovery questions, value anchors, public signals, news, annual reports, closing scenarios, stat cards, call timer, email insights, cheat sheet). `0020_meeting_briefs.sql`.
+  - 14 nested Pydantic models validate every JSONB row shape on PATCH; whole-document update with 409 / 422 guards. Write permission = engagement OR solutioning so both Pre-Sales and Solutioning teams can prep.
+  - Frontend `MeetingBriefEditor.tsx`: single component, collapsible `<details>` sections, generic `ItemList<T>` + `StringListField` helpers, sticky save bar with reset-brief action.
+  - **Brief promoted to own top-level tab (Phase 3 of this session)** — was originally embedded in Pre-Sales as a collapsible section; now `/accounts/:id/brief` with a "Open Brief →" shortcut card left on Pre-Sales below the MoM uploads.
+  - Tests: 9 cases covering roundtrip across every collection, shape validation (severity / confidence / call_type), RBAC, delete-clear.
+
+- **M11 — Solutioning Sales Hand-off Lock (2026-05-11)** (no doc folder — small feature shipped under M13's umbrella)
+  - `account_solutioning.locked_at` + `locked_by` columns. `POST /solutioning/lock` requires a non-empty value_definition; `POST /solutioning/unlock` reopens. PATCH on locked solutioning fields returns 409.
+  - **Originally shipped with a Trial / POC block (9 fields + `trial_kind` enum), rolled back in `0021_drop_solutioning_trial_fields.sql` after the user confirmed it wasn't part of the v20 prototype's Solutioning page UI** — only the lock remains. The lock infrastructure is what M13 builds on for the Sales Hand-off snapshot flow.
+
 - **M10 — Production polish + deploy (2026-05-09)** ([FUNC](./docs/features/M10-production/FUNCTIONAL.md) · [TECH](./docs/features/M10-production/TECHNICAL.md))
   - **Deployed to Render + Vercel** end-to-end. `render.yaml` Blueprint stands up FastAPI + Celery worker + managed Redis in one click; `apps/web/vercel.json` adds SPA-fallback rewrite so deep links don't 404.
   - **Visual prototype match** — Tailwind tokens lifted from prototype `:root` (card-border #e4eaf6, navy-4 #001e52, rounded-card 14px). Sidebar restyled to `.sb-btn` with brightened text contrast; sub-nav switched from pills to underline `.tab-b` pattern; cards harmonized everywhere.
@@ -198,6 +236,8 @@ See [`docs/architecture/overview.md`](./docs/architecture/overview.md) for the d
 _(none — Sprint 1 deployed and stakeholder-demo-ready)_
 
 ### ⏳ Up next
+- **M15.1 — AI VDD extraction for Goals.** Upload a VDD doc → Claude extracts candidate goals → review modal → confirm into `cs_goals`. Needs Claude wiring + extraction prompt + a review UI; deferred from M15 to keep that phase shippable.
+- **M16 — Renewal cadence + alerts.** The signing gate (M13) stores `gate_renewal_date` + `gate_bvd_due_date` as passive metadata. Wire reminders + an account-list rollup of the alignment-dot indicator from M15.
 - **M8 — Scaffold remaining HTML tabs** (Home, Leadership, Success Mgmt, Growth, Intel as routed shells with `v1.1` banners). Production cutover already happened in M10.
 - **v1.1 backlog** — flesh out Home / Success / Growth / Intel tabs with real data; bulk import for users; audio/video transcription on document upload; AI assistant side panel; PowerPoint export.
 
@@ -261,6 +301,28 @@ _(none — Sprint 1 deployed and stakeholder-demo-ready)_
 - **2026-05-09** — `apps/api/uv.lock` committed. Reason: Render's `uv sync --frozen` build command requires it; refusing to deploy without a lockfile is correct production behaviour (no surprise version drift).
 - **2026-05-09** — Render API pool downsized to 3 base + 7 overflow = 10 max (was 10+20=30) when on session-mode pooler. Reason: 15-client Supabase cap. Tx-mode mode bumps it back to 10+20=30 since the cap is ~200.
 - **2026-05-09** — Audited and committed pre-existing TypeScript / ESLint warnings before deploy. Reason: CI's `--max-warnings 0` flag is a hard gate; one warning blocks the entire deploy pipeline. Fixed AuthProvider's `let unsub` → `const`, useMemo deps `[authUser, meQuery]`.
+
+### M11–M15 — Sales Handoff + CS Onboarding + Goals (2026-05-11 → 2026-05-12)
+
+- **2026-05-11** — Trial / POC fields rolled back from `account_solutioning` in `0021_drop_solutioning_trial_fields.sql`. Reason: user confirmed the v20 prototype's Solutioning page UI doesn't include trial/POC fields — they were sourced from the prototype's account-data objects but never rendered. Kept the `locked_at` / `locked_by` lock columns since `passSolToHandoff` IS in the prototype.
+- **2026-05-12** — Pre-Meeting Brief promoted from a collapsible inside Pre-Sales to its own top-level tab (`/accounts/:id/brief`). Reason: matches the prototype's "Account Kit" model where Brief is one of the named sub-tabs. Promotion keeps the editor component unchanged; just adds a route and a slim shortcut card on Pre-Sales.
+- **2026-05-12** — **Additive over restructure** chosen for Phases 3–5. Sales Handoff / CS Onboarding / Goals ship as new top-level tabs in the AK02 nav, not as sub-tabs inside an "Account Kit" container. Reason: less disruptive than rewriting the routing + nav; sub-tab restructure can be a follow-up if the team prefers the prototype's exact shape.
+- **2026-05-12** — Signing event is a structured POST (`/accounts/:id/sign`), not a free-form PATCH. Reason: signing is a milestone, not a mutable field. Forces a single audit trail entry per signing decision and a single point to compute derived dates (renewal, VDD due).
+- **2026-05-12** — Renewal + VDD due dates are **stored**, not derived on read. Reason: queryable / sortable on the account list without joins. Recomputed in the route handler whenever `/sign` fires; `gate_unlocked` is the signal that they may be stale until re-confirmed.
+- **2026-05-12** — `Custom` contract terms leave `gate_renewal_date` null instead of guessing. Reason: less wrong than picking an arbitrary year count. UI shows "—"; follow-up could expose a manual renewal-date input for Custom.
+- **2026-05-12** — Signing unlock is **admin-only** (`is_global_admin`). Reason: every unlock should land under a director-grade user in the audit trail. VP Sales can sign but can't unlock — the asymmetry is intentional.
+- **2026-05-12** — Solutioning lock now auto-snapshots `value_definition` into `sh_value_from_solutioning` on first lock; subsequent re-locks (after unlock) preserve the prior snapshot. Reason: Sales's edits during the unlock window mustn't be clobbered just because Solutioning re-passes.
+- **2026-05-12** — Solutioning PATCH split by field ownership: `sol_fields` (value definition) gated by lock + `can_write_solutioning`; `sh_*` fields gated by `can_write_sales_handoff`, no lock check. Reason: post-lock the value definition is read-only but the sales-side context fields are the whole point of the post-lock flow.
+- **2026-05-12** — CSM-side handover checklist on CS Onboarding (M14) is **stored separately** from the Sales-side checklist on Sales Hand-off (M13). Reason: two-sided handshake. The Sales side says "we delivered this"; the CS side says "we received it." Combining into one jsonb keyed by side was rejected as over-engineering for four items.
+- **2026-05-12** — Three CS stakeholder roles (Budget Owner / Champion / Category Manager) stored as a flat jsonb on `accounts.cs_stakeholders`, NOT as rows in `client_contacts`. Reason: the 3-role map is a fundamentally different concept from the broader Client Contacts list (which has many people). Partial-role updates MERGE per-field in the route handler so concurrent edits across roles don't race.
+- **2026-05-12** — Goals stored in a new `cs_goals` table with phases + initiatives + history as JSONB (not normalized into sub-tables). Reason: the prototype iterates these field-by-field constantly; normalization would force a migration sweep every time. Pydantic enforces shape at the API boundary. When cross-account queries on individual initiatives become a real need, we'll normalize.
+- **2026-05-12** — `cs_goals.history` is **separate** from the global `audit_log`. Reason: `audit_log` captures field-level DB writes via the SQLAlchemy event listener (mechanical). `cs_goals.history` captures business-level events — `phase_a_completed`, `soft_deleted`, `restored` — written intentionally by the route handler. Both coexist; the Goals tab renders only `history`.
+- **2026-05-12** — Goal `alignment_status` **auto-derives** from the three `*_complete` flags on PATCH unless the caller sends an explicit status. Reason: most callers (including the UI's "mark complete" checkbox) shouldn't have to compute alignment; the explicit-override escape hatch covers out-of-order signoffs.
+- **2026-05-12** — Goal soft-delete requires a `reason` (5–600 chars), enforced by both Pydantic AND a DB CHECK constraint (`chk_cs_goals_delete_has_reason`). Reason: the audit trail is only useful if reasons are non-trivial. Belt-and-braces in case a direct DB write skips the API.
+- **2026-05-12** — Goal restore is **admin-only**, not in the regular CS write set. Reason: deleting a goal is reversible; reversing the deletion should land under a director-grade user. Matches the M13 signing-unlock asymmetry.
+- **2026-05-12** — `api.delete()` extended to accept an optional body. Reason: needed for `/cs-goals/:id` soft-delete which carries the mandatory reason. DELETE with a body is valid HTTP (used by Elasticsearch APIs etc.); the existing `request<T>()` already supports the shape.
+- **2026-05-12** — Scope cache (`apps/api/app/core/scope.py`) `_FIELDS` whitelist extended with the new `gate_*` (M13) and `cs_*` (M14) columns. Reason: cached account rows must include the new fields or AccountDetail returns nulls for them. Forgot this on the first run of M13; tests caught it with `gate_signed: Input should be a valid boolean [input_value=None]`.
+- **2026-05-12** — `_hard_clear` test helper soft-deletes residual goals at the start of each test rather than asserting exact counts. Reason: cross-test DB state accumulates because we never hard-delete (soft delete keeps history). One test was rewritten to do id-based existence assertions instead of count-based; pattern propagated to the rest.
 
 ---
 

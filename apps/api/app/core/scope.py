@@ -40,6 +40,17 @@ _FIELDS = (
     "contract_start", "contract_end", "renewal_date",
     "health_score", "last_activity_at",
     "handed_off_to_solutioning", "handed_off_at", "handed_off_by",
+    # M13 — signing gate columns. Cached so AccountDetail + the signing
+    # endpoints don't need a second DB hit; invalidated on /sign + /unlock.
+    "gate_signed", "gate_signed_date", "gate_contract_acv", "gate_contract_term",
+    "gate_renewal_date", "gate_bvd_due_date", "gate_confirmed_by", "gate_confirmed_at",
+    "gate_unlocked", "gate_unlock_reason", "gate_unlocked_by", "gate_unlocked_at",
+    "gate_contract_doc", "gate_contract_doc_at", "gate_contract_modules",
+    "gate_platform_tier", "gate_account_segment", "gate_subscribers",
+    "handover_quality_check",
+    # M14 — CS Onboarding columns.
+    "cs_entry_type", "cs_entry_b_context", "cs_entry_b_goals",
+    "cs_handover_checklist", "cs_stakeholders",
     "created_at", "updated_at", "deleted_at",
 )
 

@@ -1,8 +1,8 @@
-"""AK03.d — Solutioning schemas. Mirrors BRD §4.3.d table 14 + v20 trial block."""
+"""AK03.d — Solutioning schemas. Mirrors BRD §4.3.d table 14."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -10,7 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 EngagementType = Literal["one_time", "retainer", "subscription", "pilot", "other"]
-TrialKind = Literal["trial", "poc", "pilot", "demo", "none"]
+ShValidation = Literal["confirmed", "partially_confirmed", "revised"]
 
 
 class SolutioningOut(BaseModel):
@@ -24,17 +24,6 @@ class SolutioningOut(BaseModel):
     value_definition: str | None
     estimated_value_musd: Decimal | None
 
-    # Trial / POC block (v20).
-    trial_conducted: bool | None = None
-    trial_type: TrialKind | None = None
-    trial_duration_text: str | None = None
-    trial_participant_count: int | None = None
-    trial_participants_text: str | None = None
-    key_users_text: str | None = None
-    info_tested: str | None = None
-    hypothesis_tested: str | None = None
-    trial_summary: str | None = None
-
     ai_extracted_from_doc: UUID | None
     ai_extracted_at: datetime | None
     ai_edited: bool
@@ -42,6 +31,20 @@ class SolutioningOut(BaseModel):
     # Sales Hand-off lock.
     locked_at: datetime | None = None
     locked_by: UUID | None = None
+
+    # Sales Hand-off context (M13). The first three are set automatically
+    # when Solutioning locks; the rest are filled in by Sales.
+    sh_value_from_solutioning: str | None = None
+    sh_value_themes_from_solutioning: str | None = None
+    sh_value_received_at: datetime | None = None
+    sh_value_validation: ShValidation | None = None
+    sh_validation_notes: str | None = None
+    sh_go_live_date: date | None = None
+    sh_first_checkpoint: date | None = None
+    sh_stakeholder_signoff: str | None = None
+    sh_commercial_context: str | None = None
+    sales_watchouts: str | None = None
+    handoff_file_name: str | None = None
 
     updated_at: datetime
     updated_by: UUID | None
@@ -56,17 +59,17 @@ class SolutioningUpdate(BaseModel):
     value_definition: str | None = Field(None, max_length=4000)
     estimated_value_musd: Decimal | None = Field(None, ge=0, le=100000)
 
-    # Trial / POC block (v20). Free-text fields capped to keep payload sane;
-    # the prototype's largest example sits well under 2000 chars.
-    trial_conducted: bool | None = None
-    trial_type: TrialKind | None = None
-    trial_duration_text: str | None = Field(None, max_length=200)
-    trial_participant_count: int | None = Field(None, ge=0, le=10_000)
-    trial_participants_text: str | None = Field(None, max_length=4000)
-    key_users_text: str | None = Field(None, max_length=2000)
-    info_tested: str | None = Field(None, max_length=4000)
-    hypothesis_tested: str | None = Field(None, max_length=4000)
-    trial_summary: str | None = Field(None, max_length=4000)
+    # Sales Hand-off context. sh_value_from_solutioning + sh_value_received_at
+    # are deliberately NOT patchable — they're set by the lock endpoint as
+    # an immutable snapshot.
+    sh_value_validation: ShValidation | None = None
+    sh_validation_notes: str | None = Field(None, max_length=4000)
+    sh_go_live_date: date | None = None
+    sh_first_checkpoint: date | None = None
+    sh_stakeholder_signoff: str | None = Field(None, max_length=600)
+    sh_commercial_context: str | None = Field(None, max_length=4000)
+    sales_watchouts: str | None = Field(None, max_length=4000)
+    handoff_file_name: str | None = Field(None, max_length=400)
 
     ai_edited: bool | None = None
 

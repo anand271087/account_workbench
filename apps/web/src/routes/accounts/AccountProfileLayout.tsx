@@ -25,6 +25,16 @@ const SUB_NAV: SubNavItem[] = [
   { to: "overview",     label: "Overview",      show: () => true },
   { to: "pre-sales",    label: "Pre-Sales",     show: (a) => a.can_view_pre_sales },
   { to: "solutioning",  label: "Solutioning",   show: (a) => a.can_view_solutioning },
+  // Brief lives next to Pre-Sales — same visibility scope. Promoted from
+  // an inline disclosure inside Pre-Sales to its own tab so the meeting
+  // lead lands on it directly.
+  { to: "brief",        label: "Brief",         show: (a) => a.can_view_pre_sales },
+  // Sales Handoff & Signing — sits next to Solutioning since it's the
+  // natural continuation (solutioning lock → handoff → signing).
+  { to: "sales-handoff", label: "Sales Handoff", show: (a) => a.can_view_sales_handoff },
+  // CS Onboarding — tab itself is always visible (entry picker is the
+  // gate). Inner content activates once gate_signed OR cs_entry_type='B'.
+  { to: "cs-onboarding", label: "CS Onboarding", show: (a) => a.can_view_cs_onboarding },
   { to: "contacts",     label: "Contacts",      show: (a) => a.can_view_contacts },
   // Documents tab removed in M11 — MoMs live on Pre-Sales, VPDs on Solutioning.
   { to: "value-def",    label: "Value Def",     show: () => true },

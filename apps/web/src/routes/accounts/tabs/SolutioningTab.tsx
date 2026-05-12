@@ -9,19 +9,15 @@ import { KindUploadCard } from "@/components/KindUploadCard";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ENGAGEMENT_TYPE_LABELS,
-  TRIAL_KIND_LABELS,
   type EngagementType,
   type Solutioning,
   type SolutioningLockResponse,
   type SolutioningUpdate,
-  type TrialKind,
 } from "@/types/solutioning";
 
 const ENGAGEMENT_TYPE_OPTIONS: EngagementType[] = [
   "one_time", "retainer", "subscription", "pilot", "other",
 ];
-
-const TRIAL_KIND_OPTIONS: TrialKind[] = ["trial", "poc", "pilot", "demo", "none"];
 
 export default function SolutioningTab() {
   const account = useAccountFromLayout();
@@ -189,157 +185,6 @@ export default function SolutioningTab() {
               />
             </Field>
           </div>
-        </Section>
-
-        <Section
-          title="Trial / POC"
-          subtitle="What was actually tested in pre-sales — the proof point Sales will reference at handoff."
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Trial conducted?">
-              <select
-                value={form.trial_conducted === null ? "" : form.trial_conducted ? "yes" : "no"}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm({
-                    ...form,
-                    trial_conducted: v === "" ? null : v === "yes",
-                    // Clearing "trial conducted = no" wipes the trial type so
-                    // we don't leave inconsistent state.
-                    trial_type: v === "no" ? "none" : form.trial_type,
-                  });
-                }}
-                disabled={!form.is_editable}
-                className={inputCls(form.is_editable)}
-              >
-                <option value="">— Select —</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </Field>
-            <Field label="Type">
-              <select
-                value={form.trial_type ?? ""}
-                onChange={(e) =>
-                  setForm({ ...form, trial_type: (e.target.value || null) as TrialKind | null })
-                }
-                disabled={!form.is_editable || form.trial_conducted === false}
-                className={inputCls(form.is_editable && form.trial_conducted !== false)}
-              >
-                <option value="">— Select —</option>
-                {TRIAL_KIND_OPTIONS.map((t) => (
-                  <option key={t} value={t}>{TRIAL_KIND_LABELS[t]}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Duration">
-              <input
-                type="text"
-                value={form.trial_duration_text ?? ""}
-                onChange={(e) => setForm({ ...form, trial_duration_text: e.target.value || null })}
-                disabled={!form.is_editable || form.trial_conducted === false}
-                placeholder="e.g. 3 weeks"
-                maxLength={200}
-                className={inputCls(form.is_editable && form.trial_conducted !== false)}
-              />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
-            <Field label="Participant count">
-              <input
-                type="number"
-                min={0}
-                max={10000}
-                value={form.trial_participant_count ?? ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    trial_participant_count: e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-                disabled={!form.is_editable || form.trial_conducted === false}
-                className={inputCls(form.is_editable && form.trial_conducted !== false)}
-              />
-            </Field>
-            <Field label="Key user types">
-              <input
-                type="text"
-                value={form.key_users_text ?? ""}
-                onChange={(e) => setForm({ ...form, key_users_text: e.target.value || null })}
-                disabled={!form.is_editable || form.trial_conducted === false}
-                placeholder="e.g. Category managers, sourcing analysts"
-                maxLength={2000}
-                className={inputCls(form.is_editable && form.trial_conducted !== false)}
-              />
-            </Field>
-          </div>
-
-          <Field label="Participants (names & roles)">
-            <textarea
-              rows={2}
-              value={form.trial_participants_text ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, trial_participants_text: e.target.value || null })
-              }
-              disabled={!form.is_editable || form.trial_conducted === false}
-              placeholder="One per line, e.g. Jordan Mills (Dir. Procurement Strategy)"
-              maxLength={4000}
-              className={cn(
-                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-                (!form.is_editable || form.trial_conducted === false) &&
-                  "bg-slate-50 text-text-secondary cursor-not-allowed",
-              )}
-            />
-          </Field>
-
-          <Field label="Information tested">
-            <textarea
-              rows={3}
-              value={form.info_tested ?? ""}
-              onChange={(e) => setForm({ ...form, info_tested: e.target.value || null })}
-              disabled={!form.is_editable || form.trial_conducted === false}
-              placeholder="Which categories, modules, or data points were put in front of them?"
-              maxLength={4000}
-              className={cn(
-                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-                (!form.is_editable || form.trial_conducted === false) &&
-                  "bg-slate-50 text-text-secondary cursor-not-allowed",
-              )}
-            />
-          </Field>
-
-          <Field label="Hypothesis tested">
-            <textarea
-              rows={3}
-              value={form.hypothesis_tested ?? ""}
-              onChange={(e) => setForm({ ...form, hypothesis_tested: e.target.value || null })}
-              disabled={!form.is_editable || form.trial_conducted === false}
-              placeholder="What did we need to validate? What would success look like?"
-              maxLength={4000}
-              className={cn(
-                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-                (!form.is_editable || form.trial_conducted === false) &&
-                  "bg-slate-50 text-text-secondary cursor-not-allowed",
-              )}
-            />
-          </Field>
-
-          <Field label="Trial summary">
-            <textarea
-              rows={4}
-              value={form.trial_summary ?? ""}
-              onChange={(e) => setForm({ ...form, trial_summary: e.target.value || null })}
-              disabled={!form.is_editable || form.trial_conducted === false}
-              placeholder="What happened. What worked, what didn't. The narrative Sales will quote."
-              maxLength={4000}
-              className={cn(
-                "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-                (!form.is_editable || form.trial_conducted === false) &&
-                  "bg-slate-50 text-text-secondary cursor-not-allowed",
-              )}
-            />
-          </Field>
         </Section>
 
         <Section title="Value themes" subtitle="Short tags — what kinds of value the engagement will deliver.">
@@ -606,9 +451,6 @@ function diff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
   const keys: (keyof SolutioningUpdate)[] = [
     "proposed_solution", "engagement_type", "engagement_duration_months",
     "value_themes", "value_definition", "estimated_value_musd",
-    "trial_conducted", "trial_type", "trial_duration_text",
-    "trial_participant_count", "trial_participants_text", "key_users_text",
-    "info_tested", "hypothesis_tested", "trial_summary",
   ];
   for (const k of keys) {
     if (JSON.stringify(next[k]) !== JSON.stringify(prev[k])) out[k] = next[k];

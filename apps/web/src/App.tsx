@@ -5,17 +5,18 @@ import LoginPage from "@/routes/_auth/login";
 import ResetPasswordPage from "@/routes/_auth/reset-password";
 import AccountListPage from "@/routes/accounts/AccountListPage";
 import AccountProfileLayout from "@/routes/accounts/AccountProfileLayout";
+import BriefTab from "@/routes/accounts/tabs/BriefTab";
+import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
+import GoalsTab from "@/routes/accounts/tabs/GoalsTab";
 import OverviewTab from "@/routes/accounts/tabs/OverviewTab";
 import PreSalesTab from "@/routes/accounts/tabs/PreSalesTab";
 import ContactsTab from "@/routes/accounts/tabs/ContactsTab";
+import SalesHandoffTab from "@/routes/accounts/tabs/SalesHandoffTab";
 import SolutioningTab from "@/routes/accounts/tabs/SolutioningTab";
 import UsersPage from "@/routes/admin/UsersPage";
 import CategoriesPage from "@/routes/admin/CategoriesPage";
 import { useAuth } from "@/components/AuthProvider";
-import {
-  GoalsInitiativesPlaceholder,
-  ValueDefinitionPlaceholder,
-} from "@/routes/accounts/tabs/PlaceholderTab";
+import { ValueDefinitionPlaceholder } from "@/routes/accounts/tabs/PlaceholderTab";
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { me, isLoading } = useAuth();
@@ -109,8 +110,11 @@ export default function App() {
         {/* /documents removed in M11 — redirect any old deep links to Pre-Sales. */}
         <Route path="documents" element={<Navigate to="../pre-sales" replace />} />
         <Route path="solutioning" element={<SolutioningTab />} />
+        <Route path="brief" element={<BriefTab />} />
+        <Route path="sales-handoff" element={<SalesHandoffTab />} />
+        <Route path="cs-onboarding" element={<CSOnboardingTab />} />
         <Route path="value-def" element={<ValueDefinitionPlaceholder />} />
-        <Route path="goals" element={<GoalsInitiativesPlaceholder />} />
+        <Route path="goals" element={<GoalsTab />} />
       </Route>
       <Route path="/" element={<Navigate to="/accounts" replace />} />
       <Route path="*" element={<Navigate to="/accounts" replace />} />

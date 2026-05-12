@@ -1,0 +1,822 @@
+// M13 — Sales Handoff & Signing.
+//
+// Three cards:
+//   1. Sales Hand-off — value validation, engagement timeline, watch-outs,
+//      handoff doc (sh_* fields on account_solutioning).
+//   2. CLIENT SIGNED stage gate — before/after states. Before: Sales captures
+//      signed date / ACV / term and confirms; after: signed metadata shown
+//      with renewal date + VDD due date derived from term.
+//   3. Handover Quality Check — 4 items, auto-detected with manual overrides.
+
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { useAccountFromLayout } from "../AccountProfileLayout";
+import {
+  SH_VALIDATION_LABELS,
+  type ShValidation,
+  type Solutioning,
+  type SolutioningUpdate,
+} from "@/types/solutioning";
+import {
+  HANDOVER_QC_ITEMS,
+  TERM_OPTIONS,
+  type ContractDocBody,
+  type HandoverChecklistBody,
+  type SignAccountBody,
+  type SigningGate,
+  type UnlockSigningBody,
+} from "@/types/signing";
+
+const SH_VALIDATION_OPTIONS: ShValidation[] = [
+  "confirmed",
+  "partially_confirmed",
+  "revised",
+];
+
+export default function SalesHandoffTab() {
+  const account = useAccountFromLayout();
+  const qc = useQueryClient();
+
+  // ---- Queries ----
+  const { data: gate, isLoading: gateLoading } = useQuery<SigningGate>({
+    queryKey: ["signing-gate", account.id],
+    queryFn: () => api.get<SigningGate>(`/api/v1/accounts/${account.id}/sign`),
+  });
+  const { data: sol, isLoading: solLoading } = useQuery<Solutioning>({
+    queryKey: ["solutioning", account.id],
+    queryFn: () => api.get<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`),
+  });
+
+  // ---- Sales hand-off form state (sh_* fields on solutioning) ----
+  const [form, setForm] = useState<Solutioning | null>(null);
+  const [shError, setShError] = useState<string | null>(null);
+  useEffect(() => {
+    if (sol && !form) setForm(sol);
+  }, [sol, form]);
+  const dirty = useMemo(() => {
+    if (!form || !sol) return false;
+    return JSON.stringify(shSlice(form)) !== JSON.stringify(shSlice(sol));
+  }, [form, sol]);
+
+  const saveSh = useMutation({
+    mutationFn: (body: SolutioningUpdate) =>
+      api.patch<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`, body),
+    onSuccess: (saved) => {
+      qc.setQueryData(["solutioning", account.id], saved);
+      qc.invalidateQueries({ queryKey: ["activity", account.id] });
+      setForm(saved);
+      setShError(null);
+    },
+    onError: (e: ApiError) => setShError(e.message),
+  });
+
+  const saveDirty = () => {
+    if (form && sol) saveSh.mutate(shDiff(form, sol));
+  };
+  const guard = useUnsavedChangesGuard({
+    dirty,
+    isSaving: saveSh.isPending,
+    onSaveShortcut: saveDirty,
+  });
+
+  // ---- Signing gate mutations ----
+  const [signError, setSignError] = useState<string | null>(null);
+  const sign = useMutation({
+    mutationFn: (body: SignAccountBody) =>
+      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sign`, body),
+    onSuccess: (g) => {
+      qc.setQueryData(["signing-gate", account.id], g);
+      qc.invalidateQueries({ queryKey: ["account", account.id] });
+      qc.invalidateQueries({ queryKey: ["activity", account.id] });
+      setSignError(null);
+    },
+    onError: (e: ApiError) => setSignError(e.message),
+  });
+  const unlock = useMutation({
+    mutationFn: (body: UnlockSigningBody) =>
+      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sign/unlock`, body),
+    onSuccess: (g) => {
+      qc.setQueryData(["signing-gate", account.id], g);
+      qc.invalidateQueries({ queryKey: ["account", account.id] });
+      setSignError(null);
+    },
+    onError: (e: ApiError) => setSignError(e.message),
+  });
+  const checklist = useMutation({
+    mutationFn: (body: HandoverChecklistBody) =>
+      api.patch<SigningGate>(`/api/v1/accounts/${account.id}/handover-checklist`, body),
+    onSuccess: (g) => {
+      qc.setQueryData(["signing-gate", account.id], g);
+      setSignError(null);
+    },
+    onError: (e: ApiError) => setSignError(e.message),
+  });
+  const contractDoc = useMutation({
+    mutationFn: (body: ContractDocBody) =>
+      api.patch<SigningGate>(`/api/v1/accounts/${account.id}/contract-doc`, body),
+    onSuccess: (g) => {
+      qc.setQueryData(["signing-gate", account.id], g);
+      setSignError(null);
+    },
+    onError: (e: ApiError) => setSignError(e.message),
+  });
+
+  // ---- Signing form state (before-signed only) ----
+  const [signForm, setSignForm] = useState<SignAccountBody>({
+    gate_signed_date: new Date().toISOString().slice(0, 10),
+    gate_contract_acv: "",
+    gate_contract_term: "",
+  });
+
+  if (gateLoading || solLoading || !form || !gate) {
+    return <div className="text-sm text-text-muted">Loading sales hand-off…</div>;
+  }
+
+  const editable = form.is_editable;
+
+  return (
+    <div className="space-y-4">
+      {/* ---------- Card 1: Sales Hand-off context ---------- */}
+      <Section title="Sales Hand-off">
+        <p className="text-xs text-text-muted mb-3">
+          Continues from the Solutioning lock. Sales validates the value
+          definition, fills in the engagement timeline, and notes any
+          watch-outs before the signing event.
+        </p>
+
+        {/* Value definition snapshot (read-only) */}
+        <Field label="Value definition (received from Solutioning)">
+          {form.sh_value_from_solutioning ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-text-primary whitespace-pre-wrap">
+              {form.sh_value_from_solutioning}
+            </div>
+          ) : (
+            <div className="text-xs text-text-muted italic">
+              Lock the Solutioning value definition first — the snapshot will
+              appear here for Sales to validate.
+            </div>
+          )}
+          {form.sh_value_received_at && (
+            <div className="text-[10px] text-text-muted mt-1">
+              Received {new Date(form.sh_value_received_at).toLocaleString()}
+            </div>
+          )}
+        </Field>
+
+        {form.sh_value_themes_from_solutioning && (
+          <Field label="Value themes">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-text-primary">
+              {form.sh_value_themes_from_solutioning}
+            </div>
+          </Field>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Sales validation">
+            <select
+              value={form.sh_value_validation ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  sh_value_validation: (e.target.value || null) as ShValidation | null,
+                })
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            >
+              <option value="">— Select —</option>
+              {SH_VALIDATION_OPTIONS.map((v) => (
+                <option key={v} value={v}>{SH_VALIDATION_LABELS[v]}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Stakeholder sign-off">
+            <input
+              type="text"
+              maxLength={600}
+              value={form.sh_stakeholder_signoff ?? ""}
+              placeholder="Who on the client side approved"
+              onChange={(e) =>
+                setForm({ ...form, sh_stakeholder_signoff: e.target.value || null })
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            />
+          </Field>
+        </div>
+
+        <Field label="Validation notes">
+          <textarea
+            rows={3}
+            maxLength={4000}
+            value={form.sh_validation_notes ?? ""}
+            placeholder="Anything Sales pushed back on or refined."
+            onChange={(e) =>
+              setForm({ ...form, sh_validation_notes: e.target.value || null })
+            }
+            disabled={!editable}
+            className={textareaCls(editable)}
+          />
+        </Field>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Go-live date">
+            <input
+              type="date"
+              value={form.sh_go_live_date ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, sh_go_live_date: e.target.value || null })
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            />
+          </Field>
+          <Field label="First checkpoint">
+            <input
+              type="date"
+              value={form.sh_first_checkpoint ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, sh_first_checkpoint: e.target.value || null })
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            />
+          </Field>
+        </div>
+
+        <Field label="Commercial context">
+          <textarea
+            rows={3}
+            maxLength={4000}
+            value={form.sh_commercial_context ?? ""}
+            placeholder="Pricing nuances, discounts, special terms."
+            onChange={(e) =>
+              setForm({ ...form, sh_commercial_context: e.target.value || null })
+            }
+            disabled={!editable}
+            className={textareaCls(editable)}
+          />
+        </Field>
+
+        <Field label="Watch-outs & risks">
+          <textarea
+            rows={3}
+            maxLength={4000}
+            value={form.sales_watchouts ?? ""}
+            placeholder="What might bite us between sign and go-live."
+            onChange={(e) =>
+              setForm({ ...form, sales_watchouts: e.target.value || null })
+            }
+            disabled={!editable}
+            className={textareaCls(editable)}
+          />
+        </Field>
+
+        <Field label="Handoff document">
+          <input
+            type="text"
+            maxLength={400}
+            value={form.handoff_file_name ?? ""}
+            placeholder="Filename of the signed handoff doc (upload via Documents)"
+            onChange={(e) =>
+              setForm({ ...form, handoff_file_name: e.target.value || null })
+            }
+            disabled={!editable}
+            className={inputCls(editable)}
+          />
+        </Field>
+
+        {/* Sticky save bar for sh_* fields */}
+        {editable && (
+          <div
+            className={cn(
+              "sticky bottom-0 -mx-5 px-5 py-3 flex items-center gap-3 border-t z-30 mt-3 transition-colors",
+              dirty
+                ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+                : "bg-white border-beroe-card-border",
+            )}
+          >
+            {shError && (
+              <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+                {shError}
+              </span>
+            )}
+            {!shError && dirty && (
+              <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                Unsaved hand-off changes
+              </span>
+            )}
+            {!dirty && !shError && (
+              <span className="text-xs text-text-muted">✓ Hand-off saved</span>
+            )}
+            <button
+              onClick={() => sol && setForm(sol)}
+              disabled={!dirty || saveSh.isPending}
+              className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
+            >
+              Discard
+            </button>
+            <button
+              onClick={saveDirty}
+              disabled={!dirty || saveSh.isPending}
+              className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
+            >
+              {saveSh.isPending ? "Saving…" : "Save hand-off"}
+            </button>
+          </div>
+        )}
+      </Section>
+
+      {/* ---------- Card 2: CLIENT SIGNED stage gate ---------- */}
+      <SigningGateCard
+        gate={gate}
+        signForm={signForm}
+        setSignForm={setSignForm}
+        sign={(b) => sign.mutate(b)}
+        unlock={(reason) => unlock.mutate({ reason })}
+        signing={sign.isPending}
+        unlocking={unlock.isPending}
+        error={signError}
+        onContractDoc={(filename) =>
+          contractDoc.mutate({ gate_contract_doc: filename })
+        }
+      />
+
+      {/* ---------- Card 3: Handover Quality Check ---------- */}
+      <HandoverQualityCheck
+        account={account}
+        gate={gate}
+        onSet={(items) => checklist.mutate({ items })}
+        saving={checklist.isPending}
+      />
+
+      {guard.pendingHref && (
+        <UnsavedChangesDialog
+          pendingHref={guard.pendingHref}
+          saving={saveSh.isPending}
+          onSaveAndGo={async () => {
+            try {
+              if (form && sol) await saveSh.mutateAsync(shDiff(form, sol));
+              guard.proceed();
+            } catch {
+              /* shError surfaces in UI */
+            }
+          }}
+          onDiscardAndGo={() => {
+            if (sol) setForm(sol);
+            guard.proceed();
+          }}
+          onStay={guard.stay}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// CLIENT SIGNED card
+// ============================================================
+
+function SigningGateCard({
+  gate,
+  signForm,
+  setSignForm,
+  sign,
+  unlock,
+  signing,
+  unlocking,
+  error,
+  onContractDoc,
+}: {
+  gate: SigningGate;
+  signForm: SignAccountBody;
+  setSignForm: (v: SignAccountBody) => void;
+  sign: (b: SignAccountBody) => void;
+  unlock: (reason: string) => void;
+  signing: boolean;
+  unlocking: boolean;
+  error: string | null;
+  onContractDoc: (filename: string | null) => void;
+}) {
+  const isSigned = gate.gate_signed;
+  const inEdit = !isSigned || gate.gate_unlocked;
+  const renewalAfterBvd =
+    gate.gate_renewal_date &&
+    gate.gate_bvd_due_date &&
+    gate.gate_bvd_due_date > gate.gate_renewal_date;
+
+  return (
+    <div
+      className={cn(
+        "rounded-card border-2 bg-white p-5",
+        isSigned && !gate.gate_unlocked
+          ? "border-green-300"
+          : isSigned && gate.gate_unlocked
+            ? "border-amber-300"
+            : "border-slate-200",
+      )}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-extrabold tracking-wide uppercase">
+          CLIENT SIGNED
+        </h2>
+        {isSigned && !gate.gate_unlocked && (
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-800">
+            ✓ Live
+          </span>
+        )}
+        {isSigned && gate.gate_unlocked && (
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+            🔓 Unlocked — needs re-confirm
+          </span>
+        )}
+        {!isSigned && (
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-text-muted">
+            Pending
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {/* Always-visible metadata grid — empty cells when unsigned. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <SignedStat label="Signed date" value={fmtDate(gate.gate_signed_date)} />
+        <SignedStat label="Contract ACV" value={fmtMoney(gate.gate_contract_acv)} />
+        <SignedStat label="Contract term" value={gate.gate_contract_term ?? "—"} />
+        <SignedStat label="Renewal date" value={fmtDate(gate.gate_renewal_date)} />
+        <SignedStat
+          label="VDD due date"
+          value={fmtDate(gate.gate_bvd_due_date)}
+          warn={!!renewalAfterBvd}
+        />
+        <SignedStat
+          label="Confirmed at"
+          value={gate.gate_confirmed_at ? fmtDateTime(gate.gate_confirmed_at) : "—"}
+        />
+      </div>
+
+      {/* Sign / re-sign form */}
+      {inEdit && gate.can_sign && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 mb-3">
+          <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold mb-2">
+            {isSigned ? "Re-confirm signing" : "Confirm signing"}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Signed date">
+              <input
+                type="date"
+                value={signForm.gate_signed_date}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) =>
+                  setSignForm({ ...signForm, gate_signed_date: e.target.value })
+                }
+                className={inputCls(true)}
+              />
+            </Field>
+            <Field label="ACV ($)">
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={signForm.gate_contract_acv}
+                onChange={(e) =>
+                  setSignForm({ ...signForm, gate_contract_acv: e.target.value })
+                }
+                className={inputCls(true)}
+              />
+            </Field>
+            <Field label="Term">
+              <select
+                value={signForm.gate_contract_term}
+                onChange={(e) =>
+                  setSignForm({ ...signForm, gate_contract_term: e.target.value })
+                }
+                className={inputCls(true)}
+              >
+                <option value="">— Select —</option>
+                {TERM_OPTIONS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <button
+            onClick={() => {
+              if (!signForm.gate_signed_date) {
+                alert("Pick a signed date.");
+                return;
+              }
+              if (!signForm.gate_contract_acv) {
+                alert("Enter the contract ACV.");
+                return;
+              }
+              if (!signForm.gate_contract_term) {
+                alert("Pick a term.");
+                return;
+              }
+              sign(signForm);
+            }}
+            disabled={signing}
+            className="mt-3 px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
+          >
+            {signing ? "Confirming…" : "✓ Confirm signing"}
+          </button>
+        </div>
+      )}
+
+      {/* Signed metadata footer */}
+      {isSigned && !gate.gate_unlocked && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {gate.gate_contract_modules.map((m) => (
+            <span
+              key={m}
+              className="inline-block text-[10px] px-2 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30"
+            >
+              {m}
+            </span>
+          ))}
+          {gate.gate_platform_tier && (
+            <span className="text-[11px] text-text-muted">
+              Tier: <b className="text-text-primary">{gate.gate_platform_tier}</b>
+            </span>
+          )}
+          {gate.gate_account_segment && (
+            <span className="text-[11px] text-text-muted">
+              Segment: <b className="text-text-primary">{gate.gate_account_segment}</b>
+            </span>
+          )}
+          {gate.gate_subscribers && (
+            <span className="text-[11px] text-text-muted">
+              Subscribers: <b className="text-text-primary">{gate.gate_subscribers}</b>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Contract doc */}
+      {isSigned && (
+        <div className="border-t border-slate-200 pt-3 mt-3">
+          <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold mb-1">
+            Contract document
+          </div>
+          {gate.gate_contract_doc ? (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-1 rounded-md bg-green-50 border border-green-200 text-green-800 font-semibold">
+                📄 {gate.gate_contract_doc}
+              </span>
+              {gate.gate_contract_doc_at && (
+                <span className="text-text-muted">
+                  uploaded {fmtDate(gate.gate_contract_doc_at)}
+                </span>
+              )}
+              {gate.can_sign && (
+                <button
+                  onClick={() => {
+                    if (confirm("Remove the contract doc reference?")) {
+                      onContractDoc(null);
+                    }
+                  }}
+                  className="ml-auto text-text-muted hover:text-red-700"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ) : gate.can_sign ? (
+            <input
+              type="text"
+              placeholder="Filename of the signed contract (uploaded via Documents)"
+              maxLength={400}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v) onContractDoc(v);
+              }}
+              className={inputCls(true)}
+            />
+          ) : (
+            <div className="text-xs text-text-muted italic">Not yet uploaded.</div>
+          )}
+        </div>
+      )}
+
+      {/* Unlock action */}
+      {isSigned && gate.can_unlock && !gate.gate_unlocked && (
+        <button
+          onClick={() => {
+            const reason = prompt(
+              "Reason for unlocking the signing gate (min 10 chars):",
+            );
+            if (reason && reason.trim().length >= 10) {
+              unlock(reason.trim());
+            } else if (reason !== null) {
+              alert("Reason must be at least 10 characters.");
+            }
+          }}
+          disabled={unlocking}
+          className="mt-3 text-xs px-3 py-1 rounded-md border border-amber-300 bg-amber-50 text-amber-900 font-semibold hover:bg-amber-100 disabled:opacity-50"
+        >
+          {unlocking ? "Unlocking…" : "🔓 Unlock for correction"}
+        </button>
+      )}
+      {gate.gate_unlocked && gate.gate_unlock_reason && (
+        <div className="mt-2 text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          Unlocked: <b>{gate.gate_unlock_reason}</b>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Handover Quality Check
+// ============================================================
+
+function HandoverQualityCheck({
+  account,
+  gate,
+  onSet,
+  saving,
+}: {
+  account: { id: string };
+  gate: SigningGate;
+  onSet: (items: Record<string, boolean>) => void;
+  saving: boolean;
+}) {
+  void account;
+  const overrides = gate.handover_quality_check ?? {};
+  return (
+    <Section title="Handover Quality Check">
+      <p className="text-xs text-text-muted mb-3">
+        Manual sign-off on the four things every Pre-Sales handover must
+        deliver. Tick when complete; the audit log records who confirmed
+        what.
+      </p>
+      <ul className="space-y-2">
+        {HANDOVER_QC_ITEMS.map((it) => {
+          const checked = !!overrides[it.key];
+          return (
+            <li
+              key={it.key}
+              className="flex items-start gap-3 bg-slate-50/40 border border-slate-200 rounded-lg px-3 py-2"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={saving}
+                onChange={(e) => onSet({ [it.key]: e.target.checked })}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-text-primary">{it.label}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </Section>
+  );
+}
+
+// ============================================================
+// Sub-components / helpers
+// ============================================================
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-card border border-beroe-card-border p-5">
+      <h2 className="text-sm font-bold text-text-primary mb-2">{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <label className="block text-[11px] uppercase tracking-wider text-text-muted font-bold mb-1">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function SignedStat({
+  label,
+  value,
+  warn,
+}: {
+  label: string;
+  value: string;
+  warn?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border px-3 py-2",
+        warn ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-slate-50/40",
+      )}
+    >
+      <div className="text-[10px] uppercase tracking-wider text-text-muted font-bold mb-0.5">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "text-sm font-bold",
+          warn ? "text-amber-800" : "text-text-primary",
+        )}
+      >
+        {value}
+        {warn && <span className="ml-1" aria-label="warning">⚠</span>}
+      </div>
+    </div>
+  );
+}
+
+function inputCls(enabled: boolean) {
+  return cn(
+    "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+  );
+}
+
+function textareaCls(enabled: boolean) {
+  return cn(
+    "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+  );
+}
+
+function fmtDate(d: string | null): string {
+  if (!d) return "—";
+  // ISO yyyy-mm-dd or full ISO datetime — both parse.
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString();
+}
+
+function fmtDateTime(d: string | null): string {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d;
+  return dt.toLocaleString();
+}
+
+function fmtMoney(v: string | number | null): string {
+  if (v == null || v === "") return "—";
+  const n = typeof v === "number" ? v : parseFloat(v);
+  if (isNaN(n)) return String(v);
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+const SH_KEYS = [
+  "sh_value_validation",
+  "sh_validation_notes",
+  "sh_go_live_date",
+  "sh_first_checkpoint",
+  "sh_stakeholder_signoff",
+  "sh_commercial_context",
+  "sales_watchouts",
+  "handoff_file_name",
+] as const;
+
+/** Pull only the sh_* slice for dirty/diff comparison. */
+function shSlice(s: Solutioning): Partial<Solutioning> {
+  const out: Partial<Solutioning> = {};
+  for (const k of SH_KEYS) {
+    // @ts-expect-error — index into typed shape
+    out[k] = s[k];
+  }
+  return out;
+}
+
+function shDiff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
+  const out: Record<string, unknown> = {};
+  for (const k of SH_KEYS) {
+    if (JSON.stringify(next[k]) !== JSON.stringify(prev[k])) {
+      out[k] = next[k];
+    }
+  }
+  return out as SolutioningUpdate;
+}

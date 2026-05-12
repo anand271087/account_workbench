@@ -1,7 +1,7 @@
 // Mirrors apps/api/app/schemas/solutioning.py.
 
 export type EngagementType = "one_time" | "retainer" | "subscription" | "pilot" | "other";
-export type TrialKind = "trial" | "poc" | "pilot" | "demo" | "none";
+export type ShValidation = "confirmed" | "partially_confirmed" | "revised";
 
 export interface Solutioning {
   account_id: string;
@@ -12,17 +12,6 @@ export interface Solutioning {
   value_definition: string | null;
   estimated_value_musd: string | number | null;
 
-  // Trial / POC block.
-  trial_conducted: boolean | null;
-  trial_type: TrialKind | null;
-  trial_duration_text: string | null;
-  trial_participant_count: number | null;
-  trial_participants_text: string | null;
-  key_users_text: string | null;
-  info_tested: string | null;
-  hypothesis_tested: string | null;
-  trial_summary: string | null;
-
   ai_extracted_from_doc: string | null;
   ai_extracted_at: string | null;
   ai_edited: boolean;
@@ -30,6 +19,19 @@ export interface Solutioning {
   // Sales Hand-off lock.
   locked_at: string | null;
   locked_by: string | null;
+
+  // Sales Hand-off context (M13). First three are set automatically by lock.
+  sh_value_from_solutioning: string | null;
+  sh_value_themes_from_solutioning: string | null;
+  sh_value_received_at: string | null;
+  sh_value_validation: ShValidation | null;
+  sh_validation_notes: string | null;
+  sh_go_live_date: string | null;
+  sh_first_checkpoint: string | null;
+  sh_stakeholder_signoff: string | null;
+  sh_commercial_context: string | null;
+  sales_watchouts: string | null;
+  handoff_file_name: string | null;
 
   updated_at: string;
   updated_by: string | null;
@@ -44,18 +46,23 @@ export interface SolutioningUpdate {
   value_definition?: string | null;
   estimated_value_musd?: string | number | null;
 
-  trial_conducted?: boolean | null;
-  trial_type?: TrialKind | null;
-  trial_duration_text?: string | null;
-  trial_participant_count?: number | null;
-  trial_participants_text?: string | null;
-  key_users_text?: string | null;
-  info_tested?: string | null;
-  hypothesis_tested?: string | null;
-  trial_summary?: string | null;
+  sh_value_validation?: ShValidation | null;
+  sh_validation_notes?: string | null;
+  sh_go_live_date?: string | null;
+  sh_first_checkpoint?: string | null;
+  sh_stakeholder_signoff?: string | null;
+  sh_commercial_context?: string | null;
+  sales_watchouts?: string | null;
+  handoff_file_name?: string | null;
 
   ai_edited?: boolean | null;
 }
+
+export const SH_VALIDATION_LABELS: Record<ShValidation, string> = {
+  confirmed: "Confirmed",
+  partially_confirmed: "Partially confirmed",
+  revised: "Revised",
+};
 
 export interface HandoverResponse {
   account_id: string;
@@ -76,12 +83,4 @@ export const ENGAGEMENT_TYPE_LABELS: Record<EngagementType, string> = {
   subscription: "Subscription",
   pilot: "Pilot",
   other: "Other",
-};
-
-export const TRIAL_KIND_LABELS: Record<TrialKind, string> = {
-  trial: "Trial",
-  poc: "POC",
-  pilot: "Pilot",
-  demo: "Demo",
-  none: "None",
 };

@@ -168,6 +168,68 @@ def can_write_solutioning(role: str, *, is_assigned: bool, is_team: bool) -> boo
     return False
 
 
+def can_write_cs_onboarding(role: str, *, is_assigned: bool, is_team: bool) -> bool:
+    """CS Onboarding (Entry type + stakeholder map + handover checklist).
+
+    Same write set as engagement — this is CSM territory. The Sales Hand-off
+    role (commercial_owner / vp_sales) can VIEW but doesn't fill these in;
+    pre-signed accounts haven't been handed to a CSM yet anyway.
+    """
+    if is_global_admin(role):
+        return True
+    if role == "csm":
+        return is_assigned
+    if role == "cs_team_manager":
+        return is_team
+    if role == "inside_sales_manager":
+        return is_assigned
+    return False
+
+
+def can_write_sales_handoff(role: str, *, is_assigned: bool, is_team: bool) -> bool:
+    """Sales Hand-off context (sh_* fields + handoff doc upload).
+
+    Pre-signing: editable by anyone with engagement-write OR solutioning-write
+    OR the Commercial Owner on this account OR VP Sales. The handoff is a
+    collaborative artifact between Pre-Sales, Solutioning, and Sales.
+    """
+    if is_global_admin(role):
+        return True
+    if role in {"solutioning_manager", "vp_sales", "vp_inside_sales", "inside_sales_manager"}:
+        return True
+    if role == "commercial_owner":
+        return is_assigned
+    if role == "csm":
+        return is_assigned
+    if role == "cs_team_manager":
+        return is_team
+    return False
+
+
+def can_sign_account(role: str, *, is_assigned: bool, is_team: bool) -> bool:
+    """Capture the signing event (POST /accounts/:id/sign).
+
+    Tighter than handoff edits: only Commercial Owner on this account, VP
+    Sales / VP Inside Sales, Inside Sales Manager (own), and global admins.
+    Solutioning + CSM cannot sign — that's a Sales / CO responsibility.
+    """
+    if is_global_admin(role):
+        return True
+    if role in {"vp_sales", "vp_inside_sales"}:
+        return True
+    if role == "commercial_owner":
+        return is_assigned
+    if role == "inside_sales_manager":
+        return is_assigned
+    return False
+
+
+def can_unlock_signing(role: str) -> bool:
+    """Re-open the signing gate. Restricted to global admins so changes to
+    a signed contract are visible in the audit log under an admin user."""
+    return is_global_admin(role)
+
+
 def can_write_documents(role: str, *, is_assigned: bool, is_team: bool, kind: str) -> bool:
     """Meeting Records (MOM) and Solutioning Documents (VPD).
 
