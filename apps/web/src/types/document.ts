@@ -27,6 +27,8 @@ export interface Document {
   job_id: string | null;
   ai_edited: boolean;
   ai_edited_at: string | null;
+  mom_extracted_fields: Record<string, unknown> | null;
+  mom_extracted_at: string | null;
   deleted_at: string | null;
 }
 

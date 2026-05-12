@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { KindUploadCard } from "@/components/KindUploadCard";
+import {
+  EXTRACTION_APPLIED_EVENT,
+  consumeEngagementSlice,
+} from "@/lib/extractionDraft";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import type {
   Engagement,
@@ -14,6 +18,7 @@ import type {
   MaturityLevel,
   QualityCheckResponse,
 } from "@/types/engagement";
+import type { ExtractedEngagement } from "@/types/mom_extraction";
 import type { Category, Geography } from "@/types/lookup";
 import type { DiscoverySummary } from "@/types/document";
 
@@ -50,8 +55,27 @@ export default function PreSalesTab() {
   const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (data && !form) setForm(data);
-  }, [data, form]);
+    if (data && !form) {
+      // First mount with server data → check for an MoM-extraction draft and
+      // merge it over the server value so the form opens dirty.
+      const draft = consumeEngagementSlice(account.id);
+      setForm(draft ? mergeEngagementDraft(data, draft) : data);
+    }
+  }, [data, form, account.id]);
+
+  // The user can click "Extract fields" while already on this tab — listen
+  // for the broadcast event and merge the draft into the live form state.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ accountId: string }>).detail;
+      if (!detail || detail.accountId !== account.id) return;
+      const draft = consumeEngagementSlice(account.id);
+      if (!draft) return;
+      setForm((prev) => (prev ? mergeEngagementDraft(prev, draft) : prev));
+    };
+    window.addEventListener(EXTRACTION_APPLIED_EVENT, handler);
+    return () => window.removeEventListener(EXTRACTION_APPLIED_EVENT, handler);
+  }, [account.id]);
 
   const dirty = useMemo(() => {
     if (!form || !data) return false;
@@ -717,6 +741,22 @@ function scoreLabel(score: number): string {
   if (score >= 4) return "Strong";
   if (score === 3) return "Acceptable";
   return "Needs work";
+}
+
+/** Apply an MoM-extracted slice over the live engagement form. Existing
+ *  values are kept when the extraction has nothing for that field; arrays
+ *  are REPLACED (not merged) — same wholesale semantic as the multi-selects. */
+function mergeEngagementDraft(base: Engagement, draft: ExtractedEngagement): Engagement {
+  return {
+    ...base,
+    engagement_objective: draft.engagement_objective || base.engagement_objective,
+    target_categories: draft.target_categories?.length ? draft.target_categories : base.target_categories,
+    geographies: draft.geographies?.length ? draft.geographies : base.geographies,
+    spoc_text: draft.spoc_text || base.spoc_text,
+    sponsor_text: draft.sponsor_text || base.sponsor_text,
+    procurement_maturity: (draft.procurement_maturity as MaturityLevel | null) || base.procurement_maturity,
+    ai_quality_dismissed: false,  // a freshly populated objective should re-trigger AI scoring
+  };
 }
 
 /** Compute the diff for PATCH — only fields whose value changed go on the wire. */

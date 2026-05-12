@@ -49,6 +49,10 @@ class Document(Base):
     ai_edited_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     ai_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # MoM field extraction — populated by the worker only when kind='mom'.
+    mom_extracted_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    mom_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

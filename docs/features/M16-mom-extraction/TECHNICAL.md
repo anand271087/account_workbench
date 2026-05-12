@@ -1,5 +1,14 @@
 # M16 — MoM Field Extraction — Technical
 
+> **Flow update (2026-05-12):** The "Extract fields" button is gone. The
+> Celery worker auto-runs `extract_from_mom()` right after AI summarisation
+> for `kind='mom'` and persists the result on `documents.mom_extracted_fields`.
+> The frontend's existing 1.5s polling loop sees the column flip, one-shot
+> applies the result as a dirty draft on Pre-Sales + Brief, and creates
+> contacts immediately. A per-doc localStorage flag (`awb:extraction-applied:<doc_id>`)
+> survives reloads so contacts never re-create. See "Auto-apply pipeline"
+> below.
+
 ## Files touched
 
 ### New files
@@ -133,6 +142,38 @@ No new pytest cases — the public surface is one route that:
 Real-extraction validation done via the standalone script run against `~/Downloads/Beroe/*.eml` (results recorded in CLAUDE.md decisions log).
 
 Affected test suites (17/17 documents, 70/70 contacts, brief, engagement — minus the 3 pre-existing engagement-Beroe-email-validation failures unrelated to this milestone) still green.
+
+## Auto-apply pipeline (2026-05-12 refactor)
+
+**Worker side** — `app/workers/tasks.py:process_document`:
+1. After AI summarisation completes, check `doc.kind == "mom"`.
+2. Call `extract_from_mom(doc.id, text)` (same service as before).
+3. `doc.mom_extracted_fields = result.model_dump(mode="json")`, `doc.mom_extracted_at = now()`. Commit. Exception is logged and swallowed — extraction failure must not fail the parent summarisation job.
+
+**Schema** — migration `0026_documents_mom_extracted.sql`:
+- `documents.mom_extracted_fields jsonb` (object-typed via CHECK constraint)
+- `documents.mom_extracted_at timestamptz`
+
+Exposed via `DocumentOut` so the existing `GET /api/v1/accounts/:id/documents?kind=mom` returns them on every poll.
+
+**Frontend side** — `KindUploadCard.tsx`:
+- A new `useEffect` watches `data.items`. For any MOM doc with `mom_extracted_fields` set AND no `awb:extraction-applied:<doc_id>` flag in localStorage:
+  1. Mark `sessionStorage` synchronously to prevent re-entry while the async work runs
+  2. `saveExtractionDraft(accountId, {filename, engagement, brief})` — engagement + brief flow into the existing draft system from the prior phase
+  3. `createExtractedContacts(accountId, contacts)` — POST each contact in parallel (409s = duplicate email skipped)
+  4. Persist `localStorage.setItem(awb:extraction-applied:<doc_id>, now)` so reloads don't re-create contacts
+  5. Surface a green toast under the upload card: `Populated engagement, brief, N contacts from "<file>". Review on Pre-Sales and Brief and click Save.`
+
+The Pre-Sales engagement form + Brief editor consume the draft (existing `consumeEngagementSlice` / `consumeBriefSlice`) on mount and on the `awb:extraction-applied` event. Forms open dirty; sticky save bar pulses; existing unsaved-changes guard blocks navigation.
+
+**Row-level UI cue**: each MOM row that has `mom_extracted_at` set shows a small violet `Fields populated` chip with a tooltip showing the timestamp.
+
+## Manual extraction endpoint
+
+`POST /api/v1/documents/:id/extract-fields` is **retained** but no longer wired to a button. Use cases:
+- API consumers that want the structured payload without persisting it
+- Future "preview extraction" UX
+- 24h cache means a re-call after the worker already extracted is free
 
 ## Known gaps / follow-up
 

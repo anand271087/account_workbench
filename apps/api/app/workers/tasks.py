@@ -36,6 +36,7 @@ from app.services.claude import (
     summarise_document,
 )
 from app.services.extract import ExtractError, extract_text
+from app.services.extract_mom import extract_from_mom
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,19 @@ async def _process(job_id: UUID) -> dict:
                 await _upsert_vpd_candidates(db, doc, text)
             except Exception:
                 logger.exception("VPD candidate extraction failed (non-fatal)")
+
+        # MoM-only: extract structured fields (engagement / brief / contacts)
+        # and persist on the document row. The frontend polling loop picks
+        # this up and one-shot applies it as a dirty draft on Pre-Sales +
+        # Brief — no user click needed.
+        if doc.kind == "mom":
+            try:
+                extracted = extract_from_mom(doc.id, text)
+                doc.mom_extracted_fields = extracted.model_dump(mode="json")
+                doc.mom_extracted_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                logger.exception("MoM field extraction failed (non-fatal)")
 
         # aggregate regen for the account
         await _regenerate_aggregate(db, doc.account_id, job.id)

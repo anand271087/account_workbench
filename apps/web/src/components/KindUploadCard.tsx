@@ -11,10 +11,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { authProvider } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { MomExtractionReview } from "@/components/MomExtractionReview";
+import { saveExtractionDraft } from "@/lib/extractionDraft";
 import {
   AI_STATUS_LABELS,
   DOC_KIND_LABELS,
@@ -25,6 +25,8 @@ import {
   type DocumentUploadResponse,
   type Job,
 } from "@/types/document";
+import type { ContactCreate } from "@/types/contact";
+import type { ExtractedContact, MomExtractionResult } from "@/types/mom_extraction";
 
 const ALLOWED_EXT = ".docx,.doc,.pdf,.txt,.vtt,.eml";
 const MAX_MB = 100;
@@ -48,7 +50,7 @@ export function KindUploadCard({
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [activeJobIds, setActiveJobIds] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const [extractDoc, setExtractDoc] = useState<Document | null>(null);
+  const [extractionToast, setExtractionToast] = useState<string | null>(null);
 
   const queryKey = ["documents", accountId, kind];
   const { data, isLoading } = useQuery<DocumentListResponse>({
@@ -72,6 +74,50 @@ export function KindUploadCard({
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveCount, accountId, kind]);
+
+  // Auto-apply MoM extraction: when a doc lands with mom_extracted_fields
+  // and we haven't already consumed it for THIS doc (localStorage flag),
+  // write the draft + auto-create contacts + show a confirmation toast.
+  // Per-doc localStorage flag survives reloads so we never double-apply.
+  useEffect(() => {
+    if (kind !== "mom" || !data?.items) return;
+    const pending = data.items.filter(
+      (d) =>
+        !d.deleted_at &&
+        d.mom_extracted_fields &&
+        !sessionStorage.getItem(appliedKey(d.id)) &&
+        !localStorage.getItem(appliedKey(d.id)),
+    );
+    if (pending.length === 0) return;
+    // Mark synchronously to prevent re-entry while the async work runs.
+    pending.forEach((d) => sessionStorage.setItem(appliedKey(d.id), "1"));
+    void Promise.all(pending.map(async (d) => {
+      const r = d.mom_extracted_fields as unknown as MomExtractionResult;
+      saveExtractionDraft(accountId, {
+        filename: d.filename,
+        appliedAt: new Date().toISOString(),
+        engagement: hasAnyEngagement(r.engagement) ? r.engagement : undefined,
+        brief: hasAnyBrief(r.brief) ? r.brief : undefined,
+      });
+      const stats = await createExtractedContacts(accountId, r.contacts || []);
+      // Persist the applied marker so reloads don't re-create contacts.
+      localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+      const parts: string[] = [];
+      if (hasAnyEngagement(r.engagement)) parts.push("engagement");
+      if (hasAnyBrief(r.brief)) parts.push("brief");
+      if (stats.created > 0) parts.push(`${stats.created} contact${stats.created === 1 ? "" : "s"}`);
+      const skipped = stats.skipped > 0 ? ` · ${stats.skipped} duplicate contact skipped` : "";
+      setExtractionToast(
+        parts.length
+          ? `Populated ${parts.join(", ")} from "${d.filename}". Review on Pre-Sales and Brief and click Save.${skipped}`
+          : `Extraction from "${d.filename}" found no new fields to apply.${skipped}`,
+      );
+      qc.invalidateQueries({ queryKey: ["engagement", accountId] });
+      qc.invalidateQueries({ queryKey: ["meeting-brief", accountId] });
+      qc.invalidateQueries({ queryKey: ["contacts", accountId] });
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.items, kind, accountId]);
 
   // Poll jobs we kicked off — drop terminal ones, refresh queries.
   useEffect(() => {
@@ -253,7 +299,6 @@ export function KindUploadCard({
               <DocumentRow
                 key={d.id}
                 doc={d}
-                kind={kind}
                 onDelete={() => {
                   if (confirm(`Soft-delete "${d.filename}"?`)) deleteMutation.mutate(d.id);
                 }}
@@ -262,20 +307,22 @@ export function KindUploadCard({
                     rerunMutation.mutate(d.id);
                   }
                 }}
-                onExtract={() => setExtractDoc(d)}
               />
             ))}
           </ul>
         )}
       </div>
 
-      {extractDoc && (
-        <MomExtractionReview
-          accountId={accountId}
-          documentId={extractDoc.id}
-          filename={extractDoc.filename}
-          onClose={() => setExtractDoc(null)}
-        />
+      {extractionToast && (
+        <div className="bg-green-50 border border-green-200 text-green-900 rounded-card px-4 py-2.5 text-xs flex items-start gap-2">
+          <span className="font-bold mt-0.5">✓</span>
+          <span className="flex-1">{extractionToast}</span>
+          <button
+            onClick={() => setExtractionToast(null)}
+            className="text-green-900/60 hover:text-green-900 leading-none px-1"
+            aria-label="Dismiss"
+          >×</button>
+        </div>
       )}
     </div>
   );
@@ -285,16 +332,12 @@ export function KindUploadCard({
 
 function DocumentRow({
   doc,
-  kind,
   onDelete,
   onRerun,
-  onExtract,
 }: {
   doc: Document;
-  kind: DocKind;
   onDelete: () => void;
   onRerun: () => void;
-  onExtract: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const age = Date.now() - new Date(doc.uploaded_at).getTime();
@@ -337,21 +380,19 @@ function DocumentRow({
           )}
         </div>
         <div className="flex gap-3 shrink-0">
-          {kind === "mom" && (
-            <button
-              onClick={onExtract}
-              disabled={inFlight}
-              className="text-xs text-violet-700 hover:underline font-semibold disabled:opacity-40"
-              title={inFlight ? "Wait for AI summary to finish first" : "Extract structured fields → review modal"}
+          {doc.kind === "mom" && doc.mom_extracted_at && (
+            <span
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800"
+              title={`Fields auto-populated on ${new Date(doc.mom_extracted_at).toLocaleString()} — review and Save on Pre-Sales + Brief`}
             >
-              Extract fields
-            </button>
+              Fields populated
+            </span>
           )}
           <button
             onClick={onRerun}
             disabled={inFlight}
             className="text-xs text-beroe-blue hover:underline font-semibold disabled:opacity-40"
-            title={inFlight ? "Already in progress…" : "Re-run AI summary"}
+            title={inFlight ? "Already in progress…" : "Re-run AI summary + re-extract fields"}
           >
             Rerun
           </button>
@@ -385,4 +426,62 @@ function formatBytes(b: number | null): string {
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ---------- Extraction helpers ----------
+
+function appliedKey(docId: string): string {
+  return `awb:extraction-applied:${docId}`;
+}
+
+function hasAnyEngagement(e: MomExtractionResult["engagement"] | undefined): boolean {
+  if (!e) return false;
+  return Boolean(
+    e.engagement_objective || e.spoc_text || e.sponsor_text || e.procurement_maturity ||
+    e.meeting_type || (e.target_categories?.length ?? 0) > 0 || (e.geographies?.length ?? 0) > 0,
+  );
+}
+
+function hasAnyBrief(b: MomExtractionResult["brief"] | undefined): boolean {
+  if (!b) return false;
+  return Boolean(
+    b.call_date || b.call_type || b.call_duration_minutes || b.win_condition ||
+    (b.company_snapshot?.length ?? 0) > 0 || (b.attendees?.length ?? 0) > 0 ||
+    (b.news?.length ?? 0) > 0 || (b.value_anchors?.length ?? 0) > 0 ||
+    (b.email_insights?.length ?? 0) > 0 || (b.cheat_sheet_never_say?.length ?? 0) > 0 ||
+    (b.cheat_sheet_opening_asks?.length ?? 0) > 0,
+  );
+}
+
+async function createExtractedContacts(
+  accountId: string,
+  contacts: ExtractedContact[],
+): Promise<{ created: number; skipped: number; failed: number }> {
+  let created = 0;
+  let skipped = 0;
+  let failed = 0;
+  await Promise.all(
+    contacts
+      .filter((c) => !c.is_internal_beroe && c.name)
+      .map(async (c) => {
+        const payload: ContactCreate = {
+          name: c.name,
+          title: c.title,
+          function: c.function,
+          seniority: c.seniority,
+          decision_power: c.decision_power,
+          is_spoc: c.is_spoc,
+          is_sponsor: c.is_sponsor,
+          notes: c.linkedin_url ? `LinkedIn: ${c.linkedin_url}` : null,
+        };
+        try {
+          await api.post(`/api/v1/accounts/${accountId}/contacts`, payload);
+          created += 1;
+        } catch (e: unknown) {
+          if (e instanceof ApiError && e.status === 409) skipped += 1;
+          else failed += 1;
+        }
+      }),
+  );
+  return { created, skipped, failed };
 }

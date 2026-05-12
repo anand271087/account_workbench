@@ -30,6 +30,8 @@ class DocumentOut(BaseModel):
     job_id: UUID | None
     ai_edited: bool = False
     ai_edited_at: datetime | None = None
+    mom_extracted_fields: dict[str, Any] | None = None
+    mom_extracted_at: datetime | None = None
     deleted_at: datetime | None
 
 

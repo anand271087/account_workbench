@@ -18,6 +18,11 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import {
+  EXTRACTION_APPLIED_EVENT,
+  consumeBriefSlice,
+} from "@/lib/extractionDraft";
+import type { ExtractedBrief } from "@/types/mom_extraction";
+import {
   BRIEF_CALL_TYPE_LABELS,
   emptyBrief,
   SCENARIO_LABELS,
@@ -66,8 +71,26 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
   const [savingError, setSavingError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (data && !form) setForm(data);
-  }, [data, form]);
+    if (data && !form) {
+      const draft = consumeBriefSlice(accountId);
+      setForm(draft ? mergeBriefDraft(data, draft) : data);
+    }
+  }, [data, form, accountId]);
+
+  // Live event — fires when the user clicks "Extract fields" while the
+  // Brief tab is already mounted (rare but possible if they extract from
+  // a MoM in Pre-Sales and then quickly hop here).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ accountId: string }>).detail;
+      if (!detail || detail.accountId !== accountId) return;
+      const draft = consumeBriefSlice(accountId);
+      if (!draft) return;
+      setForm((prev) => (prev ? mergeBriefDraft(prev, draft) : prev));
+    };
+    window.addEventListener(EXTRACTION_APPLIED_EVENT, handler);
+    return () => window.removeEventListener(EXTRACTION_APPLIED_EVENT, handler);
+  }, [accountId]);
 
   const dirty = useMemo(() => {
     if (!form || !data) return false;
@@ -1278,4 +1301,25 @@ function diff(next: MeetingBrief, prev: MeetingBrief): MeetingBriefUpdate {
     }
   }
   return out;
+}
+
+/** Apply an MoM-extracted slice over the live brief form. Scalar fields fall
+ *  back to the existing value when the draft is empty; collections REPLACE
+ *  wholesale when the draft has any entries — same semantic as the JSONB
+ *  PATCH on the server, where a non-empty array overwrites in full. */
+function mergeBriefDraft(base: MeetingBrief, draft: ExtractedBrief): MeetingBrief {
+  const next: MeetingBrief = { ...base };
+  if (draft.call_date) next.call_date = draft.call_date;
+  if (draft.call_type) next.call_type = draft.call_type;
+  if (draft.call_duration_minutes != null) next.call_duration_minutes = draft.call_duration_minutes;
+  if (draft.win_condition) next.win_condition = draft.win_condition;
+  if (draft.company_snapshot?.length) next.company_snapshot = draft.company_snapshot as SnapshotStat[];
+  if (draft.attendees?.length) next.attendees = draft.attendees as Attendee[];
+  if (draft.news?.length) next.news = draft.news as NewsItem[];
+  if (draft.public_signals?.length) next.public_signals = draft.public_signals as PublicSignal[];
+  if (draft.value_anchors?.length) next.value_anchors = draft.value_anchors as ValueAnchor[];
+  if (draft.email_insights?.length) next.email_insights = draft.email_insights as EmailInsight[];
+  if (draft.cheat_sheet_never_say?.length) next.cheat_sheet_never_say = draft.cheat_sheet_never_say;
+  if (draft.cheat_sheet_opening_asks?.length) next.cheat_sheet_opening_asks = draft.cheat_sheet_opening_asks;
+  return next;
 }
