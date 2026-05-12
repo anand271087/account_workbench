@@ -22,6 +22,7 @@ dependencies = [
     "python-magic>=0.4.27",
     "pypdf>=5.1.0",
     "python-docx>=1.1.0",
+    "markitdown[pptx,docx,xlsx,xls,pdf]>=0.1.5",
     "structlog>=24.4.0",
     "sentry-sdk[fastapi]>=2.18.0",
 ]

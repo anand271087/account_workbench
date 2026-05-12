@@ -3,12 +3,24 @@
 Audio/video transcription is deferred to v1.1 — the worker raises a clear
 'not supported' error for those mime types so the UI can show the right
 message instead of a stack trace.
+
+Format coverage (M16.x — markitdown switchover):
+  - .docx / .pptx / .xlsx / .xls / .pdf → Microsoft's `markitdown` library.
+    Single API, produces structured Markdown (slide numbers, speaker notes,
+    tables, image alt-text), wheel-only deps (clean on Render).
+  - .txt, .vtt, .eml                     → our own handlers (fast paths;
+    .eml has Outlook-specific parsing markitdown's `[outlook]` extra
+    targets .msg files, not RFC-5322 .eml).
+  - .doc / .ppt                          → rejected with a friendly
+    "Save As .docx/.pptx and re-upload" message. Legacy OLE binary
+    formats have no reliable pure-Python parser.
 """
 
 from __future__ import annotations
 
-import io
 import logging
+import tempfile
+from pathlib import Path
 from typing import Final
 
 logger = logging.getLogger(__name__)
@@ -17,6 +29,9 @@ logger = logging.getLogger(__name__)
 # Claude Sonnet 4.5 has plenty of context, but we only summarise meeting docs;
 # the first ~24k characters cover everything that matters.
 MAX_EXTRACT_CHARS: Final[int] = 24_000
+
+# Extensions markitdown handles in our deployment (we install the matching extras).
+_MARKITDOWN_EXTS: Final[tuple[str, ...]] = (".docx", ".pptx", ".xlsx", ".xls", ".pdf")
 
 
 class ExtractError(Exception):
@@ -31,19 +46,25 @@ def extract_text(filename: str, mime_type: str | None, data: bytes) -> str:
         mime_type and (mime_type.startswith("audio/") or mime_type.startswith("video/"))
     ):
         raise ExtractError(
-            "Audio/video transcription lands in v1.1. Upload a .docx/.pdf/.txt/.vtt instead."
+            "Audio/video transcription lands in v1.1. "
+            "Upload a .docx/.pptx/.xlsx/.pdf/.txt/.vtt/.eml instead."
         )
 
-    if name.endswith(".docx"):
-        text = _extract_docx(data)
-    elif name.endswith(".doc"):
-        # Legacy binary Word — no reliable pure-Python parser; ask user to convert.
+    # Legacy OLE binary formats — no reliable pure-Python parser. Friendly
+    # error so the user knows the actionable next step.
+    if name.endswith(".doc"):
         raise ExtractError(
             "Legacy .doc format isn't supported for text extraction. "
             "Open the file in Word and 'Save As' .docx, then re-upload."
         )
-    elif name.endswith(".pdf"):
-        text = _extract_pdf(data)
+    if name.endswith(".ppt"):
+        raise ExtractError(
+            "Legacy .ppt format isn't supported for text extraction. "
+            "Open the file in PowerPoint and 'Save As' .pptx, then re-upload."
+        )
+
+    if name.endswith(_MARKITDOWN_EXTS):
+        text = _extract_with_markitdown(name, data)
     elif name.endswith(".vtt"):
         text = _extract_vtt(data)
     elif name.endswith(".eml"):
@@ -61,36 +82,30 @@ def extract_text(filename: str, mime_type: str | None, data: bytes) -> str:
     return text
 
 
-def _extract_docx(data: bytes) -> str:
-    from docx import Document  # python-docx
+def _extract_with_markitdown(filename: str, data: bytes) -> str:
+    """Single entry for .docx / .pptx / .xlsx / .xls / .pdf via markitdown.
 
-    doc = Document(io.BytesIO(data))
-    parts: list[str] = []
-    for p in doc.paragraphs:
-        if p.text:
-            parts.append(p.text)
-    # Tables are common in MOMs; append cell text in row order.
-    for tbl in doc.tables:
-        for row in tbl.rows:
-            cells = [c.text.strip() for c in row.cells if c.text.strip()]
-            if cells:
-                parts.append(" | ".join(cells))
-    return "\n".join(parts)
+    markitdown's `convert_stream()` exists but it sniffs by content; the more
+    reliable path on every release is to write to a temp file with the right
+    extension and call `convert()`. Marginal disk cost; bulletproof routing.
+    """
+    from markitdown import MarkItDown  # type: ignore
 
-
-def _extract_pdf(data: bytes) -> str:
-    from pypdf import PdfReader
-
-    reader = PdfReader(io.BytesIO(data))
-    pages: list[str] = []
-    for page in reader.pages:
+    md = MarkItDown(enable_plugins=False)
+    suffix = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as fh:
+        fh.write(data)
+        tmp_path = Path(fh.name)
+    try:
+        result = md.convert(str(tmp_path))
+    except Exception as exc:  # noqa: BLE001 — surface as ExtractError, not a 500
+        raise ExtractError(f"Failed to extract text from {filename}: {exc}") from exc
+    finally:
         try:
-            pages.append(page.extract_text() or "")
+            tmp_path.unlink(missing_ok=True)
         except Exception:
-            # Some PDFs contain only images; we accept partial extraction.
-            logger.warning("PDF page extraction failed; skipping a page")
-            continue
-    return "\n\n".join(pages)
+            logger.warning("Could not clean up tempfile %s", tmp_path)
+    return getattr(result, "text_content", "") or ""
 
 
 def _extract_vtt(data: bytes) -> str:

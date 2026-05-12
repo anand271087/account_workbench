@@ -28,7 +28,7 @@ import {
 import type { ContactCreate } from "@/types/contact";
 import type { ExtractedContact, MomExtractionResult } from "@/types/mom_extraction";
 
-const ALLOWED_EXT = ".docx,.doc,.pdf,.txt,.vtt,.eml";
+const ALLOWED_EXT = ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml";
 const MAX_MB = 100;
 
 export function KindUploadCard({

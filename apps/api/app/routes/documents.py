@@ -101,7 +101,7 @@ def _validate_extension(filename: str) -> str:
     if name.endswith((".mp3", ".mp4", ".m4a", ".wav", ".mov")):
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            "Audio/video transcription lands in v1.1 — upload .docx/.doc/.pdf/.txt/.vtt/.eml for now.",
+            "Audio/video transcription lands in v1.1 — upload .docx/.pptx/.xlsx/.pdf/.txt/.vtt/.eml for now.",
         )
     allowed = get_settings().allowed_extensions_list
     if not any(name.endswith(ext) for ext in allowed):
