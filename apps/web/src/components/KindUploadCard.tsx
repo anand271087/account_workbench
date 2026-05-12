@@ -62,11 +62,25 @@ export function KindUploadCard({
   });
 
   // Auto-refetch when anything's processing — even if we didn't kick it off
-  // in this session (cross-tab pickups also flip pills here).
+  // in this session (cross-tab pickups also flip pills here). We also keep
+  // polling for ~2 min after AI summary completes on an MoM until the worker
+  // writes the structured-extraction result, so the "Extracting fields…"
+  // chip eventually flips to "Fields populated" without a manual refresh.
+  const EXTRACTION_WINDOW_MS = 120_000;
   const liveCount =
-    data?.items.filter(
-      (d) => !d.deleted_at && (d.ai_status === "pending" || d.ai_status === "processing"),
-    ).length ?? 0;
+    data?.items.filter((d) => {
+      if (d.deleted_at) return false;
+      if (d.ai_status === "pending" || d.ai_status === "processing") return true;
+      if (
+        kind === "mom" &&
+        d.ai_status === "complete" &&
+        !d.mom_extracted_at &&
+        Date.now() - new Date(d.uploaded_at).getTime() < EXTRACTION_WINDOW_MS
+      ) {
+        return true;
+      }
+      return false;
+    }).length ?? 0;
 
   useEffect(() => {
     if (liveCount === 0) return;
@@ -361,6 +375,7 @@ function DocumentRow({
                 {doc.ai_edited ? "AI-assisted" : "AI-generated"}
               </span>
             )}
+            <MomExtractionPill doc={doc} />
           </div>
           <div className="text-[11px] text-text-muted mt-0.5">
             {formatBytes(doc.size_bytes)} · uploaded {new Date(doc.uploaded_at).toLocaleString()}
@@ -380,14 +395,6 @@ function DocumentRow({
           )}
         </div>
         <div className="flex gap-3 shrink-0">
-          {doc.kind === "mom" && doc.mom_extracted_at && (
-            <span
-              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800"
-              title={`Fields auto-populated on ${new Date(doc.mom_extracted_at).toLocaleString()} — review and Save on Pre-Sales + Brief`}
-            >
-              Fields populated
-            </span>
-          )}
           <button
             onClick={onRerun}
             disabled={inFlight}
@@ -417,6 +424,41 @@ function StatusPill({ status }: { status: AiStatus }) {
   return (
     <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full", tone)}>
       {AI_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+/** MoM-only extraction state.
+ *
+ *  Hidden for non-MoM docs and while AI summary is still running. Once
+ *  ai_status flips to "complete":
+ *    - mom_extracted_at set     → "Fields populated" (violet, success)
+ *    - within 2 min of upload   → "Extracting fields…" (blue, animated)
+ *    - >2 min and still no data → silent (something blocked extraction;
+ *                                  the Rerun button is the fix)
+ *  The 2-min window matches the polling-loop liveCount logic above so the
+ *  card keeps refetching exactly as long as this pill is "Extracting…". */
+function MomExtractionPill({ doc }: { doc: Document }) {
+  if (doc.kind !== "mom") return null;
+  if (doc.ai_status !== "complete") return null;
+  if (doc.mom_extracted_at) {
+    return (
+      <span
+        className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800"
+        title={`Fields auto-populated on ${new Date(doc.mom_extracted_at).toLocaleString()} — review and Save on Pre-Sales + Brief`}
+      >
+        Fields populated
+      </span>
+    );
+  }
+  const age = Date.now() - new Date(doc.uploaded_at).getTime();
+  if (age > 120_000) return null;
+  return (
+    <span
+      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 animate-pulse"
+      title="Claude is extracting structured fields from this MoM — Pre-Sales + Brief will pre-fill in a moment."
+    >
+      Extracting fields…
     </span>
   );
 }
