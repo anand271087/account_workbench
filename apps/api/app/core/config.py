@@ -53,7 +53,7 @@ class Settings(BaseSettings):
 
     # ---- File upload ----
     max_upload_size_mb: int = 100
-    allowed_doc_extensions: str = ".docx,.pdf,.txt,.vtt"
+    allowed_doc_extensions: str = ".docx,.doc,.pdf,.txt,.vtt,.eml"
 
     @property
     def cors_origins_list(self) -> list[str]:

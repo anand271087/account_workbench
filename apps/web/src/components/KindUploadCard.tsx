@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { authProvider } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { MomExtractionReview } from "@/components/MomExtractionReview";
 import {
   AI_STATUS_LABELS,
   DOC_KIND_LABELS,
@@ -25,7 +26,7 @@ import {
   type Job,
 } from "@/types/document";
 
-const ALLOWED_EXT = ".docx,.pdf,.txt,.vtt";
+const ALLOWED_EXT = ".docx,.doc,.pdf,.txt,.vtt,.eml";
 const MAX_MB = 100;
 
 export function KindUploadCard({
@@ -47,6 +48,7 @@ export function KindUploadCard({
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [activeJobIds, setActiveJobIds] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [extractDoc, setExtractDoc] = useState<Document | null>(null);
 
   const queryKey = ["documents", accountId, kind];
   const { data, isLoading } = useQuery<DocumentListResponse>({
@@ -251,6 +253,7 @@ export function KindUploadCard({
               <DocumentRow
                 key={d.id}
                 doc={d}
+                kind={kind}
                 onDelete={() => {
                   if (confirm(`Soft-delete "${d.filename}"?`)) deleteMutation.mutate(d.id);
                 }}
@@ -259,11 +262,21 @@ export function KindUploadCard({
                     rerunMutation.mutate(d.id);
                   }
                 }}
+                onExtract={() => setExtractDoc(d)}
               />
             ))}
           </ul>
         )}
       </div>
+
+      {extractDoc && (
+        <MomExtractionReview
+          accountId={accountId}
+          documentId={extractDoc.id}
+          filename={extractDoc.filename}
+          onClose={() => setExtractDoc(null)}
+        />
+      )}
     </div>
   );
 }
@@ -272,12 +285,16 @@ export function KindUploadCard({
 
 function DocumentRow({
   doc,
+  kind,
   onDelete,
   onRerun,
+  onExtract,
 }: {
   doc: Document;
+  kind: DocKind;
   onDelete: () => void;
   onRerun: () => void;
+  onExtract: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const age = Date.now() - new Date(doc.uploaded_at).getTime();
@@ -320,6 +337,16 @@ function DocumentRow({
           )}
         </div>
         <div className="flex gap-3 shrink-0">
+          {kind === "mom" && (
+            <button
+              onClick={onExtract}
+              disabled={inFlight}
+              className="text-xs text-violet-700 hover:underline font-semibold disabled:opacity-40"
+              title={inFlight ? "Wait for AI summary to finish first" : "Extract structured fields → review modal"}
+            >
+              Extract fields
+            </button>
+          )}
           <button
             onClick={onRerun}
             disabled={inFlight}

@@ -36,10 +36,18 @@ def extract_text(filename: str, mime_type: str | None, data: bytes) -> str:
 
     if name.endswith(".docx"):
         text = _extract_docx(data)
+    elif name.endswith(".doc"):
+        # Legacy binary Word — no reliable pure-Python parser; ask user to convert.
+        raise ExtractError(
+            "Legacy .doc format isn't supported for text extraction. "
+            "Open the file in Word and 'Save As' .docx, then re-upload."
+        )
     elif name.endswith(".pdf"):
         text = _extract_pdf(data)
     elif name.endswith(".vtt"):
         text = _extract_vtt(data)
+    elif name.endswith(".eml"):
+        text = _extract_eml(data)
     elif name.endswith(".txt"):
         text = data.decode("utf-8", errors="replace")
     else:
@@ -95,3 +103,71 @@ def _extract_vtt(data: bytes) -> str:
             continue
         out.append(s)
     return " ".join(out)
+
+
+def _extract_eml(data: bytes) -> str:
+    """Parse an Outlook/RFC-5322 .eml file. Prefer text/plain; fall back to a
+    naive HTML strip for text/html. Prepend a small header summary so the AI
+    sees subject + participants alongside the body."""
+    import re
+    from email import message_from_bytes
+    from email.policy import default as default_policy
+
+    msg = message_from_bytes(data, policy=default_policy)
+
+    header_lines: list[str] = []
+    for label, key in (("From", "From"), ("To", "To"), ("Cc", "Cc"), ("Subject", "Subject"), ("Date", "Date")):
+        val = msg.get(key)
+        if val:
+            header_lines.append(f"{label}: {val}")
+
+    # Walk parts, prefer text/plain. Capture text/html as fallback.
+    plain_parts: list[str] = []
+    html_parts: list[str] = []
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        ctype = (part.get_content_type() or "").lower()
+        # Skip attachments by Content-Disposition.
+        disp = (part.get("Content-Disposition") or "").lower()
+        if "attachment" in disp:
+            continue
+        try:
+            content = part.get_content()
+        except Exception:
+            payload = part.get_payload(decode=True) or b""
+            content = payload.decode("utf-8", errors="replace") if isinstance(payload, bytes) else str(payload)
+        if not isinstance(content, str):
+            continue
+        if ctype == "text/plain":
+            plain_parts.append(content)
+        elif ctype == "text/html":
+            html_parts.append(content)
+
+    body = "\n\n".join(plain_parts).strip()
+    if not body and html_parts:
+        # Naive HTML → text: drop tags + collapse whitespace. Good enough for MOMs.
+        raw_html = "\n\n".join(html_parts)
+        # Drop <style>/<script> blocks entirely.
+        raw_html = re.sub(r"(?is)<(style|script)[^>]*>.*?</\1>", " ", raw_html)
+        # Convert <br> and </p> to newlines so paragraph structure survives.
+        raw_html = re.sub(r"(?i)<br\s*/?>", "\n", raw_html)
+        raw_html = re.sub(r"(?i)</p\s*>", "\n\n", raw_html)
+        # Strip remaining tags.
+        text_only = re.sub(r"<[^>]+>", " ", raw_html)
+        # Unescape common entities.
+        text_only = (
+            text_only.replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", '"')
+            .replace("&#39;", "'")
+        )
+        # Collapse runs of whitespace per line; keep paragraph breaks.
+        lines = [re.sub(r"\s+", " ", ln).strip() for ln in text_only.splitlines()]
+        body = "\n".join(ln for ln in lines if ln)
+
+    header_block = "=== HEADERS ===\n" + "\n".join(header_lines) if header_lines else ""
+    body_block = f"\n\n=== BODY ===\n{body}" if body else ""
+    return (header_block + body_block).strip()

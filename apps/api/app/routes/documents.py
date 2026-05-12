@@ -54,6 +54,7 @@ from app.schemas.document import (
     DocumentUploadResponse,
     JobOut,
 )
+from app.schemas.mom_extraction import MomExtractionResult
 from app.services import ai_quota
 from app.services import files as storage_svc
 
@@ -100,7 +101,7 @@ def _validate_extension(filename: str) -> str:
     if name.endswith((".mp3", ".mp4", ".m4a", ".wav", ".mov")):
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            "Audio/video transcription lands in v1.1 — upload .docx/.pdf/.txt/.vtt for now.",
+            "Audio/video transcription lands in v1.1 — upload .docx/.doc/.pdf/.txt/.vtt/.eml for now.",
         )
     allowed = get_settings().allowed_extensions_list
     if not any(name.endswith(ext) for ext in allowed):
@@ -418,6 +419,52 @@ async def rerun_ai(
         logger.warning("Celery enqueue failed on rerun; job %s left as pending", job.id, exc_info=True)
 
     return JobOut.model_validate(job)
+
+
+# ============================================================
+# POST /documents/:id/extract-fields  (MoM → structured fields)
+# ============================================================
+
+
+@document_router.post(
+    "/{document_id}/extract-fields", response_model=MomExtractionResult
+)
+async def extract_fields(
+    document_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MomExtractionResult:
+    """Run Claude over the stored MoM text and return a structured payload
+    (account / engagement / contacts / brief) the UI can review and fan-out
+    apply via the existing PATCH/POST endpoints. Read-only — never writes."""
+    from app.services.extract import ExtractError, extract_text
+    from app.services.extract_mom import extract_from_mom
+
+    doc, _, is_assigned, is_team = await _scope_for_document(db, user, document_id)
+    # Same view gate as the doc itself; if you can see the document you can
+    # see what the AI extracted from it. The "apply" step uses per-target RBAC.
+    if not can_view_account(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot view this document")
+
+    # Bill against the user's daily Claude budget.
+    ai_quota.consume(user.id, label="mom_extract")
+
+    bucket, _, key = doc.storage_path.partition("/")
+    try:
+        raw = storage_svc.download_bytes(bucket, key)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"Could not download document from storage: {e}",
+        ) from e
+
+    try:
+        text = extract_text(doc.filename, doc.mime_type, raw)
+    except ExtractError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+
+    result = extract_from_mom(doc.id, text)
+    return result
 
 
 # ============================================================
