@@ -20,6 +20,7 @@ from app.routes import favorites as favorite_routes
 from app.routes import cs_goals as cs_goals_routes
 from app.routes import cs_onboarding as cs_onboarding_routes
 from app.routes import lookups as lookup_routes
+from app.routes import checkpoints as checkpoint_routes
 from app.routes import meeting_brief as meeting_brief_routes
 from app.routes import metrics as metric_routes
 from app.routes import signing as signing_routes
@@ -79,6 +80,8 @@ def create_app() -> FastAPI:
     app.include_router(success_contract_routes.router)
     app.include_router(metric_routes.account_router)
     app.include_router(metric_routes.metric_router)
+    app.include_router(checkpoint_routes.account_router)
+    app.include_router(checkpoint_routes.checkpoint_router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)
 
