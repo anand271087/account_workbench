@@ -5,6 +5,7 @@ import LoginPage from "@/routes/_auth/login";
 import ResetPasswordPage from "@/routes/_auth/reset-password";
 import AccountListPage from "@/routes/accounts/AccountListPage";
 import AccountProfileLayout from "@/routes/accounts/AccountProfileLayout";
+import AccountKitLayout from "@/routes/accounts/AccountKitLayout";
 import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
 import GoalsTab from "@/routes/accounts/tabs/GoalsTab";
@@ -105,14 +106,26 @@ export default function App() {
       >
         <Route index element={<Navigate to="overview" replace />} />
         <Route path="overview" element={<OverviewTab />} />
-        <Route path="pre-sales" element={<PreSalesTab />} />
+
+        {/* M17 — Account Kit group: Pre-Sales / Brief / Solutioning / Sales Handoff / CS Onboarding */}
+        <Route path="account-kit" element={<AccountKitLayout />}>
+          <Route index element={<Navigate to="pre-sales" replace />} />
+          <Route path="pre-sales"     element={<PreSalesTab />} />
+          <Route path="brief"         element={<BriefTab />} />
+          <Route path="solutioning"   element={<SolutioningTab />} />
+          <Route path="sales-handoff" element={<SalesHandoffTab />} />
+          <Route path="cs-onboarding" element={<CSOnboardingTab />} />
+        </Route>
+
+        {/* Back-compat: old deep links → new Account Kit URLs */}
+        <Route path="pre-sales"     element={<Navigate to="../account-kit/pre-sales"     replace />} />
+        <Route path="brief"         element={<Navigate to="../account-kit/brief"         replace />} />
+        <Route path="solutioning"   element={<Navigate to="../account-kit/solutioning"   replace />} />
+        <Route path="sales-handoff" element={<Navigate to="../account-kit/sales-handoff" replace />} />
+        <Route path="cs-onboarding" element={<Navigate to="../account-kit/cs-onboarding" replace />} />
+        <Route path="documents"     element={<Navigate to="../account-kit/pre-sales"     replace />} />
+
         <Route path="contacts" element={<ContactsTab />} />
-        {/* /documents removed in M11 — redirect any old deep links to Pre-Sales. */}
-        <Route path="documents" element={<Navigate to="../pre-sales" replace />} />
-        <Route path="solutioning" element={<SolutioningTab />} />
-        <Route path="brief" element={<BriefTab />} />
-        <Route path="sales-handoff" element={<SalesHandoffTab />} />
-        <Route path="cs-onboarding" element={<CSOnboardingTab />} />
         <Route path="value-def" element={<ValueDefinitionPlaceholder />} />
         <Route path="goals" element={<GoalsTab />} />
       </Route>
