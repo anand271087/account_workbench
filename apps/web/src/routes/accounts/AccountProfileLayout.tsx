@@ -45,7 +45,8 @@ const SUB_NAV: SubNavItem[] = [
   },
   { to: "contacts",  label: "Contacts",  show: (a) => a.can_view_contacts },
   { to: "value-def", label: "Value Def", show: () => true },
-  { to: "goals",     label: "Goals",     show: () => true },
+  // Goals folded into Success Management → Contract & Goals (M19).
+  // Old /goals URL still works via the back-compat redirect in App.tsx.
 ];
 
 export default function AccountProfileLayout() {

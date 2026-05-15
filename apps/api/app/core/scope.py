@@ -51,6 +51,8 @@ _FIELDS = (
     # M14 — CS Onboarding columns.
     "cs_entry_type", "cs_entry_b_context", "cs_entry_b_goals",
     "cs_handover_checklist", "cs_stakeholders",
+    # M19 — Success Contract (3-lock structure).
+    "success_contract", "success_contract_locked_at", "success_contract_locked_by",
     "created_at", "updated_at", "deleted_at",
 )
 

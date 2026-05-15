@@ -14,7 +14,6 @@ import CheckpointsTab from "@/routes/accounts/tabs/sm/CheckpointsTab";
 import DeliveryRenewalTab from "@/routes/accounts/tabs/sm/DeliveryRenewalTab";
 import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
-import GoalsTab from "@/routes/accounts/tabs/GoalsTab";
 import OverviewTab from "@/routes/accounts/tabs/OverviewTab";
 import PreSalesTab from "@/routes/accounts/tabs/PreSalesTab";
 import ContactsTab from "@/routes/accounts/tabs/ContactsTab";
@@ -143,7 +142,9 @@ export default function App() {
 
         <Route path="contacts" element={<ContactsTab />} />
         <Route path="value-def" element={<ValueDefinitionPlaceholder />} />
-        <Route path="goals" element={<GoalsTab />} />
+        {/* M19 — /goals folded into Success Management → Contract & Goals.
+             Back-compat redirect so existing bookmarks land in the new home. */}
+        <Route path="goals" element={<Navigate to="../success-management/contract-goals" replace />} />
       </Route>
       <Route path="/" element={<Navigate to="/accounts" replace />} />
       <Route path="*" element={<Navigate to="/accounts" replace />} />

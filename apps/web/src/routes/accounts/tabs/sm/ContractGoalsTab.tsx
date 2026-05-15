@@ -1,19 +1,33 @@
-import { SMStub } from "./_StubTab";
+// M19 — Success Contract + Goals + Initiatives.
+//
+// Three-panel layout:
+//   1. Success Contract card (3-lock)         — new in M19
+//   2. (existing GoalsTab content)            — reused from M15 below the contract
+//
+// The /goals top-level tab redirects here so this is the single source of
+// truth going forward.
+
+import { useAuth } from "@/components/AuthProvider";
+import { SuccessContractCard } from "@/components/SuccessContractCard";
+import { useAccountFromLayout } from "../../AccountProfileLayout";
+import GoalsTab from "../GoalsTab";
 
 export default function ContractGoalsTab() {
+  const account = useAccountFromLayout();
+  const { me } = useAuth();
+  const isAdmin = !!me?.permissions?.is_global_admin;
+
   return (
-    <SMStub
-      title="Success Contract & Goals"
-      milestone="M19"
-      description="The CS team's commitment to the client. Locks the success metric, measurement method, and value narrative — then drives every downstream artefact (initiatives, checkpoints, VDD)."
-      bullets={[
-        "Success Contract — 3 locks: primary metric (+ unit), measurement method (data source + frequency + owner), value narrative",
-        "Auto-drafts the contract from Sales Handoff data on first CSM entry",
-        "Goals & Initiatives — extends M15 cs_goals with 3-phase alignment (A: what it means · B: groundwork · C: agreed target)",
-        "Initiative value stages are category-aware (cost_savings: identified → committed → implemented; base_rationalization: baselined → in_progress → achieved; etc.)",
-        "Goal history captures every state change with reason (auditable)",
-        "Existing /goals top-level tab will fold into this view in M19",
-      ]}
-    />
+    <div className="space-y-4">
+      <SuccessContractCard accountId={account.id} isAdmin={isAdmin} />
+
+      {/* Goals & Initiatives — the M15 view, kept as-is for now. */}
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-2">
+          Goals & Initiatives
+        </div>
+        <GoalsTab />
+      </div>
+    </div>
   );
 }

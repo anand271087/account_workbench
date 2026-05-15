@@ -23,6 +23,7 @@ from app.routes import lookups as lookup_routes
 from app.routes import meeting_brief as meeting_brief_routes
 from app.routes import signing as signing_routes
 from app.routes import solutioning as solutioning_routes
+from app.routes import success_contract as success_contract_routes
 from app.routes import users as user_routes
 # Importing audit_writer triggers @event.listens_for registration.
 from app.services import audit_writer  # noqa: F401
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(cs_onboarding_routes.router)
     app.include_router(cs_goals_routes.account_router)
     app.include_router(cs_goals_routes.goal_router)
+    app.include_router(success_contract_routes.router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)
 
