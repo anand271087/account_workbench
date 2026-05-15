@@ -21,6 +21,7 @@ from app.routes import cs_goals as cs_goals_routes
 from app.routes import cs_onboarding as cs_onboarding_routes
 from app.routes import lookups as lookup_routes
 from app.routes import meeting_brief as meeting_brief_routes
+from app.routes import metrics as metric_routes
 from app.routes import signing as signing_routes
 from app.routes import solutioning as solutioning_routes
 from app.routes import success_contract as success_contract_routes
@@ -76,6 +77,8 @@ def create_app() -> FastAPI:
     app.include_router(cs_goals_routes.account_router)
     app.include_router(cs_goals_routes.goal_router)
     app.include_router(success_contract_routes.router)
+    app.include_router(metric_routes.account_router)
+    app.include_router(metric_routes.metric_router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)
 
