@@ -35,6 +35,14 @@ const SUB_NAV: SubNavItem[] = [
       a.can_view_sales_handoff ||
       a.can_view_cs_onboarding,
   },
+  // M18 — Success Management group: VDD / Contract+Goals / Value Tracking
+  // / Checkpoints / Delivery+Renewal. Visible to anyone with CS-onboarding
+  // view rights (same gate as the downstream CSM workflow).
+  {
+    to: "success-management",
+    label: "Success Management",
+    show: (a) => a.can_view_cs_onboarding,
+  },
   { to: "contacts",  label: "Contacts",  show: (a) => a.can_view_contacts },
   { to: "value-def", label: "Value Def", show: () => true },
   { to: "goals",     label: "Goals",     show: () => true },

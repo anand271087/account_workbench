@@ -6,6 +6,12 @@ import ResetPasswordPage from "@/routes/_auth/reset-password";
 import AccountListPage from "@/routes/accounts/AccountListPage";
 import AccountProfileLayout from "@/routes/accounts/AccountProfileLayout";
 import AccountKitLayout from "@/routes/accounts/AccountKitLayout";
+import SuccessManagementLayout from "@/routes/accounts/SuccessManagementLayout";
+import VDDTab from "@/routes/accounts/tabs/sm/VDDTab";
+import ContractGoalsTab from "@/routes/accounts/tabs/sm/ContractGoalsTab";
+import ValueTrackingTab from "@/routes/accounts/tabs/sm/ValueTrackingTab";
+import CheckpointsTab from "@/routes/accounts/tabs/sm/CheckpointsTab";
+import DeliveryRenewalTab from "@/routes/accounts/tabs/sm/DeliveryRenewalTab";
 import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
 import GoalsTab from "@/routes/accounts/tabs/GoalsTab";
@@ -124,6 +130,16 @@ export default function App() {
         <Route path="sales-handoff" element={<Navigate to="../account-kit/sales-handoff" replace />} />
         <Route path="cs-onboarding" element={<Navigate to="../account-kit/cs-onboarding" replace />} />
         <Route path="documents"     element={<Navigate to="../account-kit/pre-sales"     replace />} />
+
+        {/* M18 — Success Management group: VDD / Contract+Goals / Value Tracking / Checkpoints / Delivery+Renewal */}
+        <Route path="success-management" element={<SuccessManagementLayout />}>
+          <Route index element={<Navigate to="vdd" replace />} />
+          <Route path="vdd"               element={<VDDTab />} />
+          <Route path="contract-goals"    element={<ContractGoalsTab />} />
+          <Route path="value-tracking"    element={<ValueTrackingTab />} />
+          <Route path="checkpoints"       element={<CheckpointsTab />} />
+          <Route path="delivery-renewal"  element={<DeliveryRenewalTab />} />
+        </Route>
 
         <Route path="contacts" element={<ContactsTab />} />
         <Route path="value-def" element={<ValueDefinitionPlaceholder />} />
