@@ -223,6 +223,16 @@ export default function AccountListPage() {
           <EmptyState hasFilters={!!(q || industry || tier || region)} />
         )}
 
+        {/* M25 — renewal alerts banner */}
+        {!isLoading && data && data.items.length > 0 && (
+          <RenewalAlertsBanner
+            items={data.items}
+            onOpen={(slug) =>
+              navigate(`/accounts/${data.items.find((i) => i.slug === slug)?.id}/overview`)
+            }
+          />
+        )}
+
         {/* Table */}
         {!isLoading && data && data.items.length > 0 && (
           <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
@@ -478,6 +488,7 @@ function Row({
         <div className="text-[11px] text-text-muted mt-0.5">
           {item.renewal_date ?? "—"}
         </div>
+        <RollupBadges item={item} />
       </td>
       <td className="px-4 py-3">
         <Pill tone={health.tone}>
@@ -523,6 +534,145 @@ function Select({
         </option>
       ))}
     </select>
+  );
+}
+
+// M25 — portfolio rollups rendered as inline badges under the Renewal cell.
+function RollupBadges({ item }: { item: AccountListItem }) {
+  const align =
+    item.alignment_status === "green"
+      ? { dot: "bg-green-500", title: `${item.goal_count} goal(s) aligned` }
+      : item.alignment_status === "amber"
+        ? {
+            dot: "bg-amber-500",
+            title: `${item.goal_count} goal(s) — partial alignment`,
+          }
+        : item.alignment_status === "red"
+          ? {
+              dot: "bg-red-500",
+              title: `${item.goal_count} goal(s) — not started`,
+            }
+          : null;
+  const cp = item.next_checkpoint_type
+    ? (() => {
+        const d = item.next_checkpoint_days_until;
+        const tone =
+          d !== null && d < 0
+            ? "bg-red-50 text-red-700 border-red-200"
+            : d !== null && d <= 7
+              ? "bg-amber-50 text-amber-700 border-amber-200"
+              : "bg-slate-50 text-slate-700 border-slate-200";
+        const label =
+          d !== null && d < 0
+            ? `${item.next_checkpoint_type} ${Math.abs(d)}d overdue`
+            : d !== null
+              ? `${item.next_checkpoint_type} in ${d}d`
+              : item.next_checkpoint_type;
+        return { tone, label };
+      })()
+    : null;
+  const outcomeTone: Record<string, string> = {
+    renewed: "bg-green-50 text-green-700 border-green-200",
+    at_risk: "bg-amber-50 text-amber-700 border-amber-200",
+    not_renewed: "bg-red-50 text-red-700 border-red-200",
+    undecided: "bg-slate-50 text-slate-700 border-slate-200",
+  };
+  const outcomeLabel: Record<string, string> = {
+    renewed: "Renewed",
+    at_risk: "At risk",
+    not_renewed: "Not renewed",
+    undecided: "Undecided",
+  };
+
+  if (!align && !cp && !item.dr_outcome) return null;
+  return (
+    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+      {align && (
+        <span
+          className={cn("inline-block w-2 h-2 rounded-full", align.dot)}
+          title={align.title}
+        />
+      )}
+      {cp && (
+        <span
+          className={cn(
+            "text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap",
+            cp.tone,
+          )}
+        >
+          {cp.label}
+        </span>
+      )}
+      {item.dr_outcome && (
+        <span
+          className={cn(
+            "text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap font-semibold",
+            outcomeTone[item.dr_outcome],
+          )}
+        >
+          {outcomeLabel[item.dr_outcome]}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// M25 — top-of-list banner. Lists every account with a renewal in the
+// next 60 days (T-60 amber, T-7 red). Clicking jumps to that account.
+function RenewalAlertsBanner({
+  items,
+  onOpen,
+}: {
+  items: AccountListItem[];
+  onOpen: (slug: string) => void;
+}) {
+  const targets = items
+    .filter(
+      (i) =>
+        i.days_to_renewal !== null &&
+        i.days_to_renewal >= 0 &&
+        i.days_to_renewal <= 60,
+    )
+    .sort((a, b) => (a.days_to_renewal ?? 0) - (b.days_to_renewal ?? 0));
+  if (targets.length === 0) return null;
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 mb-3 flex items-start gap-3">
+      <span className="text-amber-700 font-bold">⏰</span>
+      <div className="flex-1 text-[12px]">
+        <div className="font-semibold text-amber-800">
+          {targets.length} renewal{targets.length === 1 ? "" : "s"} within 60 days
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {targets.slice(0, 10).map((t) => {
+            const d = t.days_to_renewal ?? 0;
+            const tone =
+              d <= 7
+                ? "bg-red-100 text-red-700 border-red-200"
+                : d <= 30
+                  ? "bg-amber-100 text-amber-800 border-amber-300"
+                  : "bg-white text-amber-700 border-amber-200";
+            return (
+              <button
+                key={t.id}
+                onClick={() => onOpen(t.slug)}
+                className={cn(
+                  "text-[11px] px-2 py-0.5 rounded border hover:underline font-medium",
+                  tone,
+                )}
+                title={`Renews ${t.renewal_date ?? "—"}`}
+              >
+                {t.name} · T-{d}d
+              </button>
+            );
+          })}
+          {targets.length > 10 && (
+            <span className="text-[11px] text-amber-700">
+              + {targets.length - 10} more
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

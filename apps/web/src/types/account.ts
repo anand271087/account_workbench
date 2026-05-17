@@ -22,6 +22,14 @@ export interface AccountListItem {
   health_score: number | null;
   last_activity_at: string | null;   // ISO datetime
   is_editable: boolean;
+  // M25 — portfolio rollups
+  alignment_status: "green" | "amber" | "red" | null;
+  goal_count: number;
+  next_checkpoint_type: "Kickoff" | "MBR" | "QBR" | "Renewal" | null;
+  next_checkpoint_date: string | null;
+  next_checkpoint_days_until: number | null;
+  overdue_checkpoint_count: number;
+  dr_outcome: "renewed" | "at_risk" | "not_renewed" | "undecided" | null;
 }
 
 export interface AccountListResponse {

@@ -38,6 +38,15 @@ class AccountListItem(BaseModel):
 
     is_editable: bool = False            # derived from caller's role + assignment
 
+    # M25 — portfolio rollups (derived, attached per-row by the list route).
+    alignment_status: str | None = None  # green / amber / red / None — rollup of cs_goals
+    goal_count: int = 0
+    next_checkpoint_type: str | None = None
+    next_checkpoint_date: date | None = None
+    next_checkpoint_days_until: int | None = None
+    overdue_checkpoint_count: int = 0
+    dr_outcome: str | None = None        # M23 final outcome if set
+
     model_config = {"from_attributes": True}
 
 

@@ -31,7 +31,9 @@ from app.core.rbac import (
 from app.db.session import get_db
 from app.models.account import Account
 from app.models.audit import AuditLog
+from app.models.checkpoint import Checkpoint
 from app.models.contact import ClientContact
+from app.models.cs_goal import CSGoal
 from app.models.user import User
 from app.schemas.account import AccountCreate, AccountListItem, AccountListResponse
 from app.schemas.account_detail import AccountDetail, ActivityFeedResponse, ActivityItem
@@ -162,6 +164,12 @@ async def list_accounts(
     team_ids = await _team_member_ids(db, user) if role == "cs_team_manager" else set()
 
     today = date.today()
+
+    # M25 — batch-fetch rollups for the page. Two extra queries regardless
+    # of page size: cs_goals aggregation + checkpoints aggregation.
+    account_ids = [r[0].id for r in rows]
+    rollups = await _attach_rollups(db, account_ids, today) if account_ids else {}
+
     items: list[AccountListItem] = []
     for r in rows:
         a: Account = r[0]
@@ -170,6 +178,7 @@ async def list_accounts(
         is_team = csm_id in team_ids if team_ids else False
         editable = can_edit_account(user.role, is_assigned=is_assigned, is_team=is_team)
         days = (a.renewal_date - today).days if a.renewal_date else None
+        roll = rollups.get(a.id, {})
 
         items.append(
             AccountListItem(
@@ -183,10 +192,99 @@ async def list_accounts(
                 renewal_date=a.renewal_date, days_to_renewal=days,
                 health_score=a.health_score, last_activity_at=a.last_activity_at,
                 is_editable=editable,
+                alignment_status=roll.get("alignment_status"),
+                goal_count=roll.get("goal_count", 0),
+                next_checkpoint_type=roll.get("next_checkpoint_type"),
+                next_checkpoint_date=roll.get("next_checkpoint_date"),
+                next_checkpoint_days_until=roll.get("next_checkpoint_days_until"),
+                overdue_checkpoint_count=roll.get("overdue_checkpoint_count", 0),
+                dr_outcome=a.dr_outcome,
             )
         )
 
     return AccountListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+# ============================================================
+# M25 — Portfolio rollups (alignment dot + next checkpoint)
+# ============================================================
+
+
+async def _attach_rollups(
+    db: AsyncSession, account_ids: list[UUID], today: date
+) -> dict[UUID, dict]:
+    """Two-query batch fetch — one for cs_goals counts, one for next/overdue
+    checkpoints. Returns {account_id: {alignment_status, goal_count,
+    next_checkpoint_*, overdue_checkpoint_count}}."""
+    out: dict[UUID, dict] = {acc_id: {} for acc_id in account_ids}
+
+    # Aggregate cs_goals: count + count(aligned) + count(partial) per account.
+    goal_rows = (
+        await db.execute(
+            select(
+                CSGoal.account_id,
+                func.count(CSGoal.id).label("total"),
+                func.count(CSGoal.id).filter(CSGoal.alignment_status == "aligned").label("aligned"),
+                func.count(CSGoal.id).filter(CSGoal.alignment_status == "partial").label("partial"),
+            )
+            .where(CSGoal.account_id.in_(account_ids))
+            .where(CSGoal.deleted_at.is_(None))
+            .group_by(CSGoal.account_id)
+        )
+    ).all()
+    for acc_id, total, aligned, partial in goal_rows:
+        if total == 0:
+            status_dot = None
+        elif aligned == total:
+            status_dot = "green"
+        elif aligned > 0 or partial > 0:
+            status_dot = "amber"
+        else:
+            status_dot = "red"
+        out[acc_id]["alignment_status"] = status_dot
+        out[acc_id]["goal_count"] = total
+
+    # Checkpoints: per-account, fetch all non-signed-off rows then derive
+    # next + overdue in Python. Bounded — typically 4 checkpoints/account.
+    cp_rows = (
+        await db.execute(
+            select(Checkpoint)
+            .where(Checkpoint.account_id.in_(account_ids))
+            .where(Checkpoint.status != "signed_off")
+        )
+    ).scalars().all()
+    by_acc: dict[UUID, list[Checkpoint]] = {}
+    for cp in cp_rows:
+        by_acc.setdefault(cp.account_id, []).append(cp)
+    for acc_id, cps in by_acc.items():
+        overdue = sum(
+            1
+            for cp in cps
+            if cp.scheduled_date and cp.scheduled_date < today
+        )
+        # Next = earliest non-overdue (scheduled_date >= today); fall back
+        # to the most overdue (smallest past date) when nothing is upcoming.
+        upcoming = sorted(
+            (cp for cp in cps if cp.scheduled_date and cp.scheduled_date >= today),
+            key=lambda cp: cp.scheduled_date,
+        )
+        nxt = upcoming[0] if upcoming else None
+        if nxt is None:
+            past = sorted(
+                (cp for cp in cps if cp.scheduled_date and cp.scheduled_date < today),
+                key=lambda cp: cp.scheduled_date,
+                reverse=True,
+            )
+            nxt = past[0] if past else None
+        if nxt:
+            out[acc_id]["next_checkpoint_type"] = nxt.type
+            out[acc_id]["next_checkpoint_date"] = nxt.scheduled_date
+            out[acc_id]["next_checkpoint_days_until"] = (
+                (nxt.scheduled_date - today).days if nxt.scheduled_date else None
+            )
+        out[acc_id]["overdue_checkpoint_count"] = overdue
+
+    return out
 
 
 # ============================================================
