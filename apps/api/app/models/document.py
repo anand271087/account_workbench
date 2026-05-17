@@ -57,6 +57,12 @@ class Document(Base):
     vpd_extracted_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     vpd_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # M15.1 — candidate-goals extraction (kind='vpd' only). The frontend
+    # surfaces a review modal when this column lands; user confirms a
+    # subset → fan-out POST /accounts/:id/cs-goals.
+    cs_goals_extracted: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    cs_goals_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

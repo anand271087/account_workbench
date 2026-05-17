@@ -31,6 +31,8 @@ export interface Document {
   mom_extracted_at: string | null;
   vpd_extracted_fields: Record<string, unknown> | null;
   vpd_extracted_at: string | null;
+  cs_goals_extracted: Record<string, unknown> | null;
+  cs_goals_extracted_at: string | null;
   deleted_at: string | null;
 }
 

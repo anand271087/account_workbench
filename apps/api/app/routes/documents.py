@@ -54,6 +54,7 @@ from app.schemas.document import (
     DocumentUploadResponse,
     JobOut,
 )
+from app.schemas.cs_goals_extraction import CsGoalsExtractionResult
 from app.schemas.mom_extraction import MomExtractionResult
 from app.services import ai_quota
 from app.services import files as storage_svc
@@ -465,6 +466,54 @@ async def extract_fields(
 
     result = extract_from_mom(doc.id, text)
     return result
+
+
+# ============================================================
+# POST /documents/:id/extract-goals  (VPD → candidate cs_goals)
+# ============================================================
+
+
+@document_router.post(
+    "/{document_id}/extract-goals", response_model=CsGoalsExtractionResult
+)
+async def extract_goals(
+    document_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CsGoalsExtractionResult:
+    """Run Claude over a VPD doc and return candidate Goals. View-gated;
+    the apply step is the existing POST /accounts/:id/cs-goals + PATCH
+    (per-row write RBAC enforced there). Read-only here — never writes."""
+    from app.services.claude import extract_cs_goals_from_vpd
+    from app.services.extract import ExtractError, extract_text
+
+    doc, _, is_assigned, is_team = await _scope_for_document(db, user, document_id)
+    if not can_view_account(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot view this document")
+    if doc.kind != "vpd":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "extract-goals only runs on documents with kind='vpd'",
+        )
+
+    ai_quota.consume(user.id, label="vpd_goals_extract")
+
+    bucket, _, key = doc.storage_path.partition("/")
+    try:
+        raw = storage_svc.download_bytes(bucket, key)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"Could not download document from storage: {e}",
+        ) from e
+
+    try:
+        text = extract_text(doc.filename, doc.mime_type, raw)
+    except ExtractError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+
+    extracted = extract_cs_goals_from_vpd(text)
+    return CsGoalsExtractionResult(document_id=doc.id, **extracted)
 
 
 # ============================================================

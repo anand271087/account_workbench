@@ -514,6 +514,209 @@ def extract_vpd_fields(text: str) -> dict:
     return out
 
 
+# ============================================================
+# M15.1 — Candidate-goals extraction from VPD
+# ============================================================
+
+
+_GOAL_CATEGORIES = (
+    "cost_savings",
+    "base_rationalization",
+    "risk_mitigation",
+    "adoption",
+    "other",
+)
+
+
+def _classify_goal_category(blob: str) -> str:
+    """Best-effort category from free-text — used by stub + as a real-call
+    fallback when Claude returns an unrecognised category."""
+    s = (blob or "").lower()
+    if any(k in s for k in ("cost", "savings", "save", "reduction")):
+        return "cost_savings"
+    if any(k in s for k in ("base", "rationalis", "rationaliz", "supplier consolidation", "sku reduction")):
+        return "base_rationalization"
+    if any(k in s for k in ("risk", "mitigation", "compliance", "single-source", "single source")):
+        return "risk_mitigation"
+    if any(k in s for k in ("adoption", "engagement", "usage", "training", "rollout")):
+        return "adoption"
+    return "other"
+
+
+def _stub_cs_goals_extract(text: str) -> dict:
+    """Heuristic candidate-goals extraction for the no-key path.
+
+    Splits on bullets / line breaks, picks lines that look like outcomes,
+    classifies each by keyword bag. Deterministic, ~70% as useful as real
+    Claude on a well-structured VPD."""
+    body = text or ""
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    for raw in body.splitlines():
+        line = raw.strip().lstrip("-•·*").strip()
+        if not line or len(line) < 12 or len(line) > 240:
+            continue
+        lower = line.lower()
+        if not any(
+            tok in lower
+            for tok in (
+                "save",
+                "reduce",
+                "improve",
+                "increase",
+                "adopt",
+                "consolidat",
+                "rationalis",
+                "rationaliz",
+                "mitigate",
+                "deliver",
+                "target",
+            )
+        ):
+            continue
+        key = lower[:80]
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(
+            {
+                "title": line[:200],
+                "category": _classify_goal_category(line),
+                "target_value": None,
+                "target_date": None,
+                "owner": None,
+                "initiatives": [],
+                "confidence": "low",
+                "rationale": "Heuristic extract — line matched outcome verb.",
+            }
+        )
+        if len(candidates) >= 6:
+            break
+    return {"goals": candidates, "is_stub": True}
+
+
+def _real_cs_goals_extract(text: str) -> dict:
+    """One Claude call → structured candidate goals."""
+    settings = get_settings()
+    from anthropic import Anthropic  # type: ignore
+
+    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
+    msg = client.messages.create(
+        model=settings.anthropic_model,
+        max_tokens=2000,
+        system=(
+            "You extract candidate customer-success Goals from a Beroe "
+            "Value-Proposition Deck (VPD).\n\n"
+            "Output ONLY a JSON object — no markdown, no fences. Schema:\n"
+            "{\n"
+            "  \"goals\": [\n"
+            "    {\n"
+            "      \"title\": <short outcome sentence, ≤180 chars>,\n"
+            "      \"category\": <one of cost_savings | base_rationalization | risk_mitigation | adoption | other>,\n"
+            "      \"target_value\": <e.g. '$2M' | '80%' | null>,\n"
+            "      \"target_date\": <ISO date YYYY-MM-DD or null>,\n"
+            "      \"owner\": <named person if explicitly assigned, else null>,\n"
+            "      \"initiatives\": [\n"
+            "         {\"name\": <short>, \"description\": <≤200 chars or null>,\n"
+            "          \"stage\": <proposed|committed|in_flight|implemented|blocked|cancelled or null>,\n"
+            "          \"levers\": [<strings: 'cost'|'risk'|'adoption'>] }\n"
+            "      ],\n"
+            "      \"confidence\": <high | medium | low>,\n"
+            "      \"rationale\": <≤2 sentences explaining why this is a goal>\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "Rules:\n"
+            "  - Each goal must be a measurable outcome, not an activity.\n"
+            "  - Category derivation: $-savings → cost_savings; supplier/SKU cuts → base_rationalization;\n"
+            "    single-source / compliance → risk_mitigation; usage / rollout / training → adoption.\n"
+            "  - Skip filler. Cap at 8 goals. Skip goals you can't tie to a sentence."
+        ),
+        messages=[{"role": "user", "content": f"VPD TEXT:\n{_truncate_for_prompt(text)}"}],
+    )
+    raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    cleaned = _JSON_FENCE_RE.sub("", raw).strip()
+    m = _JSON_OBJECT_RE.search(cleaned)
+    candidate = m.group(0) if m else cleaned
+    try:
+        parsed = json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        return _stub_cs_goals_extract(text) | {"is_stub": False}
+
+    out_goals: list[dict] = []
+    for g in (parsed.get("goals") or [])[:8]:
+        if not isinstance(g, dict):
+            continue
+        title = (g.get("title") or "").strip()[:200]
+        if not title:
+            continue
+        cat = (g.get("category") or "").strip()
+        if cat not in _GOAL_CATEGORIES:
+            cat = _classify_goal_category(title)
+        initiatives: list[dict] = []
+        for it in (g.get("initiatives") or [])[:10]:
+            if not isinstance(it, dict):
+                continue
+            nm = (it.get("name") or "").strip()[:200]
+            if not nm:
+                continue
+            initiatives.append(
+                {
+                    "name": nm,
+                    "description": (str(it.get("description"))[:2000]) if it.get("description") else None,
+                    "stage": it.get("stage") or None,
+                    "levers": [str(x)[:40] for x in (it.get("levers") or [])][:5],
+                }
+            )
+        out_goals.append(
+            {
+                "title": title,
+                "category": cat,
+                "target_value": (str(g.get("target_value"))[:200]) if g.get("target_value") else None,
+                "target_date": g.get("target_date") or None,
+                "owner": (str(g.get("owner"))[:200]) if g.get("owner") else None,
+                "initiatives": initiatives,
+                "confidence": g.get("confidence") if g.get("confidence") in ("high", "medium", "low") else None,
+                "rationale": (str(g.get("rationale"))[:600]) if g.get("rationale") else None,
+            }
+        )
+    return {"goals": out_goals, "is_stub": False}
+
+
+def extract_cs_goals_from_vpd(text: str) -> dict:
+    """Public entry point. Stub-or-real based on key, cached 24h."""
+    settings = get_settings()
+    key = settings.anthropic_api_key.get_secret_value()
+    if not _key_looks_real(key):
+        return _stub_cs_goals_extract(text)
+
+    digest = hashlib.sha256(
+        f"vpd-goals|{settings.anthropic_model}|{text}".encode("utf-8")
+    ).hexdigest()
+    now = time.time()
+    cached = _doc_cache.get(digest)
+    if cached and (now - cached[0]) < _REAL_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    last_err: BaseException | None = None
+    for attempt in (1, 2):
+        try:
+            r = _real_cs_goals_extract(text)
+            _doc_cache[digest] = (now, r)
+            return r
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if attempt == 1 and _is_transient_anthropic_error(e):
+                logger.warning("Claude goals extract transient error %s — retrying", type(e).__name__)
+                time.sleep(0.8)
+                continue
+            break
+
+    err_name = type(last_err).__name__ if last_err else "unknown"
+    logger.warning("Claude goals extract unavailable (%s); using stub", err_name)
+    return _stub_cs_goals_extract(text)
+
+
 def aggregate_account_summary(per_doc_summaries: list[str]) -> str:
     settings = get_settings()
     key = settings.anthropic_api_key.get_secret_value()

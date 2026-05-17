@@ -28,6 +28,8 @@ import {
 import type { ContactCreate } from "@/types/contact";
 import type { ExtractedContact, MomExtractionResult } from "@/types/mom_extraction";
 import type { ExtractedVpd } from "@/types/vpd_extraction";
+import type { CsGoalsExtractionResult, ExtractedGoal } from "@/types/cs_goals_extraction";
+import { VpdGoalsExtractionReview } from "@/components/VpdGoalsExtractionReview";
 
 const ALLOWED_EXT = ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml";
 const MAX_MB = 100;
@@ -343,6 +345,7 @@ export function KindUploadCard({
               <DocumentRow
                 key={d.id}
                 doc={d}
+                accountId={accountId}
                 onDelete={() => {
                   if (confirm(`Soft-delete "${d.filename}"?`)) deleteMutation.mutate(d.id);
                 }}
@@ -376,14 +379,17 @@ export function KindUploadCard({
 
 function DocumentRow({
   doc,
+  accountId,
   onDelete,
   onRerun,
 }: {
   doc: Document;
+  accountId: string;
   onDelete: () => void;
   onRerun: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [goalsModalOpen, setGoalsModalOpen] = useState(false);
   const age = Date.now() - new Date(doc.uploaded_at).getTime();
   const inFlight =
     (doc.ai_status === "processing" || doc.ai_status === "pending") && age < 90_000;
@@ -423,6 +429,22 @@ function DocumentRow({
               {doc.ai_summary_text}
             </div>
           )}
+          {/* M15.1 — VPD candidate-goals review CTA */}
+          {doc.kind === "vpd" &&
+            (() => {
+              const extracted = doc.cs_goals_extracted as unknown as CsGoalsExtractionResult | null;
+              const goalCount = extracted?.goals?.length ?? 0;
+              if (goalCount === 0) return null;
+              return (
+                <button
+                  onClick={() => setGoalsModalOpen(true)}
+                  className="mt-1.5 text-xs text-violet-700 font-semibold hover:underline"
+                  title="AI extracted candidate goals from this VPD — review and create"
+                >
+                  Review {goalCount} candidate goal{goalCount === 1 ? "" : "s"} →
+                </button>
+              );
+            })()}
         </div>
         <div className="flex gap-3 shrink-0">
           <button
@@ -441,6 +463,20 @@ function DocumentRow({
           </button>
         </div>
       </div>
+      {goalsModalOpen && doc.cs_goals_extracted && (
+        <VpdGoalsExtractionReview
+          accountId={accountId}
+          documentName={doc.filename}
+          result={
+            {
+              ...(doc.cs_goals_extracted as unknown as CsGoalsExtractionResult),
+              goals: ((doc.cs_goals_extracted as unknown as CsGoalsExtractionResult).goals ??
+                []) as ExtractedGoal[],
+            } satisfies CsGoalsExtractionResult
+          }
+          onClose={() => setGoalsModalOpen(false)}
+        />
+      )}
     </li>
   );
 }

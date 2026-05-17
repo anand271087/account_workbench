@@ -31,6 +31,7 @@ from app.models.document import AccountDiscoverySummary, Document, Job
 from app.services import files as storage_svc
 from app.services.claude import (
     aggregate_account_summary,
+    extract_cs_goals_from_vpd,
     extract_vpd_fields,
     summarise_document,
 )
@@ -131,6 +132,17 @@ async def _process(job_id: UUID) -> dict:
                 await db.commit()
             except Exception:
                 logger.exception("VPD field extraction failed (non-fatal)")
+
+            # M15.1 — also pull candidate Goals so the CSM can promote a
+            # subset into cs_goals via the review modal. Independent of
+            # the solutioning-field extract above; failures are swallowed.
+            try:
+                goals_extracted = extract_cs_goals_from_vpd(text)
+                doc.cs_goals_extracted = goals_extracted
+                doc.cs_goals_extracted_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                logger.exception("VPD candidate-goals extraction failed (non-fatal)")
 
         # MoM-only: extract structured fields (engagement / brief / contacts)
         # and persist on the document row. The frontend polling loop picks

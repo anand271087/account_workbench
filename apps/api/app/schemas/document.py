@@ -34,6 +34,8 @@ class DocumentOut(BaseModel):
     mom_extracted_at: datetime | None = None
     vpd_extracted_fields: dict[str, Any] | None = None
     vpd_extracted_at: datetime | None = None
+    cs_goals_extracted: dict[str, Any] | None = None
+    cs_goals_extracted_at: datetime | None = None
     deleted_at: datetime | None
 
 
