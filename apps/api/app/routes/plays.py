@@ -29,6 +29,7 @@ from app.core.rbac import (
 from app.db.session import get_db
 from app.models.account import Account
 from app.models.play import AccountPlay
+from app.models.signal import SoftSignal
 from app.routes.accounts import _team_member_ids
 from app.schemas.play import (
     AppetiteOut,
@@ -215,7 +216,14 @@ async def get_appetite(
             .where(AccountPlay.hidden.is_(False))
         )
     ).scalars().all()
-    return compute_appetite(acc=acc, plays=list(plays))
+    signals = (
+        await db.execute(
+            select(SoftSignal)
+            .where(SoftSignal.account_id == account_id)
+            .where(SoftSignal.hidden.is_(False))
+        )
+    ).scalars().all()
+    return compute_appetite(acc=acc, plays=list(plays), signals=list(signals))
 
 
 # ============================================================
@@ -259,4 +267,13 @@ async def set_plan_mode(
             .where(AccountPlay.hidden.is_(False))
         )
     ).scalars().all()
-    return compute_appetite(acc=real, plays=list(plays))
+    signals = (
+        await db.execute(
+            select(SoftSignal)
+            .where(SoftSignal.account_id == account_id)
+            .where(SoftSignal.hidden.is_(False))
+        )
+    ).scalars().all()
+    return compute_appetite(
+        acc=real, plays=list(plays), signals=list(signals)
+    )

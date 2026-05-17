@@ -25,6 +25,7 @@ from app.routes import delivery_renewal as delivery_renewal_routes
 from app.routes import meeting_brief as meeting_brief_routes
 from app.routes import metrics as metric_routes
 from app.routes import plays as play_routes
+from app.routes import signals as signal_routes
 from app.routes import signing as signing_routes
 from app.routes import solutioning as solutioning_routes
 from app.routes import success_contract as success_contract_routes
@@ -89,6 +90,9 @@ def create_app() -> FastAPI:
     app.include_router(delivery_renewal_routes.router)
     app.include_router(play_routes.account_router)
     app.include_router(play_routes.play_router)
+    app.include_router(signal_routes.account_router)
+    app.include_router(signal_routes.signal_router)
+    app.include_router(signal_routes.activity_router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)
 

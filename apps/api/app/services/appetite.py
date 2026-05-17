@@ -29,6 +29,7 @@ from decimal import Decimal
 
 from app.models.account import Account
 from app.models.play import AccountPlay
+from app.models.signal import SoftSignal
 from app.schemas.play import AppetiteOut, ModeBreakdown
 
 
@@ -78,17 +79,39 @@ def _days_to_renewal(acc: Account, today: date) -> int | None:
 
 
 def compute_appetite(
-    *, acc: Account, plays: list[AccountPlay], today: date | None = None
+    *,
+    acc: Account,
+    plays: list[AccountPlay],
+    signals: list[SoftSignal] | None = None,
+    today: date | None = None,
 ) -> AppetiteOut:
     today = today or date.today()
+    signals = signals or []
 
     # 1. Health (40%)
     health_score = int(acc.health_score or 50)
     health_pts = round(health_score * 0.40)
 
-    # 2. Signal mix (25%) — placeholder full value (neutral) until M27.
-    # When soft_signals lands we'll plug it in here.
-    sig_pts = 15
+    # 2. Signal mix (25%) — prototype rule: count visible active signals
+    # by type, score by majority. Default neutral (15) when none.
+    visible = [s for s in signals if not s.hidden and s.status == "active"]
+    sig_counts = {"expansion": 0, "positive": 0, "neutral": 0, "risk": 0, "critical": 0}
+    for s in visible:
+        sig_counts[s.type] = sig_counts.get(s.type, 0) + 1
+    total = len(visible) or 1
+    pos_share = (sig_counts["expansion"] + sig_counts["positive"]) / total
+    if pos_share > 0.5:
+        sig_pts = 25
+    elif sig_counts["neutral"] / total > 0.5:
+        sig_pts = 15
+    elif sig_counts["risk"] / total > 0.5:
+        sig_pts = 8
+    elif sig_counts["critical"] / total > 0.3:
+        sig_pts = 0
+    else:
+        sig_pts = 15
+
+    has_risk = sig_counts["risk"] > 0 or sig_counts["critical"] > 0
 
     # 3. Renewal proximity (15%)
     dtr = _days_to_renewal(acc, today)
@@ -98,9 +121,10 @@ def compute_appetite(
         renew_pts = 15
     elif dtr >= 90:
         renew_pts = 10
+    elif not has_risk:
+        # Close to renewal but no risk on the board → still some buffer.
+        renew_pts = 6
     else:
-        # No risk signals modelled yet → assume zero. Once M27 lands we
-        # can re-introduce the "no risk and no critical" → 6 branch.
         renew_pts = 0
 
     # 4. ARR growth (20%)
