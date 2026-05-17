@@ -57,6 +57,8 @@ _FIELDS = (
     "value_delivery_document", "vdd_locked_at", "vdd_locked_by",
     # M23 — Delivery & Renewal.
     "delivery_renewal", "dr_outcome", "dr_outcome_set_at", "dr_outcome_set_by",
+    # M26 — Growth & Pipeline · mode override.
+    "plan_current_mode",
     "created_at", "updated_at", "deleted_at",
 )
 

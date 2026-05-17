@@ -7,6 +7,7 @@ from app.models.cs_goal import CSGoal
 from app.models.engagement import AccountEngagement
 from app.models.meeting_brief import MeetingBrief
 from app.models.metric import SuccessMetric
+from app.models.play import AccountPlay
 from app.models.solutioning import AccountSolutioning
 from app.models.user import User
 from app.models.user_favorite import UserFavorite
@@ -15,6 +16,7 @@ __all__ = [
     "Account",
     "AccountDiscoverySummary",
     "AccountEngagement",
+    "AccountPlay",
     "AccountSolutioning",
     "AuditLog",
     "Checkpoint",

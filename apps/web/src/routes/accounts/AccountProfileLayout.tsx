@@ -43,6 +43,14 @@ const SUB_NAV: SubNavItem[] = [
     label: "Success Management",
     show: (a) => a.can_view_cs_onboarding,
   },
+  // M26 — Growth & Pipeline. Three sub-tabs (Account Plan live; Signals
+  // & Activity + External Intelligence stubs until M27 / M28). Visibility
+  // gated on the same CS-onboarding view right as the rest of the funnel.
+  {
+    to: "growth-pipeline",
+    label: "Growth & Pipeline",
+    show: (a) => a.can_view_cs_onboarding,
+  },
   { to: "contacts",  label: "Contacts",  show: (a) => a.can_view_contacts },
   { to: "value-def", label: "Value Def", show: () => true },
   // Goals folded into Success Management → Contract & Goals (M19).

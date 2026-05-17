@@ -12,6 +12,10 @@ import ContractGoalsTab from "@/routes/accounts/tabs/sm/ContractGoalsTab";
 import ValueTrackingTab from "@/routes/accounts/tabs/sm/ValueTrackingTab";
 import CheckpointsTab from "@/routes/accounts/tabs/sm/CheckpointsTab";
 import DeliveryRenewalTab from "@/routes/accounts/tabs/sm/DeliveryRenewalTab";
+import GrowthPipelineLayout from "@/routes/accounts/GrowthPipelineLayout";
+import AccountPlanTab from "@/routes/accounts/tabs/gp/AccountPlanTab";
+import SignalsActivityTab from "@/routes/accounts/tabs/gp/SignalsActivityTab";
+import ExternalIntelTab from "@/routes/accounts/tabs/gp/ExternalIntelTab";
 import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
 import OverviewTab from "@/routes/accounts/tabs/OverviewTab";
@@ -138,6 +142,14 @@ export default function App() {
           <Route path="value-tracking"    element={<ValueTrackingTab />} />
           <Route path="checkpoints"       element={<CheckpointsTab />} />
           <Route path="delivery-renewal"  element={<DeliveryRenewalTab />} />
+        </Route>
+
+        {/* M26 — Growth & Pipeline group: Account Plan / Signals / External Intel */}
+        <Route path="growth-pipeline" element={<GrowthPipelineLayout />}>
+          <Route index element={<Navigate to="plan" replace />} />
+          <Route path="plan"      element={<AccountPlanTab />} />
+          <Route path="signals"   element={<SignalsActivityTab />} />
+          <Route path="ext-intel" element={<ExternalIntelTab />} />
         </Route>
 
         <Route path="contacts" element={<ContactsTab />} />

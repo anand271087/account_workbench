@@ -137,6 +137,12 @@ class Account(Base):
         UUID(as_uuid=True), nullable=True
     )
 
+    # M26 — Growth & Pipeline. User-set override for the auto-recommended
+    # play mode (rescue / retain / expand). Null = use the recommendation.
+    plan_current_mode: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
