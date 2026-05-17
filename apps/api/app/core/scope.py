@@ -55,6 +55,8 @@ _FIELDS = (
     "success_contract", "success_contract_locked_at", "success_contract_locked_by",
     # M22 — Value Delivery Document.
     "value_delivery_document", "vdd_locked_at", "vdd_locked_by",
+    # M23 — Delivery & Renewal.
+    "delivery_renewal", "dr_outcome", "dr_outcome_set_at", "dr_outcome_set_by",
     "created_at", "updated_at", "deleted_at",
 )
 

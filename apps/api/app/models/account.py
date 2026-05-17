@@ -125,6 +125,18 @@ class Account(Base):
         UUID(as_uuid=True), nullable=True
     )
 
+    # M23 — Delivery & Renewal. Dual-track post-delivery view + outcome.
+    delivery_renewal: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
+    dr_outcome: Mapped[str | None] = mapped_column(nullable=True)
+    dr_outcome_set_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dr_outcome_set_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
