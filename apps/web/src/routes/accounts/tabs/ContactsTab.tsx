@@ -254,6 +254,7 @@ export default function ContactsTab() {
       {creating && (
         <ContactFormModal
           title="Add contact"
+          existing={data?.items ?? []}
           onClose={() => setCreating(false)}
           onSubmit={(body) => createMutation.mutateAsync(body)}
           isPending={createMutation.isPending}
@@ -264,6 +265,7 @@ export default function ContactsTab() {
         <ContactFormModal
           title={`Edit ${editing.name}`}
           initial={editing}
+          existing={data?.items ?? []}
           onClose={() => setEditing(null)}
           onSubmit={(body) => patchMutation.mutateAsync({ id: editing.id, body })}
           isPending={patchMutation.isPending}
@@ -320,12 +322,14 @@ function DecisionPowerPill({ p }: { p: ContactDecisionPower }) {
 function ContactFormModal({
   title,
   initial,
+  existing,
   onClose,
   onSubmit,
   isPending,
 }: {
   title: string;
   initial?: Contact;
+  existing: Contact[];
   onClose: () => void;
   onSubmit: (body: ContactCreate) => Promise<unknown>;
   isPending: boolean;
@@ -344,10 +348,37 @@ function ContactFormModal({
   });
   const [error, setError] = useState<string | null>(null);
 
+  // Bug 4 — preflight dedup on name OR email (case-insensitive). Backend
+  // already enforces email uniqueness via ux_client_contacts_account_email
+  // and 409s, but stakeholder feedback was the UI should warn before the
+  // POST so duplicates don't even submit. Also catches name-only dupes,
+  // which the DB index doesn't cover.
+  const nameKey = form.name.trim().toLowerCase();
+  const emailKey = (form.email ?? "").trim().toLowerCase();
+  const dup = existing.find(
+    (c) =>
+      c.id !== initial?.id &&
+      !c.deleted_at &&
+      ((nameKey && c.name.trim().toLowerCase() === nameKey) ||
+        (emailKey &&
+          (c.email ?? "").trim().toLowerCase() === emailKey)),
+  );
+
   const handleSubmit = async () => {
     setError(null);
     if (form.name.trim().length < 3) {
       setError("Name must be at least 3 characters.");
+      return;
+    }
+    if (dup) {
+      const which =
+        emailKey && (dup.email ?? "").trim().toLowerCase() === emailKey
+          ? "email"
+          : "name";
+      setError(
+        `A contact with this ${which} already exists on this account: "${dup.name}". ` +
+          `Edit the existing row instead of creating a duplicate.`,
+      );
       return;
     }
     if (form.title && form.title.trim().length > 0 && form.title.trim().length < 2) {
@@ -508,10 +539,11 @@ function ContactFormModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isPending}
+            disabled={isPending || !!dup}
+            title={dup ? `Duplicate: "${dup.name}" already exists` : undefined}
             className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
           >
-            {isPending ? "Saving…" : "Save"}
+            {isPending ? "Saving…" : dup ? "Duplicate detected" : "Save"}
           </button>
         </div>
       </div>

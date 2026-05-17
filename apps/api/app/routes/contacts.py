@@ -150,6 +150,27 @@ async def create_contact(
             "Your role cannot edit contacts on this account",
         )
 
+    # Bug 4 — preflight name dedup (email is covered by the DB unique index,
+    # but the stakeholder bug specifies "same name OR email"). Name match is
+    # case-insensitive over non-deleted rows.
+    name_key = (body.name or "").strip().lower()
+    if name_key:
+        from sqlalchemy import func
+
+        clash = (
+            await db.execute(
+                select(ClientContact)
+                .where(ClientContact.account_id == account_id)
+                .where(ClientContact.deleted_at.is_(None))
+                .where(func.lower(func.trim(ClientContact.name)) == name_key)
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f'A contact with this name already exists on this account: "{clash.name}".',
+            )
+
     new_contact = ClientContact(
         account_id=account_id,
         name=body.name,

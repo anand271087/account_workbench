@@ -44,7 +44,13 @@ export default function AccountListPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { me } = useAuth();
-  const isAdmin = me?.user.role === "admin";
+  // Bug 7 — reassign-owner widened to admin / CS Director / VP CSM / VP Sales.
+  const canReassign = !!me && [
+    "admin",
+    "cs_director",
+    "vp_csm",
+    "vp_sales",
+  ].includes(me.user.role);
   const fav = useFavoriteAccounts(me?.user.id);
   const [reassignTarget, setReassignTarget] = useState<AccountListItem | null>(null);
 
@@ -62,7 +68,7 @@ export default function AccountListPage() {
   // Bulk select state
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const canBulkReassign = isAdmin;
+  const canBulkReassign = canReassign;
 
   // M9 — create account
   const canCreateAccount =
@@ -277,7 +283,7 @@ export default function AccountListPage() {
                     <Row
                       key={it.id}
                       item={it}
-                      isAdmin={isAdmin}
+                      canReassign={canReassign}
                       selectable={canBulkReassign}
                       checked={selected.has(it.id)}
                       onToggleSelected={() =>
@@ -412,7 +418,7 @@ function Th({
 
 function Row({
   item,
-  isAdmin,
+  canReassign,
   selectable,
   checked,
   onToggleSelected,
@@ -422,7 +428,7 @@ function Row({
   onTogglePinned,
 }: {
   item: AccountListItem;
-  isAdmin: boolean;
+  canReassign: boolean;
   selectable: boolean;
   checked: boolean;
   onToggleSelected: () => void;
@@ -460,14 +466,14 @@ function Row({
               {!item.is_editable && (
                 <span className="text-[10px] text-text-muted">(read-only)</span>
               )}
-              {isAdmin && (
+              {canReassign && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onReassign();
                   }}
                   className="text-[10px] text-beroe-blue hover:underline font-semibold"
-                  title="Reassign owner (admin)"
+                  title="Reassign owner (admin / CS Director / VPs)"
                 >
                   Reassign
                 </button>

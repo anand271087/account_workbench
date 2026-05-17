@@ -63,6 +63,9 @@ class Document(Base):
     cs_goals_extracted: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     cs_goals_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Bug 3 — free-text notes attached to the uploaded document.
+    notes: Mapped[str | None] = mapped_column(nullable=True)
+
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

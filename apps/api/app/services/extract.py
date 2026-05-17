@@ -69,7 +69,11 @@ def extract_text(filename: str, mime_type: str | None, data: bytes) -> str:
         text = _extract_vtt(data)
     elif name.endswith(".eml"):
         text = _extract_eml(data)
-    elif name.endswith(".txt"):
+    elif name.endswith((".txt", ".csv", ".md", ".markdown")):
+        # Bug 6 — CSV / MD treated as plain text. UTF-8 decode is correct
+        # for both: CSV stays as-is (Claude reads tabular text fine) and
+        # markdown is already a text format. Replace errors keeps the
+        # extraction non-fatal on dirty inputs.
         text = data.decode("utf-8", errors="replace")
     else:
         raise ExtractError(f"Unsupported extension for text extraction: {filename}")

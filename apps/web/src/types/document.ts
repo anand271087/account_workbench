@@ -33,6 +33,7 @@ export interface Document {
   vpd_extracted_at: string | null;
   cs_goals_extracted: Record<string, unknown> | null;
   cs_goals_extracted_at: string | null;
+  notes: string | null;
   deleted_at: string | null;
 }
 

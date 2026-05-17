@@ -53,7 +53,10 @@ class Settings(BaseSettings):
 
     # ---- File upload ----
     max_upload_size_mb: int = 100
-    allowed_doc_extensions: str = ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml"
+    # Bug 6 — added .csv / .md / .markdown to the upload allow-list.
+    allowed_doc_extensions: str = (
+        ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml,.csv,.md,.markdown"
+    )
 
     @property
     def cors_origins_list(self) -> list[str]:

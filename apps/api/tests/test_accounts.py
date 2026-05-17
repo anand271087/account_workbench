@@ -137,7 +137,10 @@ def test_pagination(client: TestClient, seeded_users: dict) -> None:
 
 
 def test_reassign_owner_admin_only(client: TestClient, seeded_users: dict) -> None:
-    """Non-admins get 403; admin succeeds."""
+    """CSM/Solutioning get 403; admin / CS Director / VPs succeed.
+
+    Stakeholder sprint-1 bug: reassign was admin-only originally; widened
+    to admin + cs_director + vp_csm + vp_sales (see rbac.can_reassign_account_owner)."""
     siemens_id = _find_account(client, seeded_users["admin"], "siemens")
 
     r = client.patch(
@@ -146,6 +149,15 @@ def test_reassign_owner_admin_only(client: TestClient, seeded_users: dict) -> No
         json={"csm_user_id": str(seeded_users["csm"])},
     )
     assert r.status_code == 403
+
+    # cs_director also allowed
+    target_harish = _user_by_email(client, seeded_users, "harish@beroe-inc.com")
+    r = client.patch(
+        f"/api/v1/accounts/{siemens_id}/owner",
+        headers=_auth(mint_jwt(seeded_users["cs_director"])),
+        json={"csm_user_id": str(target_harish)},
+    )
+    assert r.status_code == 200, r.text
 
     # admin reassigns Siemens to csm2 (then back to harish to leave demo state intact)
     target_csm2 = seeded_users["csm"] if False else _user_by_email(client, seeded_users, "csm2@beroe-inc.com")

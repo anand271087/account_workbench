@@ -50,6 +50,7 @@ from app.schemas.document import (
     DocKind,
     DocumentListResponse,
     DocumentOut,
+    DocumentNotesUpdate,
     DocumentSummaryUpdate,
     DocumentUploadResponse,
     JobOut,
@@ -357,6 +358,26 @@ async def edit_summary(
     doc.ai_edited = True
     doc.ai_edited_by = user.id
     doc.ai_edited_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(doc)
+    return DocumentOut.model_validate(doc)
+
+
+@document_router.patch("/{document_id}/notes", response_model=DocumentOut)
+async def edit_notes(
+    document_id: Annotated[UUID, Path()],
+    body: DocumentNotesUpdate,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DocumentOut:
+    """Bug 3 — per-document free-text notes (prototype parity).
+    Same write gate as the summary edit; empty string clears the note."""
+    doc, _, is_assigned, is_team = await _scope_for_document(db, user, document_id)
+    if not can_write_documents(
+        user.role, is_assigned=is_assigned, is_team=is_team, kind=doc.kind
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot edit this document")
+    doc.notes = body.notes.strip() or None
     await db.commit()
     await db.refresh(doc)
     return DocumentOut.model_validate(doc)

@@ -100,8 +100,14 @@ def can_bulk_import(role: str) -> bool:
 
 
 def can_reassign_account_owner(role: str) -> bool:
-    """Re-assign owner = admin only (matrix note)."""
-    return role == "admin"
+    """Re-assign owner — admin + CS Director + VP CSM + VP Sales.
+
+    Stakeholder feedback (sprint-1 bug tracker, BUG re: roles): CS Director
+    and the VPs need to reassign too, not just Admin. Matrix-narrative
+    conflict resolved in favour of the operating need; reassign is itself
+    audited by the existing SQLAlchemy before_flush listener so each
+    handover lands under a director-grade user."""
+    return role in {"admin", "cs_director", "vp_csm", "vp_sales"}
 
 
 def can_create_account(role: str) -> bool:

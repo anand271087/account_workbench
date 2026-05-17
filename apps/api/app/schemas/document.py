@@ -36,6 +36,7 @@ class DocumentOut(BaseModel):
     vpd_extracted_at: datetime | None = None
     cs_goals_extracted: dict[str, Any] | None = None
     cs_goals_extracted_at: datetime | None = None
+    notes: str | None = None
     deleted_at: datetime | None
 
 
@@ -43,6 +44,13 @@ class DocumentSummaryUpdate(BaseModel):
     """User edit of an AI summary — flips ai_edited to true server-side."""
 
     ai_summary_text: str = Field(..., min_length=1, max_length=4000)
+
+
+class DocumentNotesUpdate(BaseModel):
+    """Bug 3 — free-text notes attached to the uploaded document.
+    Empty string allowed (clears the note)."""
+
+    notes: str = Field("", max_length=4000)
 
 
 class DocumentListResponse(BaseModel):

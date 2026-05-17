@@ -38,8 +38,13 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
 
   return (
     <div className="flex min-h-screen bg-beroe-bg font-sans">
-      {/* Sidebar — mirrors prototype `.sb` (224px wide, navy bg) */}
-      <aside className="w-[224px] bg-beroe-navy border-r border-beroe-navy-4 flex flex-col flex-shrink-0">
+      {/* Sidebar — mirrors prototype `.sb` (224px wide, navy bg).
+          Bug 5 — fix logout sticking. The aside must be viewport-locked
+          (sticky + h-screen) so the bottom footer with the avatar +
+          sign-out stays visible while the inner <nav> scrolls. Without
+          this the aside grows to match the longer main content and the
+          footer slides off-screen on long account lists. */}
+      <aside className="w-[224px] bg-beroe-navy border-r border-beroe-navy-4 flex flex-col flex-shrink-0 sticky top-0 h-screen self-start">
         <div className="px-4 py-3 border-b border-beroe-navy-4 flex items-center gap-2">
           <div className="w-7 h-7 bg-gradient-to-br from-beroe-blue to-[#3800CC] rounded-md flex items-center justify-center font-extrabold text-[11px] text-white">
             B
