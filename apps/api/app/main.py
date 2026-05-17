@@ -27,6 +27,7 @@ from app.routes import signing as signing_routes
 from app.routes import solutioning as solutioning_routes
 from app.routes import success_contract as success_contract_routes
 from app.routes import users as user_routes
+from app.routes import vdd as vdd_routes
 # Importing audit_writer triggers @event.listens_for registration.
 from app.services import audit_writer  # noqa: F401
 
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(cs_goals_routes.account_router)
     app.include_router(cs_goals_routes.goal_router)
     app.include_router(success_contract_routes.router)
+    app.include_router(vdd_routes.router)
     app.include_router(metric_routes.account_router)
     app.include_router(metric_routes.metric_router)
     app.include_router(checkpoint_routes.account_router)

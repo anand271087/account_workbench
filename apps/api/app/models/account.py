@@ -112,6 +112,19 @@ class Account(Base):
         UUID(as_uuid=True), nullable=True
     )
 
+    # M22 — Value Delivery Document. Renewal-conversation source of truth.
+    # Four sections: client priorities / agreed metrics / approach per
+    # initiative (3-lever savings) / value delivered (CSM-attributed).
+    value_delivery_document: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
+    vdd_locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    vdd_locked_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )

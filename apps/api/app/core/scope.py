@@ -53,6 +53,8 @@ _FIELDS = (
     "cs_handover_checklist", "cs_stakeholders",
     # M19 — Success Contract (3-lock structure).
     "success_contract", "success_contract_locked_at", "success_contract_locked_by",
+    # M22 — Value Delivery Document.
+    "value_delivery_document", "vdd_locked_at", "vdd_locked_by",
     "created_at", "updated_at", "deleted_at",
 )
 
