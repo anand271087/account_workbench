@@ -662,6 +662,11 @@ function CCSection({
     ["L4", l4Q, l4Q * 5, "#FD576B"],
   ];
 
+  // Avg Feedback comes from the platform telemetry when available; until
+  // then we show "—" rather than a fabricated rating.
+  const avgFeedback =
+    (data.abi as unknown as { avg_feedback?: string | null }).avg_feedback ??
+    "—";
   if (mode === "numbers") {
     return (
       <div className="grid grid-cols-2 gap-3">
@@ -673,7 +678,7 @@ function CCSection({
               ["Credits Estimated", String(creditsEst)],
               ["L3 Requests", String(l3Q)],
               ["L4 Requests", String(l4Q)],
-              ["Avg Feedback", "8.5/10"],
+              ["Avg Feedback", avgFeedback],
             ]}
           />
         </Card>

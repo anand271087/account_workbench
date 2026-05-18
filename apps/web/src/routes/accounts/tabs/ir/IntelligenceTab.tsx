@@ -277,12 +277,17 @@ function AbiEngagement({ data }: { data: PlatformIntel }) {
   const abi = data.abi;
   const cm = abi.complexity_mix;
   const totalMix = cm.l1a + cm.l1m + cm.l2 + cm.l3 + cm.l4 || 1;
+  // Usage Trend can be carried directly on the abi payload when telemetry
+  // exists (allowed via extra="allow" on AbiIntel). Falls back to "—"
+  // until the field is populated.
+  const usageTrend =
+    (abi as unknown as { usage_trend?: string | null }).usage_trend ?? "—";
   const cards: Array<[string, string, string]> = [
     ["Total Queries", String(abi.total_queries), "#4A00F8"],
     ["Queries/User", abi.queries_per_user.toFixed(1), "#C344C7"],
     ["Resolution Rate", abi.resolution_rate ?? "—", "#40CC8F"],
     ["Avg Response", abi.avg_response ?? "—", "#EF9637"],
-    ["Usage Trend", "Increasing", "#40CC8F"],
+    ["Usage Trend", usageTrend, "#40CC8F"],
   ];
   const complexityRows: Array<[string, number, string, string]> = [
     ["L1 Auto", cm.l1a, "#4A00F8", "Quick lookups"],
