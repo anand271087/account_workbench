@@ -5,6 +5,7 @@ from app.models.contact import ClientContact
 from app.models.document import AccountDiscoverySummary, Document, Job
 from app.models.cs_goal import CSGoal
 from app.models.engagement import AccountEngagement
+from app.models.intel_news import IntelNewsItem
 from app.models.meeting_brief import MeetingBrief
 from app.models.metric import SuccessMetric
 from app.models.play import AccountPlay
@@ -25,6 +26,7 @@ __all__ = [
     "ClientContact",
     "CSGoal",
     "Document",
+    "IntelNewsItem",
     "Job",
     "MeetingBrief",
     "SoftSignal",
