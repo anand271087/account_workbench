@@ -55,6 +55,9 @@ def _serialise(
         benchmark=src.get("benchmark") or {},
         engagement=src.get("engagement") or {},
         nps=src.get("nps") or {},
+        usage=src.get("usage") or {},
+        modules=src.get("modules") or {},
+        super_users=src.get("super_users") or [],
         has_data=has_data,
         is_editable=editable,
     )

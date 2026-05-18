@@ -108,6 +108,42 @@ export interface NpsIntel {
   voc: VocItem[];
 }
 
+export interface UsageIntel {
+  months: string[];
+  monthly_logins: number[];
+  monthly_active: number[];
+  licensed_users: number;
+  active_seats: number;
+  inactive_seats: number;
+}
+
+export interface ModulesMonthly {
+  mmd: number[];
+  abi: number[];
+  sd: number[];
+  dl: number[];
+  bm: number[];
+}
+
+export interface ModulesIntel {
+  mmd: number;
+  abi: number;
+  sd: number;
+  dl: number;
+  bm: number;
+  monthly: ModulesMonthly;
+}
+
+export interface SuperUser {
+  name: string;
+  role: string | null;
+  logins: number;
+  cw_views: number;
+  abi_queries: number;
+  sd_searches: number;
+  hours: number;
+}
+
 export interface PlatformIntel {
   account_id: string;
   cat_intel: CatIntel;
@@ -116,6 +152,9 @@ export interface PlatformIntel {
   benchmark: BenchmarkAvgs;
   engagement: EngagementIntel;
   nps: NpsIntel;
+  usage: UsageIntel;
+  modules: ModulesIntel;
+  super_users: SuperUser[];
   has_data: boolean;
   is_editable: boolean;
 }

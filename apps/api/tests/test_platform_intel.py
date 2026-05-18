@@ -26,7 +26,7 @@ def _find_id(client: TestClient, admin_uid, slug: str) -> str:
 def test_get_returns_seeded_data_for_mondelez(
     client: TestClient, seeded_users: dict
 ) -> None:
-    """Migration 0039 seeded Mondelez with platform_intel content."""
+    """Migration 0039 + 0040 seeded Mondelez with platform_intel content."""
     mondelez = _find_id(client, seeded_users["admin"], "mondelez")
     r = client.get(
         f"/api/v1/accounts/{mondelez}/platform-intel",
@@ -36,7 +36,7 @@ def test_get_returns_seeded_data_for_mondelez(
     body = r.json()
     assert body["has_data"] is True
 
-    # Spot-check the seeded shape.
+    # Spot-check the seeded shape — M29 sections.
     assert body["cat_intel"]["section_avg"]["price"] > 0
     assert len(body["cat_intel"]["top_cats"]) >= 3
     assert body["supplier_watch"]["tracked"] > 0
@@ -45,6 +45,14 @@ def test_get_returns_seeded_data_for_mondelez(
     assert body["engagement"]["alerts"] >= 0
     assert body["nps"]["score"] is not None
     assert len(body["nps"]["voc"]) >= 1
+
+    # M30 — analytics sections seeded by migration 0040.
+    assert len(body["usage"]["monthly_logins"]) == 12
+    assert len(body["usage"]["monthly_active"]) == 12
+    assert body["usage"]["licensed_users"] > 0
+    assert body["modules"]["mmd"] > 0
+    assert len(body["modules"]["monthly"]["mmd"]) == 12
+    assert len(body["super_users"]) >= 3
 
 
 def test_get_returns_empty_state_for_unseeded_account(

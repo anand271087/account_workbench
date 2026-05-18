@@ -182,6 +182,59 @@ class NpsIntel(BaseModel):
 
 
 # ============================================================
+# Analytics — usage + modules + super_users
+# ============================================================
+
+
+class UsageIntel(BaseModel):
+    """12-month logins + active users + adoption breakdown."""
+
+    model_config = ConfigDict(extra="allow")
+
+    months: list[str] = Field(default_factory=list)            # e.g. ["Apr", ...]
+    monthly_logins: list[int] = Field(default_factory=list)
+    monthly_active: list[int] = Field(default_factory=list)
+    licensed_users: int = 0
+    active_seats: int = 0
+    inactive_seats: int = 0
+
+
+class ModulesMonthly(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    mmd: list[int] = Field(default_factory=list)
+    abi: list[int] = Field(default_factory=list)
+    sd: list[int] = Field(default_factory=list)
+    dl: list[int] = Field(default_factory=list)
+    bm: list[int] = Field(default_factory=list)
+
+
+class ModulesIntel(BaseModel):
+    """Per-period totals + 12-month monthly trend per module."""
+
+    model_config = ConfigDict(extra="allow")
+
+    mmd: int = 0
+    abi: int = 0
+    sd: int = 0
+    dl: int = 0
+    bm: int = 0
+    monthly: ModulesMonthly = Field(default_factory=ModulesMonthly)
+
+
+class SuperUser(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    role: str | None = None
+    logins: int = 0
+    cw_views: int = 0
+    abi_queries: int = 0
+    sd_searches: int = 0
+    hours: int = 0
+
+
+# ============================================================
 # Top-level container
 # ============================================================
 
@@ -199,6 +252,10 @@ class PlatformIntelOut(BaseModel):
     benchmark: BenchmarkAvgs = Field(default_factory=BenchmarkAvgs)
     engagement: EngagementIntel = Field(default_factory=EngagementIntel)
     nps: NpsIntel = Field(default_factory=NpsIntel)
+    # M30 — analytics.
+    usage: UsageIntel = Field(default_factory=UsageIntel)
+    modules: ModulesIntel = Field(default_factory=ModulesIntel)
+    super_users: list[SuperUser] = Field(default_factory=list)
 
     has_data: bool = False
     is_editable: bool = False
@@ -216,3 +273,6 @@ class PlatformIntelUpdate(BaseModel):
     benchmark: BenchmarkAvgs | None = None
     engagement: EngagementIntel | None = None
     nps: NpsIntel | None = None
+    usage: UsageIntel | None = None
+    modules: ModulesIntel | None = None
+    super_users: list[SuperUser] | None = None
