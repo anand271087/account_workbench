@@ -12,12 +12,27 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useAccountFromLayout } from "../../AccountProfileLayout";
+import {
+  useAccountFromLayout,
+  useAccountPeriod,
+  type AccountPeriod,
+} from "../../AccountProfileLayout";
 import {
   RISK_COLOR,
   RISK_LABEL,
   type PlatformIntel,
 } from "@/types/platform_intel";
+
+// M33 — period scaling. Matches the prototype's periodScale() exactly:
+// 30d = 0.33 (one-third of a quarter), 90d = 1 (baseline), FY = 4 (the
+// 12-month annualised view). Stored numbers in platform_intel are the
+// 90d baseline; this multiplier shifts the surfaced view client-side.
+function periodScale(p: AccountPeriod): number {
+  return p === "30d" ? 1 / 3 : p === "FY" ? 4 : 1;
+}
+function scaleInt(v: number, s: number): number {
+  return Math.round(v * s);
+}
 
 type Sub =
   | "usage"
@@ -43,6 +58,8 @@ const SUB_TABS: Array<{ id: Sub; label: string }> = [
 
 export default function AnalyticsTab() {
   const account = useAccountFromLayout();
+  const { period } = useAccountPeriod();
+  const scale = periodScale(period);
   const [sub, setSub] = useState<Sub>("usage");
   const [mode, setMode] = useState<Mode>("charts");
 
@@ -90,6 +107,20 @@ export default function AnalyticsTab() {
         </div>
       </div>
 
+      {/* M33 — period legend so users know what window is in effect. */}
+      <div className="text-[11px] text-text-muted mb-2">
+        Showing data scaled to{" "}
+        <b className="text-text-secondary">
+          {period === "30d"
+            ? "last 30 days"
+            : period === "FY"
+              ? "full year (annualised)"
+              : "last 90 days"}
+        </b>{" "}
+        · change in the top-right{" "}
+        <span className="font-semibold">30d / 90d / FY</span> pill group.
+      </div>
+
       {isLoading || !data ? (
         <Card>
           <div className="text-sm text-text-muted">Loading analytics…</div>
@@ -106,21 +137,21 @@ export default function AnalyticsTab() {
           </div>
         </Card>
       ) : sub === "usage" ? (
-        <UsageSection data={data} mode={mode} />
+        <UsageSection data={data} mode={mode} period={period} />
       ) : sub === "modules" ? (
-        <ModulesSection data={data} mode={mode} />
+        <ModulesSection data={data} mode={mode} scale={scale} period={period} />
       ) : sub === "cw" ? (
-        <CWSection data={data} mode={mode} />
+        <CWSection data={data} mode={mode} scale={scale} />
       ) : sub === "abi" ? (
-        <AbiSection data={data} mode={mode} />
+        <AbiSection data={data} mode={mode} scale={scale} />
       ) : sub === "sd" ? (
-        <SDSection data={data} mode={mode} />
+        <SDSection data={data} mode={mode} scale={scale} />
       ) : sub === "srm" ? (
         <SRMSection data={data} mode={mode} />
       ) : sub === "cc" ? (
-        <CCSection data={data} mode={mode} />
+        <CCSection data={data} mode={mode} scale={scale} />
       ) : (
-        <SUSection data={data} />
+        <SUSection data={data} scale={scale} />
       )}
     </div>
   );
@@ -130,8 +161,23 @@ export default function AnalyticsTab() {
 // Usage & Logins
 // ============================================================
 
-function UsageSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
+function UsageSection({
+  data,
+  mode,
+  period,
+}: {
+  data: PlatformIntel;
+  mode: Mode;
+  period: AccountPeriod;
+}) {
   const u = data.usage;
+  // Slice the 12-month series to match the period — 30d shows the last
+  // month, 90d shows the last 3, FY shows all 12.
+  const monthsToShow = period === "30d" ? 1 : period === "90d" ? 3 : 12;
+  const len = u.months.length || 0;
+  const months = u.months.slice(Math.max(0, len - monthsToShow));
+  const logins = u.monthly_logins.slice(Math.max(0, len - monthsToShow));
+  const active = u.monthly_active.slice(Math.max(0, len - monthsToShow));
   const adoption = [
     ["Active", u.active_seats, "#40CC8F"],
     ["Inactive", u.inactive_seats, "#FD576B"],
@@ -142,16 +188,16 @@ function UsageSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
     return (
       <div className="grid grid-cols-2 gap-3">
         <Card>
-          <CardTitle>Monthly Logins</CardTitle>
+          <CardTitle>Monthly Logins · {period}</CardTitle>
           <SimpleTable
-            rows={u.months.map((m, i) => [m, String(u.monthly_logins[i] ?? 0)])}
+            rows={months.map((m, i) => [m, String(logins[i] ?? 0)])}
             headers={["Month", "Logins"]}
           />
         </Card>
         <Card>
-          <CardTitle>Monthly Active Users</CardTitle>
+          <CardTitle>Monthly Active Users · {period}</CardTitle>
           <SimpleTable
-            rows={u.months.map((m, i) => [m, String(u.monthly_active[i] ?? 0)])}
+            rows={months.map((m, i) => [m, String(active[i] ?? 0)])}
             headers={["Month", "Active"]}
           />
         </Card>
@@ -172,20 +218,12 @@ function UsageSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
   return (
     <div className="grid grid-cols-3 gap-3">
       <Card>
-        <CardTitle>Monthly Logins</CardTitle>
-        <LineChart
-          labels={u.months}
-          values={u.monthly_logins}
-          color="#4A00F8"
-        />
+        <CardTitle>Monthly Logins · {period}</CardTitle>
+        <LineChart labels={months} values={logins} color="#4A00F8" />
       </Card>
       <Card>
-        <CardTitle>Monthly Active Users</CardTitle>
-        <LineChart
-          labels={u.months}
-          values={u.monthly_active}
-          color="#40CC8F"
-        />
+        <CardTitle>Monthly Active Users · {period}</CardTitle>
+        <LineChart labels={months} values={active} color="#40CC8F" />
       </Card>
       <Card>
         <CardTitle>User Adoption</CardTitle>
@@ -205,15 +243,26 @@ function UsageSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
 // Module Activity
 // ============================================================
 
-function ModulesSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
+function ModulesSection({
+  data,
+  mode,
+  scale,
+  period,
+}: {
+  data: PlatformIntel;
+  mode: Mode;
+  scale: number;
+  period: AccountPeriod;
+}) {
   const m = data.modules;
   const items: Array<[string, number, string, keyof typeof m.monthly]> = [
-    ["Market Monitor", m.mmd, "#4A00F8", "mmd"],
-    ["Abi Queries", m.abi, "#C344C7", "abi"],
-    ["Supplier Discovery", m.sd, "#40CC8F", "sd"],
-    ["Downloads", m.dl, "#d88520", "dl"],
-    ["Benchmarks", m.bm, "#35E1D4", "bm"],
+    ["Market Monitor", scaleInt(m.mmd, scale), "#4A00F8", "mmd"],
+    ["Abi Queries", scaleInt(m.abi, scale), "#C344C7", "abi"],
+    ["Supplier Discovery", scaleInt(m.sd, scale), "#40CC8F", "sd"],
+    ["Downloads", scaleInt(m.dl, scale), "#d88520", "dl"],
+    ["Benchmarks", scaleInt(m.bm, scale), "#35E1D4", "bm"],
   ];
+  void period;
   const total = items.reduce((s, [, v]) => s + v, 0);
 
   if (mode === "numbers") {
@@ -283,9 +332,21 @@ function ModulesSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
 // Category Watch
 // ============================================================
 
-function CWSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
+function CWSection({
+  data,
+  mode,
+  scale,
+}: {
+  data: PlatformIntel;
+  mode: Mode;
+  scale: number;
+}) {
   const ci = data.cat_intel;
-  const cats = ci.top_cats.filter((c) => c.visits > 0);
+  // Visit counts scale with the period; section avg-time (minutes per page)
+  // is a per-session figure and stays stable.
+  const cats = ci.top_cats
+    .filter((c) => c.visits > 0)
+    .map((c) => ({ ...c, visits: scaleInt(c.visits, scale) }));
   const sa = ci.section_avg;
   const sectionRows: Array<[string, number, string]> = [
     ["Price Intelligence", sa.price, "#4A00F8"],
@@ -352,10 +413,26 @@ function CWSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
 // Abi Intelligence
 // ============================================================
 
-function AbiSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
+function AbiSection({
+  data,
+  mode,
+  scale,
+}: {
+  data: PlatformIntel;
+  mode: Mode;
+  scale: number;
+}) {
   const abi = data.abi;
-  const totalQ = abi.total_queries;
-  const cm = abi.complexity_mix;
+  const totalQ = scaleInt(abi.total_queries, scale);
+  // Scale the complexity-mix counts too (they're query counts in the
+  // seeded data, not percentages). Proportions stay the same.
+  const cm = {
+    l1a: scaleInt(abi.complexity_mix.l1a, scale),
+    l1m: scaleInt(abi.complexity_mix.l1m, scale),
+    l2: scaleInt(abi.complexity_mix.l2, scale),
+    l3: scaleInt(abi.complexity_mix.l3, scale),
+    l4: scaleInt(abi.complexity_mix.l4, scale),
+  };
   const totalMix = cm.l1a + cm.l1m + cm.l2 + cm.l3 + cm.l4 || 1;
   const rows: Array<[string, number, string]> = [
     ["L1 Auto", cm.l1a, "#4A00F8"],
@@ -423,8 +500,16 @@ function AbiSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
 // Supplier Discovery
 // ============================================================
 
-function SDSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
-  const sd = data.modules.sd;
+function SDSection({
+  data,
+  mode,
+  scale,
+}: {
+  data: PlatformIntel;
+  mode: Mode;
+  scale: number;
+}) {
+  const sd = scaleInt(data.modules.sd, scale);
   const monthly = data.modules.monthly.sd ?? [];
   const months = data.usage.months;
   const shortlists = Math.round(sd * 0.4);
@@ -552,10 +637,18 @@ function SRMSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
 // Custom Credits
 // ============================================================
 
-function CCSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
+function CCSection({
+  data,
+  mode,
+  scale,
+}: {
+  data: PlatformIntel;
+  mode: Mode;
+  scale: number;
+}) {
   const cm = data.abi.complexity_mix;
   const totalMix = cm.l1a + cm.l1m + cm.l2 + cm.l3 + cm.l4 || 1;
-  const totalQ = data.abi.total_queries;
+  const totalQ = scaleInt(data.abi.total_queries, scale);
   const l1mQ = Math.round((totalQ * cm.l1m) / totalMix);
   const l2Q = Math.round((totalQ * cm.l2) / totalMix);
   const l3Q = Math.round((totalQ * cm.l3) / totalMix);
@@ -625,8 +718,15 @@ function CCSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
 // Super Users
 // ============================================================
 
-function SUSection({ data }: { data: PlatformIntel }) {
-  const users = data.super_users;
+function SUSection({ data, scale }: { data: PlatformIntel; scale: number }) {
+  const users = data.super_users.map((u) => ({
+    ...u,
+    logins: scaleInt(u.logins, scale),
+    cw_views: scaleInt(u.cw_views, scale),
+    abi_queries: scaleInt(u.abi_queries, scale),
+    sd_searches: scaleInt(u.sd_searches, scale),
+    hours: scaleInt(u.hours, scale),
+  }));
   if (users.length === 0) {
     return (
       <Card>
