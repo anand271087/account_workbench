@@ -60,6 +60,79 @@ See [`docs/architecture/overview.md`](./docs/architecture/overview.md) for the d
 ## Current state
 
 ### ✅ Built
+- **Data-wiring audit + 2 hardcode fixes (2026-05-18)** ([DOC](./docs/DATA-WIRING-AUDIT.md))
+  - Audit pass over every `.tsx` under `apps/web/src` to verify every displayed number/word is backend-driven.
+  - 13 grep hits surfaced; 11 turned out to be input placeholders / scoring-weight constants / static product collateral. 2 were genuine hardcoded data values — both fixed.
+  - **Fix 1** — IntelligenceTab Abi sub-tab `"Usage Trend": "Increasing"` literal → now reads `abi.usage_trend` (carried via `extra="allow"` on `AbiIntel`).
+  - **Fix 2** — AnalyticsTab Custom Credits `"Avg Feedback": "8.5/10"` literal → now reads `abi.avg_feedback`.
+  - Migration `0041_platform_intel_telemetry_fields.sql` backfills both fields via `jsonb_set` on the existing Mondelez + Siemens seeds so the demo accounts still show non-empty values.
+  - Doc lays out per-screen data sources (account list, header trio, Home, Account Kit, Success Mgmt, Growth & Pipeline, Intelligence & Reports) + distinguishes hardcoded-data (now zero) from definitional constants (Appetite weights, SALES_STAGES ladder, MODE_CONF palette, DOC_MATERIALS catalog) + tracks deferred ETL TODOs.
+
+- **M33 — Account-header trio matches prototype (2026-05-18)** ([FUNC](./docs/features/M32-33-home-and-header/FUNCTIONAL.md) · [TECH](./docs/features/M32-33-home-and-header/TECHNICAL.md))
+  - Verified at `prototype/beroe_awb_v20.html` line 2807-2812: every account header carries a 3-piece trio in the top-right — period selector + health badge + mode pill.
+  - Replaced our old 5-card KPI strip (ACV / Renewal / Health / Tier / Category) with the prototype trio: `PeriodBar` (30d / 90d / FY pill group) + `HealthBadge` (score + Healthy / At Risk / Critical band) + `ModePill` (M26 Appetite mode with icon + colour). The displaced ACV/Renewal KPIs now live on the Home tab as the 4 KPI tiles.
+  - Period state defaults to 90d, persists in `localStorage` under `awb:account-period`, syncs across tabs via the `storage` event.
+  - New `useAccountPeriod()` hook on the outlet context so leaf tabs can read the selector.
+  - Mode pill fed by `GET /api/v1/accounts/:id/appetite-score` at layout level — render stays consistent across every sub-tab.
+  - **Period scaling wired into Analytics (Option A)** — `periodScale(period)` matches prototype `periodScale()` exactly: 30d → 1/3 · 90d → 1 · FY → 4. Per-section behaviour: Usage slices last 1/3/12 months · Modules/Abi/SD/CC/SuperUsers totals × scale · Supplier Risk + complexity-mix proportions unchanged · 12-month trend chart still shows the full year. Backend untouched; Option B (server-side period-scoped queries) deferred to v1.1 when the platform_intel ETL ships.
+
+- **M32 — Home tab (replaces Overview) + nav consolidation (2026-05-18)** ([FUNC](./docs/features/M32-33-home-and-header/FUNCTIONAL.md) · [TECH](./docs/features/M32-33-home-and-header/TECHNICAL.md))
+  - Prototype line 2784 confirms exactly 5 top-level account tabs: 🏠 Home · 📋 Account Kit · 🎯 Success Management · 🚀 Growth & Pipeline · 📊 Intelligence & Reports. Contacts and Value Def are NOT top-level (Contacts is a "Client Contacts" group inside Pre-Sales at line 5874; Value Definition is inside Solutioning at line 5956).
+  - `AccountProfileLayout` SUB_NAV now matches the prototype's 5 tabs. Old `/contacts` route still works (no nav entry); reachable from a new "Client Contacts → Manage Contacts" shortcut card on Pre-Sales. Old `/value-def` route redirects to `/account-kit/solutioning`.
+  - New `HomeTab.tsx` (~600 lines) replaces OverviewTab at the `/overview` URL (URL preserved for back-compat). Faithful port of prototype `bHome`:
+    * Header strip with mode/appetite chip
+    * Priority Action Card — cascading priority: entry → overdue CP → held-no-signoff → red flag → no value → no checkpoints; CTA deep-links to the right sub-tab
+    * 4 KPI tiles (ACV · Renewal · Health · Open signals)
+    * 🗓 This Week — computed client-side from critical signals + ≤90d renewal + high-prob plays + stale metrics (port of prototype `generateThisWeekActions`)
+    * 📡 Top Signals (M27, 3 highest-impact)
+    * 🚀 Expansion Pipeline preview (M26, prob ≥60 + weighted pipeline total)
+    * 💬 Recent Activity (M27 activities, latest 4)
+    * Health bar — only renders when overdue CPs > 0 OR Track 2 paused
+  - No backend changes — HomeTab reads from existing M19–M28 endpoints in parallel via TanStack Query.
+
+- **M31 — Intelligence & Reports · Documents & Reports (2026-05-18)** ([FUNC](./docs/features/M29-31-intelligence-reports/FUNCTIONAL.md) · [TECH](./docs/features/M29-31-intelligence-reports/TECHNICAL.md))
+  - **Backend** — `services/reports.py` with three HTML generators:
+    * `generate_qbr_html` — 8 sections (engagement scope · usage analysis · category trends · Abi usage · success metrics · checkpoint cadence · industry benchmark · expansion pipeline). Reads from account + Checkpoints (M21) + SuccessMetrics (M20) + AccountPlays (M26) + platform_intel (M29/M30).
+    * `generate_mbr_html` — monthly snapshot (usage highlights, open checkpoints, top metrics, action items).
+    * `generate_utilization_html` — adoption tile + module-wise usage + super-users table.
+  - Routes: `GET /accounts/:id/reports/{qbr|mbr|utilization}` view-gated, returns `{html, filename, type}`.
+  - **Frontend** — `DocumentsReportsTab.tsx` replaces M29 stub:
+    * 3 report-type cards with HTML / PPT / PDF buttons. HTML works → iframe preview + Download HTML button (Blob URL). PPT / PDF disabled with v1.1 tooltips (need python-pptx + reportlab templates).
+    * Solutioning Proposals — shortcut link to Account Kit → Solutioning rather than duplicating the upload UI.
+    * Available Materials library — 6 groups × 3-5 items ported verbatim from prototype `DOC_MATERIALS` into `types/doc_materials.ts`. View button → modal with summary.
+  - Tests: 4 in `test_reports.py` (QBR renders 8 sections + Mondelez seed data appears, MBR sections, utilization super-users rendered, sol_mgr view-only). All green.
+
+- **M30 — Intelligence & Reports · Analytics section (2026-05-18)** ([FUNC](./docs/features/M29-31-intelligence-reports/FUNCTIONAL.md) · [TECH](./docs/features/M29-31-intelligence-reports/TECHNICAL.md))
+  - Replaces M29 stub. 8 sub-tabs faithful to prototype `bAnalytics`: Usage & Logins · Module Activity · Category Watch · Abi Intelligence · Supplier Discovery · Supplier Risk · Custom Credits · Super Users.
+  - **Backend** — migration `0040_platform_intel_analytics.sql` extends `accounts.platform_intel` jsonb on Mondelez + Siemens with three new top-level keys: `usage` (12-month logins + active users + adoption), `modules` (per-period totals + 12-month monthly trend per module), `super_users` (top 5 power-user roster).
+  - `schemas/platform_intel.py` gains `UsageIntel` + `ModulesIntel` + `ModulesMonthly` + `SuperUser` models; PlatformIntelOut/Update extended.
+  - **Frontend** — `AnalyticsTab.tsx` with Numbers / Charts mode toggle per-section. Zero-dependency inline SVG renderers: `LineChart`, `MultiLineChart`, `BarChart`, `DonutChart` (centre-label shows total). Empty-state when `has_data: false`.
+  - Numbers mode renders faithful tables; Charts mode renders the SVGs. Super Users sub-tab is table-only.
+  - Tests: existing platform_intel suite extended with M30 assertions (12-month series length, module trend length, super_users count). 6/6 green.
+
+- **M29 — Intelligence & Reports scaffold + Intelligence section (2026-05-17)** ([FUNC](./docs/features/M29-31-intelligence-reports/FUNCTIONAL.md) · [TECH](./docs/features/M29-31-intelligence-reports/TECHNICAL.md))
+  - New top-level **📊 Intelligence & Reports** tab (cyan theme) in the account profile. Three-section pill nav: Intelligence (live) · Analytics (M30) · Documents & Reports (M31).
+  - **Backend** — migration `0039_platform_intel.sql` adds `accounts.platform_intel jsonb` (single column carries the whole 6-section snapshot — same single-jsonb pattern as M19/M22/M23) + jsonb-object CHECK + seeded demo content for Mondelez + Siemens Energy.
+  - `schemas/platform_intel.py` — 6 section models (CatIntel, SupplierWatch, AbiIntel, BenchmarkAvgs, EngagementIntel, NpsIntel) + PlatformIntelOut/Update; `extra="allow"` everywhere so the prototype's evolving fields flow through without DDL churn.
+  - Routes: `GET/PATCH /accounts/:id/platform-intel` — section-level replace, `null` value pops the key.
+  - **Frontend** — `IntelReportsLayout.tsx` (cyan sub-tab strip) + `IntelligenceTab.tsx` (~500 lines, faithful port of `bIntel`) with all 6 sub-tabs:
+    * Category Watch — section-avg times + heat list (🔥/🤝/⭐/❄) + insights with ok/warn/red tones
+    * Supplier Watch — 5 risk-tier KPI tiles + tracked-suppliers table
+    * Abi Engagement — 5 KPIs + complexity-mix bars + top types + insight callout
+    * Industry Benchmark — 3-up comparison cards with Above/On Par/Below pill
+    * Engagement Metrics — 5 channel KPIs + 7-segment user breakdown
+    * NPS — score with Promoter/Passive/Detractor label + VoC quotes with sentiment-coloured left border
+  - Tests: 6 in `test_platform_intel.py` (seeded GET, empty-state, section replace, null clears section, sol_mgr view-only, CSM-on-own can patch). All green.
+
+- **M28 — Growth & Pipeline · External Intelligence (2026-05-17)** ([FUNC](./docs/features/M28-external-intelligence/FUNCTIONAL.md) · [TECH](./docs/features/M28-external-intelligence/TECHNICAL.md))
+  - Replaces the M26 stub for the External Intelligence sub-tab. Faithful port of prototype `bExtIntel` + push-as-signal integration into the M27 SoftSignal flow.
+  - **Backend** — migration `0038_intel_news.sql` adds `intel_news_category` enum (10 categories matching the prototype filter strip: financial_performance / supply_chain / supplier_strategy / expansion_capex / regulatory_compliance / sustainability_esg / digital_transformation / risk_geopolitical / product_innovation / m_and_a) + `intel_signal_relevance` enum + `intel_news_items` table with `signal_id` back-ref into `soft_signals`.
+  - `services/intel_news.py` — `stub_generate` (deterministic 6-item set keyed on `sha256(account_name)`, spans ≥4 categories) + `_real_generate` (one Claude call, JSON-only schema, 24h cache) + `generate_intel_news` public entry with stub fallback.
+  - Routes: `GET/POST /accounts/:id/intel-news`, `POST /accounts/:id/intel-news/refresh` (dedup on headline), `PATCH /intel-news/:id`, `POST /intel-news/:id/push-as-signal` (creates SoftSignal + back-link; idempotent), `DELETE /intel-news/:id` (admin-only).
+  - **Push-as-signal mapping** — category → signal type (financial_performance → risk; supply_chain → critical; expansion_capex → expansion; sustainability_esg → positive; …) + relevance → impact 1:1.
+  - **Frontend** — `ExternalIntelTab.tsx` (replaces M26 stub): refresh button, search input, 11-pill filter strip (All + 10 categories) with active-state coloured per category, cards with pulsing red-dot on high relevance + category pill + publication + date + AI/New chips + "→ Push as Soft Signal" button (turns into "✓ Signal created" once promoted). Pushing invalidates intel-news + signals + appetite queries so the M26 banner picks up the new signal next render.
+  - Tests: 6 in `test_intel_news.py` (stub determinism + diversity, refresh+dedup, manual create+hide, push-as-signal idempotency with correct type+impact mapping, RBAC). All green.
+
 - **Sprint-1 bug-fix pass (2026-05-17)** ([FUNC](./docs/features/SPRINT1-bugfix/FUNCTIONAL.md) · [TECH](./docs/features/SPRINT1-bugfix/TECHNICAL.md))
   - 7 bugs from `Bug_Tracker_For 1st Sprint.xlsx` (Harish, 2026-05-12) cleared in one commit (`190ac7f`).
   - **Bug 7 — Reassign owner widened** (P1, Roles): `can_reassign_account_owner` now `{admin, cs_director, vp_csm, vp_sales}` (was admin-only). Frontend `AccountListPage` swaps `isAdmin` for `canReassign` on the per-row Reassign link + the bulk-reassign affordance. Audited by the existing SQLA before_flush listener.
@@ -333,11 +406,11 @@ See [`docs/architecture/overview.md`](./docs/architecture/overview.md) for the d
 _(none — Sprint 1 deployed and stakeholder-demo-ready)_
 
 ### ⏳ Up next
-- **M28 — Growth & Pipeline · External Intelligence (sub-tab 3 of 3).** Market and competitor intel scoped per account (category trend cards, competitor signals, Beroe research links filtered by account scope, AI weekly summary). Stub already routed in M26; replaces it with real data.
 - **M24 — Leadership view.** New top-level cross-account portfolio dashboard: M23 outcome rollup (renewed / at_risk / not_renewed counts), value-delivered total from M22 VDDs, overdue-checkpoint count from M21, red-flag list across portfolio. Read-only dashboards.
-- **M16.1 — Account-header PATCH endpoint.** Today the MoM extraction modal surfaces industry / country / annual_revenue / tier_band / sf_link as informational chips because there's no scalar PATCH on `accounts`. Add `PATCH /api/v1/accounts/:id` for those five fields so the apply step covers the whole header.
-- **Home + Intel top-level scaffolds** — last two top-level tabs from the prototype (🏠 Home / 📊 Intelligence & Reports). Home is the AI-powered single pane of glass (priority action card + this-week list + pipeline preview); Intelligence wraps the existing Discovery summary + Analytics + Documents views.
-- **v1.1 backlog** — bulk import for users; audio/video transcription on document upload; AI assistant side panel; PowerPoint export of VDD; release the test-pollution flakes (`test_pagination`, `test_list_contacts_admin`) by switching cross-test cleanup to fixture-scoped truncates.
+- **M16.1 — Account-header PATCH endpoint.** The MoM extraction modal still surfaces industry / country / annual_revenue / tier_band / sf_link as informational chips because there's no scalar PATCH on `accounts`. Add `PATCH /api/v1/accounts/:id` for those five fields so the apply step covers the whole header.
+- **`platform_intel` ETL pipeline (v1.1)** — today the Intelligence + Analytics surfaces read from `accounts.platform_intel` jsonb seeded for Mondelez + Siemens via migrations 0039–0041. Real ingestion is a Beroe-Live → AWB feed that lands the same JSON shape on a schedule. When that pipeline ships the **frontend doesn't change** — same `GET /platform-intel` endpoint serves it, every screen updates automatically (see `docs/DATA-WIRING-AUDIT.md`).
+- **PPT / PDF export of reports** — QBR / MBR / Utilization currently render as HTML inside an iframe + Download HTML. PPT needs python-pptx templates; PDF needs reportlab. Buttons disabled with v1.1 tooltips.
+- **v1.1 backlog** — bulk import for users; audio/video transcription on document upload; AI assistant side panel; release the test-pollution flakes (`test_pagination`, `test_list_contacts_admin`) by switching cross-test cleanup to fixture-scoped truncates; Option B period-scoped queries (server-side period scaling, currently client-side Option A in Analytics); SD regional split sourced from telemetry; Industry-benchmark cross-account aggregation server-side.
 
 ---
 
@@ -470,6 +543,41 @@ _(none — Sprint 1 deployed and stakeholder-demo-ready)_
 - **2026-05-17** — Paste-text upload wraps clipboard content as a synthetic `pasted-{kind}-{ts}.txt` `File` and pushes through the regular `handleFiles` pipeline (not a separate paste endpoint). Reason: one upload path = one bug class. Celery, AI summarisation, MoM/VPD extraction, document table — all the existing plumbing fires automatically; reviewers don't need to learn a new flow.
 - **2026-05-17** — `KindUploadCard` upload affordance disabled when `data.is_editable` is false. Reason: stakeholder bug 1 — "Upload option needs to be disabled" for roles that can't write. The endpoint already returned `is_editable` derived from `can_write_documents(role, kind)`; just needed the frontend to honour it.
 - **2026-05-17** — `documents.notes` (Bug 3) added as a free-text column rather than reusing `ai_summary_text`. Reason: notes and AI summaries are separate concerns — the AI summary changes on re-run, but human-written notes shouldn't. Distinct field also keeps the AI-tag lifecycle (`ai_edited` → `ai_assisted`) clean since notes aren't ai_edited material.
+
+### M28 — External Intelligence (2026-05-17)
+
+- **2026-05-17** — Intel-news category enum → soft-signal type map hardcoded in `routes/intel_news.py` (`_CATEGORY_TO_SIGNAL_TYPE`): financial_performance/regulatory/risk_geopolitical → `risk`; supply_chain → `critical`; expansion_capex/m_and_a → `expansion`; sustainability/digital → `positive`; product_innovation/supplier_strategy → `neutral`. Reason: the prototype `pushNewsAsSignal` does the same mapping. Reasonable defaults for sprint-1; will become editable once stakeholders surface edge cases.
+- **2026-05-17** — Push-as-signal is **idempotent**: second call returns the existing `signal_id` without creating a duplicate. Reason: the CSM might click the button twice (debounce edge case) or revisit the modal. Idempotency keeps the signals feed clean.
+- **2026-05-17** — Intel-news AI generation uses the shared `_doc_cache` from `services/claude.py` (24h TTL, sha256 key on `intel|model|account_name|industry`). Reason: same caching infrastructure as MoM extraction + VPD goals extraction; no separate cache to maintain.
+
+### M29–M31 — Intelligence & Reports (2026-05-17 → 2026-05-18)
+
+- **2026-05-17** — Intelligence + Analytics surfaces live in **one** `accounts.platform_intel` jsonb column rather than 8 separate tables (cat_intel, supplier_watch, abi, benchmark, engagement, nps, usage, modules, super_users). Reason: data shape evolves with the prototype every iteration; cross-account queries on these sub-fields aren't a sprint-1 need (the surface is read 1:1 by the Intelligence tab); the ETL pipeline (v1.1) writes one big JSON blob per account on a schedule, which fits a single column cleanly.
+- **2026-05-17** — Sample seed content on Mondelez + Siemens via migrations 0039–0040 carries through to QBR/MBR/Utilization report HTML (M31). Reason: the same column is the source of truth — when real telemetry lands, every screen + every report picks it up via the existing `GET /platform-intel` endpoint with no further code changes.
+- **2026-05-18** — Analytics charts ship as **inline SVG** instead of Chart.js. Reason: keeps the bundle lean (no ~200kB chart dependency), avoids React-Chart.js interop quirks, and the chart vocab needed (line / multi-line / bar / donut) is small enough to write directly. Trade-off: no built-in interactivity (tooltips/zoom) — adequate for stakeholder review; can upgrade to Recharts later if needed.
+- **2026-05-18** — Reports HTML generation is **server-side string concatenation**, not Jinja templates. Reason: the templates are small (~150 lines each) and inline-styled for portability; no external template-engine dependency. PPT/PDF export (v1.1) will need `python-pptx` and `reportlab` and can keep the same data-fetch shape.
+- **2026-05-18** — `DOC_MATERIALS` lives as a frontend constant (`apps/web/src/types/doc_materials.ts`), not a DB table. Reason: it's a static catalog of Beroe product collateral, not customer data. Updating it is a code commit; same as the prototype.
+
+### M32 — Home tab + nav consolidation (2026-05-18)
+
+- **2026-05-18** — Top-level account nav reduced from 7 entries (Overview + Account Kit + Success Mgmt + Growth + Intel + Contacts + Value Def) to **exactly 5** matching the prototype (Home / Account Kit / Success Mgmt / Growth / Intel). Reason: prototype line 2784 is canonical. Contacts + Value Def belong inside their workflow context (Pre-Sales / Solutioning respectively), not as top-level distractions.
+- **2026-05-18** — Contacts kept as a fully-routed page (richer than the prototype's inline list) and reached from a **shortcut card on Pre-Sales** rather than a top-level tab. Reason: we built more than the prototype here (sortable columns, SPOC/sponsor pinning, soft-delete + 30-day restore). Throwing that away to match the prototype's simpler shape would lose value. Funnel + reach via the workflow stays prototype-faithful.
+- **2026-05-18** — `/value-def` redirects to `/account-kit/solutioning` rather than being a thin alias. Reason: prevents future drift — there's one place for value definition (`account_solutioning.value_definition`) and one URL for it. Old bookmarks keep working via the redirect.
+- **2026-05-18** — Home tab is **client-side composition** of existing endpoints — no new backend route. Reason: every block on Home (Priority Action, This Week, Top Signals, Pipeline, Activity, Health bar) is a derived view of M19–M28 data. A dedicated `/home-summary` endpoint would be a duplication; running 7 parallel queries via TanStack Query is faster on a cold tab and degrades gracefully when any single fetch errors.
+- **2026-05-18** — Priority cascade hardcoded in the frontend (entry → overdue CP → held-no-signoff → red flag → no value → no checkpoints). Reason: same logic as the prototype's `bHome` priority cascade. Future configurability (per-account rule overrides) is a v1.1 backlog item.
+
+### M33 — Account-header trio (2026-05-18)
+
+- **2026-05-18** — Replaced 5-card KPI strip (ACV / Renewal / Health / Tier / Category) with the prototype's **3-piece trio** in the header (Period selector · Health badge · Mode pill). Reason: prototype line 2807-2812 is canonical, and the displaced KPIs already live on Home as the 4 KPI tiles + in-context on individual tabs (Account Kit shows tier/category; Home shows ACV + renewal). No information lost; less header clutter.
+- **2026-05-18** — Period state persisted in `localStorage` under `awb:account-period` (not in URL query string). Reason: URL noise — every navigation would carry `?period=90d` clutter. `localStorage` is per-device; `storage` event listener keeps multiple tabs in sync. Cross-device sync is a v1.1 nice-to-have.
+- **2026-05-18** — Period scaling implemented as **Option A** (client-side multiplication: 30d → ÷3, 90d → 1, FY → ×4) in `AnalyticsTab`, matching prototype `periodScale()` exactly. Reason: backend doesn't have time-series telemetry yet (`platform_intel` carries 90d-baseline + 12-month series as static JSON). Option B (server-side `?period=` filtering against real time-series) lands when the v1.1 ETL ships. Frontend swap will be a 5-line change.
+- **2026-05-18** — Mode pill fetched at the layout level via `GET /appetite-score` rather than re-fetched per sub-tab. Reason: stays consistent across navigation; single TanStack Query cache entry shared with `AccountPlanTab`. Invalidated when signals or plays mutate (M27 push-as-signal flow).
+
+### Data-wiring audit (2026-05-18)
+
+- **2026-05-18** — Audit pass over every frontend `.tsx` for suspicious hardcoded literals. Method: regex sweep for customer names, $-amounts, percent strings, trend words, ratings. 13 hits found; 11 were input placeholders / scoring weights / static collateral; **2 were genuine hardcoded data** values — both fixed in this commit. Reason: confidence check before real customer data lands. Without this, demo accounts hide stale literals; once ETL ships those literals would conflict with real data.
+- **2026-05-18** — Telemetry-side Abi fields (`usage_trend`, `avg_feedback`) carried via the existing `extra="allow"` on the Pydantic `AbiIntel` model rather than adding strict schema fields. Reason: low cost to add, but it sets a precedent — telemetry fields evolve faster than core schemas, and `extra="allow"` is exactly the relief valve for that. Frontend reads with a type-safe `?? "—"` fallback so an empty seed doesn't render fabricated values.
+- **2026-05-18** — `docs/DATA-WIRING-AUDIT.md` is the canonical per-screen data-source manifest. Reason: stakeholder ETL conversation needs a single doc to point to. Re-runnable regex commands at the bottom so the audit can be repeated as new screens land.
 
 ---
 
