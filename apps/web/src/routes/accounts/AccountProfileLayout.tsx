@@ -21,14 +21,21 @@ interface SubNavItem {
   show: (a: AccountDetail) => boolean;
 }
 
+// M32 — top-level nav matches the prototype's 5-tab structure exactly:
+// Home (was Overview) · Account Kit · Success Management · Growth &
+// Pipeline · Intelligence & Reports. Contacts and Value Def used to be
+// top-level entries; both now live where the prototype puts them —
+// Contacts inside Account Kit → Pre-Sales (Client Contacts group), and
+// Value Def inside Account Kit → Solutioning. Back-compat redirects in
+// App.tsx keep the old `/contacts` + `/value-def` URLs working.
 const SUB_NAV: SubNavItem[] = [
-  { to: "overview",   label: "Overview",   show: () => true },
+  { to: "overview",   label: "🏠 Home",    show: () => true },
   // M17 — Pre-Sales / Brief / Solutioning / Sales Handoff / CS Onboarding
   // are grouped under a single "Account Kit" tab. The sub-tab strip lives
   // inside AccountKitLayout. Visibility = at least one inner sub is visible.
   {
     to: "account-kit",
-    label: "Account Kit",
+    label: "📋 Account Kit",
     show: (a) =>
       a.can_view_pre_sales ||
       a.can_view_solutioning ||
@@ -40,7 +47,7 @@ const SUB_NAV: SubNavItem[] = [
   // view rights (same gate as the downstream CSM workflow).
   {
     to: "success-management",
-    label: "Success Management",
+    label: "🎯 Success Management",
     show: (a) => a.can_view_cs_onboarding,
   },
   // M26 — Growth & Pipeline. Three sub-tabs (Account Plan live; Signals
@@ -48,7 +55,7 @@ const SUB_NAV: SubNavItem[] = [
   // gated on the same CS-onboarding view right as the rest of the funnel.
   {
     to: "growth-pipeline",
-    label: "Growth & Pipeline",
+    label: "🚀 Growth & Pipeline",
     show: (a) => a.can_view_cs_onboarding,
   },
   // M29 — Intelligence & Reports group: Intelligence (live) + Analytics
@@ -56,11 +63,9 @@ const SUB_NAV: SubNavItem[] = [
   // surface; anyone with view access on the account can read.
   {
     to: "intel-reports",
-    label: "Intelligence & Reports",
+    label: "📊 Intelligence & Reports",
     show: () => true,
   },
-  { to: "contacts",  label: "Contacts",  show: (a) => a.can_view_contacts },
-  { to: "value-def", label: "Value Def", show: () => true },
   // Goals folded into Success Management → Contract & Goals (M19).
   // Old /goals URL still works via the back-compat redirect in App.tsx.
 ];

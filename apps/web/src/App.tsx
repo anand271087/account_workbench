@@ -22,7 +22,7 @@ import AnalyticsTab from "@/routes/accounts/tabs/ir/AnalyticsTab";
 import DocumentsReportsTab from "@/routes/accounts/tabs/ir/DocumentsReportsTab";
 import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
-import OverviewTab from "@/routes/accounts/tabs/OverviewTab";
+import HomeTab from "@/routes/accounts/tabs/HomeTab";
 import PreSalesTab from "@/routes/accounts/tabs/PreSalesTab";
 import ContactsTab from "@/routes/accounts/tabs/ContactsTab";
 import SalesHandoffTab from "@/routes/accounts/tabs/SalesHandoffTab";
@@ -30,7 +30,6 @@ import SolutioningTab from "@/routes/accounts/tabs/SolutioningTab";
 import UsersPage from "@/routes/admin/UsersPage";
 import CategoriesPage from "@/routes/admin/CategoriesPage";
 import { useAuth } from "@/components/AuthProvider";
-import { ValueDefinitionPlaceholder } from "@/routes/accounts/tabs/PlaceholderTab";
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { me, isLoading } = useAuth();
@@ -118,7 +117,10 @@ export default function App() {
         }
       >
         <Route index element={<Navigate to="overview" replace />} />
-        <Route path="overview" element={<OverviewTab />} />
+        {/* M32 — Home replaces Overview at the /overview URL so existing
+            bookmarks keep working. Top-nav label is "🏠 Home". */}
+        <Route path="overview" element={<HomeTab />} />
+        <Route path="home" element={<Navigate to="../overview" replace />} />
 
         {/* M17 — Account Kit group: Pre-Sales / Brief / Solutioning / Sales Handoff / CS Onboarding */}
         <Route path="account-kit" element={<AccountKitLayout />}>
@@ -164,8 +166,15 @@ export default function App() {
           <Route path="documents" element={<DocumentsReportsTab />} />
         </Route>
 
+        {/* M32 — Contacts + Value Def removed from the top nav (prototype
+            puts Client Contacts inside Pre-Sales and Value Definition
+            inside Solutioning). Routes kept as back-compat redirects so
+            existing bookmarks land in the right place. */}
         <Route path="contacts" element={<ContactsTab />} />
-        <Route path="value-def" element={<ValueDefinitionPlaceholder />} />
+        <Route
+          path="value-def"
+          element={<Navigate to="../account-kit/solutioning" replace />}
+        />
         {/* M19 — /goals folded into Success Management → Contract & Goals.
              Back-compat redirect so existing bookmarks land in the new home. */}
         <Route path="goals" element={<Navigate to="../success-management/contract-goals" replace />} />

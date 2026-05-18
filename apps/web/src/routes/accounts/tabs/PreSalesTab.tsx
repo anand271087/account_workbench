@@ -158,6 +158,27 @@ export default function PreSalesTab() {
         </span>
       </button>
 
+      {/* M32 — Client Contacts shortcut. Prototype puts contacts as a
+          "Client Contacts" group inside Pre-Sales (line ~5874 of
+          beroe_awb_v20.html). We keep the richer M6 contacts surface
+          but funnel users into it from here so the discovery flow stays
+          intact. */}
+      <button
+        type="button"
+        onClick={() => navigate(`/accounts/${account.id}/contacts`)}
+        className="w-full bg-white rounded-card border border-beroe-card-border px-5 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-2"
+      >
+        <span className="text-sm font-bold text-text-primary">
+          Client Contacts
+        </span>
+        <span className="text-[11px] text-text-muted">
+          · SPOC, sponsor, decision-power map for {account.name}
+        </span>
+        <span className="ml-auto text-xs text-beroe-blue font-semibold">
+          Manage Contacts →
+        </span>
+      </button>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
         {/* Engagement objective + AI quality check */}
