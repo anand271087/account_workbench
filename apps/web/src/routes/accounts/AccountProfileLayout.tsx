@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from "react-router-dom";
 
@@ -7,13 +8,18 @@ import { StarButton } from "@/components/StarButton";
 import { api, ApiError } from "@/lib/api";
 import { useFavoriteAccounts } from "@/lib/use-favorites";
 import { cn } from "@/lib/utils";
-import {
-  formatACV,
-  formatRenewalDays,
-  healthBucket,
-  initials,
-} from "@/lib/format";
+import { initials } from "@/lib/format";
 import type { AccountDetail } from "@/types/account";
+import type { Appetite } from "@/types/play";
+import { MODE_CONF } from "@/types/play";
+
+// M33 — Period selector. The prototype's account header has a 30d/90d/FY
+// toggle in the top-right. We store the choice in localStorage scoped by
+// account so navigation keeps your view stable across reloads, and pass
+// it down via outlet context so leaf tabs (Home, Analytics) can react.
+export type AccountPeriod = "30d" | "90d" | "FY";
+const PERIODS: AccountPeriod[] = ["30d", "90d", "FY"];
+const PERIOD_KEY = "awb:account-period";
 
 interface SubNavItem {
   to: string;
@@ -84,6 +90,42 @@ export default function AccountProfileLayout() {
     retry: 0,
   });
 
+  // M33 — Appetite score drives the mode pill in the header. Fetched
+  // once at the layout so leaf tabs share the same view.
+  const apptQ = useQuery<Appetite>({
+    queryKey: ["appetite", accountId],
+    queryFn: () =>
+      api.get<Appetite>(`/api/v1/accounts/${accountId}/appetite-score`),
+    enabled: !!accountId,
+    retry: 0,
+  });
+
+  // M33 — Period selector state. Default 90d. Persisted in localStorage.
+  const [period, setPeriodState] = useState<AccountPeriod>(() => {
+    if (typeof window === "undefined") return "90d";
+    const v = window.localStorage.getItem(PERIOD_KEY);
+    return v === "30d" || v === "90d" || v === "FY" ? v : "90d";
+  });
+  const setPeriod = (p: AccountPeriod) => {
+    setPeriodState(p);
+    try {
+      window.localStorage.setItem(PERIOD_KEY, p);
+    } catch {
+      // ignore (private-mode + storage-quota etc.)
+    }
+  };
+  // Initial mount nudge in case localStorage changed in another tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === PERIOD_KEY && (e.newValue === "30d" || e.newValue === "90d" || e.newValue === "FY")) {
+        setPeriodState(e.newValue);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   if (isLoading) {
     return (
       <AppShell>
@@ -121,9 +163,6 @@ export default function AccountProfileLayout() {
   }
 
   if (!data) return null;
-
-  const renewal = formatRenewalDays(data.days_to_renewal);
-  const health = healthBucket(data.health_score);
 
   // If the URL is /accounts/:id (no sub-tab), redirect to overview.
   const lastSeg = loc.pathname.split("/").filter(Boolean).pop();
@@ -172,25 +211,16 @@ export default function AccountProfileLayout() {
             </div>
           </div>
 
-          {/* KPI strip — uniform cards (prototype `.kpi`), aligned baselines */}
-          <div className="flex items-stretch gap-2 flex-wrap">
-            <Stat label="ACV" value={formatACV(data.current_acv)} />
-            <Stat
-              label="Renewal"
-              value={renewal.label}
-              tone={renewal.tone}
-              alert={renewal.tone === "danger"}
-              sub={data.renewal_date ?? undefined}
-            />
-            <Stat
-              label="Health"
-              value={health.label}
-              tone={health.tone}
-              alert={health.tone === "danger"}
-              sub={data.health_score !== null ? String(data.health_score) : undefined}
-            />
-            <Stat label="Tier" value={data.tier ?? "—"} />
-            <Stat label="Category" value={data.category ?? "—"} />
+          {/* M33 — Header trio (faithful port of prototype account-header
+              top-right, line 2807-2812 of beroe_awb_v20.html):
+                1. Period selector (30d / 90d / FY) — pill group
+                2. Health score badge — score number + status label
+                3. Mode pill — current Appetite Score mode (rescue /
+                   retain / expand) with icon + label. */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <PeriodBar value={period} onChange={setPeriod} />
+            <HealthBadge score={data.health_score} />
+            <ModePill appetite={apptQ.data} />
           </div>
         </div>
 
@@ -217,13 +247,102 @@ export default function AccountProfileLayout() {
 
       {/* Tab outlet */}
       <div className="p-6">
-        <Outlet context={{ account: data }} />
+        <Outlet context={{ account: data, period, setPeriod }} />
       </div>
     </AppShell>
   );
 }
 
-function Stat({
+// M33 — Period selector. Pill group exactly matching the prototype's
+// `.per-bar` + `.per-btn` styling.
+function PeriodBar({
+  value,
+  onChange,
+}: {
+  value: AccountPeriod;
+  onChange: (p: AccountPeriod) => void;
+}) {
+  return (
+    <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5">
+      {PERIODS.map((p) => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={cn(
+            "text-[11px] px-3 py-1 rounded font-semibold transition-colors",
+            value === p
+              ? "bg-white shadow-sm text-beroe-blue"
+              : "text-text-muted hover:text-text-secondary",
+          )}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// M33 — Health badge. Score + colour-keyed status label, matching the
+// prototype account-header trio (Healthy / At Risk / Critical bands).
+function HealthBadge({ score }: { score: number | null }) {
+  const s = score ?? 0;
+  const tone =
+    s >= 70
+      ? { col: "#40CC8F", bg: "#E8F8EF", label: "Healthy" }
+      : s >= 40
+        ? { col: "#EF9637", bg: "#FFF4E5", label: "At Risk" }
+        : { col: "#e63950", bg: "#FCEBED", label: "Critical" };
+  return (
+    <div
+      className="text-center rounded-lg px-3 py-1.5"
+      style={{ background: tone.bg }}
+    >
+      <div
+        className="text-[16px] font-extrabold leading-none"
+        style={{ color: tone.col }}
+      >
+        {score === null ? "—" : score}
+      </div>
+      <div
+        className="text-[8px] font-bold uppercase tracking-wider mt-0.5"
+        style={{ color: tone.col }}
+      >
+        {tone.label}
+      </div>
+    </div>
+  );
+}
+
+// M33 — Mode pill. Mirrors the prototype's buildModePill — current
+// recommended mode (rescue / retain / expand) with icon + label.
+function ModePill({ appetite }: { appetite: Appetite | undefined }) {
+  if (!appetite) {
+    return (
+      <span className="text-[10px] px-2 py-1 rounded-md border border-beroe-card-border text-text-muted">
+        Mode —
+      </span>
+    );
+  }
+  const conf = MODE_CONF[appetite.current_mode];
+  return (
+    <span
+      className="text-[11px] px-2.5 py-1 rounded-md border font-bold"
+      style={{
+        background: conf.bg,
+        color: conf.col,
+        borderColor: conf.col + "30",
+      }}
+      title={`Appetite ${appetite.score}/100 · ${appetite.is_overridden ? "Manual override" : "Auto-recommended"}`}
+    >
+      {conf.icon} {conf.label}
+    </span>
+  );
+}
+
+// Legacy Stat KPI card — exported so other tabs can still use the
+// compact card primitive. Not rendered in the layout header anymore
+// as of M33 (replaced by the trio above).
+export function Stat({
   label,
   value,
   sub,
@@ -278,8 +397,24 @@ function Stat({
   );
 }
 
-/** Hook that tabs use to access the parent layout's account. */
+/** Hook that tabs use to access the parent layout's account + period. */
 import { useOutletContext } from "react-router-dom";
+
+interface AccountOutletContext {
+  account: AccountDetail;
+  period: AccountPeriod;
+  setPeriod: (p: AccountPeriod) => void;
+}
+
 export function useAccountFromLayout(): AccountDetail {
-  return (useOutletContext<{ account: AccountDetail }>()).account;
+  return (useOutletContext<AccountOutletContext>()).account;
+}
+
+/** Hook for tabs that want to react to the period selector. */
+export function useAccountPeriod(): {
+  period: AccountPeriod;
+  setPeriod: (p: AccountPeriod) => void;
+} {
+  const ctx = useOutletContext<AccountOutletContext>();
+  return { period: ctx.period, setPeriod: ctx.setPeriod };
 }
