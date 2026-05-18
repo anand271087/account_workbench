@@ -59,6 +59,8 @@ _FIELDS = (
     "delivery_renewal", "dr_outcome", "dr_outcome_set_at", "dr_outcome_set_by",
     # M26 — Growth & Pipeline · mode override.
     "plan_current_mode",
+    # M29 — Intelligence & Reports · Intelligence section snapshot.
+    "platform_intel",
     "created_at", "updated_at", "deleted_at",
 )
 

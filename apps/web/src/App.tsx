@@ -16,6 +16,10 @@ import GrowthPipelineLayout from "@/routes/accounts/GrowthPipelineLayout";
 import AccountPlanTab from "@/routes/accounts/tabs/gp/AccountPlanTab";
 import SignalsActivityTab from "@/routes/accounts/tabs/gp/SignalsActivityTab";
 import ExternalIntelTab from "@/routes/accounts/tabs/gp/ExternalIntelTab";
+import IntelReportsLayout from "@/routes/accounts/IntelReportsLayout";
+import IntelligenceTab from "@/routes/accounts/tabs/ir/IntelligenceTab";
+import AnalyticsTab from "@/routes/accounts/tabs/ir/AnalyticsTab";
+import DocumentsReportsTab from "@/routes/accounts/tabs/ir/DocumentsReportsTab";
 import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
 import OverviewTab from "@/routes/accounts/tabs/OverviewTab";
@@ -150,6 +154,14 @@ export default function App() {
           <Route path="plan"      element={<AccountPlanTab />} />
           <Route path="signals"   element={<SignalsActivityTab />} />
           <Route path="ext-intel" element={<ExternalIntelTab />} />
+        </Route>
+
+        {/* M29 — Intelligence & Reports group: Intelligence (live) + Analytics + Documents */}
+        <Route path="intel-reports" element={<IntelReportsLayout />}>
+          <Route index element={<Navigate to="intelligence" replace />} />
+          <Route path="intelligence" element={<IntelligenceTab />} />
+          <Route path="analytics" element={<AnalyticsTab />} />
+          <Route path="documents" element={<DocumentsReportsTab />} />
         </Route>
 
         <Route path="contacts" element={<ContactsTab />} />

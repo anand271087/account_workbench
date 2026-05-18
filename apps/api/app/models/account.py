@@ -143,6 +143,14 @@ class Account(Base):
         String, nullable=True
     )
 
+    # M29 — Intelligence & Reports · Intelligence section. Per-account
+    # platform metrics snapshot powering the 6 Intelligence sub-tabs.
+    # Real telemetry ingestion lands in v1.1; for now seeded for demo
+    # accounts via migration 0039.
+    platform_intel: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )

@@ -51,6 +51,14 @@ const SUB_NAV: SubNavItem[] = [
     label: "Growth & Pipeline",
     show: (a) => a.can_view_cs_onboarding,
   },
+  // M29 — Intelligence & Reports group: Intelligence (live) + Analytics
+  // (M30 stub) + Documents & Reports (M31 stub). Read-only platform-data
+  // surface; anyone with view access on the account can read.
+  {
+    to: "intel-reports",
+    label: "Intelligence & Reports",
+    show: () => true,
+  },
   { to: "contacts",  label: "Contacts",  show: (a) => a.can_view_contacts },
   { to: "value-def", label: "Value Def", show: () => true },
   // Goals folded into Success Management → Contract & Goals (M19).
