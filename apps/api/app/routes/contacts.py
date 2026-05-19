@@ -189,10 +189,16 @@ async def create_contact(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        if "ux_client_contacts_account_email" in str(exc):
+        msg = str(exc)
+        if "ux_client_contacts_account_email" in msg:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
                 "A contact with this email already exists on this account.",
+            ) from exc
+        if "ux_client_contacts_account_name" in msg:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "A contact with this name already exists on this account.",
             ) from exc
         raise
     await db.refresh(new_contact)
@@ -223,10 +229,16 @@ async def update_contact(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        if "ux_client_contacts_account_email" in str(exc):
+        msg = str(exc)
+        if "ux_client_contacts_account_email" in msg:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
                 "A contact with this email already exists on this account.",
+            ) from exc
+        if "ux_client_contacts_account_name" in msg:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "A contact with this name already exists on this account.",
             ) from exc
         raise
     await db.refresh(contact)
