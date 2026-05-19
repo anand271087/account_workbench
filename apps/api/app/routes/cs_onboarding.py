@@ -58,6 +58,39 @@ async def _scope(
     return acc, is_assigned, is_team
 
 
+def _dedup_check(stakeholders: dict) -> None:
+    """Reject a stakeholder map where two roles share the same name or email.
+
+    Comparison is case-insensitive on the trimmed value. Rows where both
+    name and email are blank are skipped (an unfilled role isn't a dup).
+    """
+    seen_names: dict[str, str] = {}
+    seen_emails: dict[str, str] = {}
+    for role, info in stakeholders.items():
+        if not isinstance(info, dict):
+            continue
+        raw_name = (info.get("name") or "").strip().lower()
+        raw_email = (info.get("email") or "").strip().lower()
+        if not raw_name and not raw_email:
+            continue
+        if raw_name and raw_name in seen_names:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Stakeholder name \"{info.get('name')}\" is already used by the "
+                f"{seen_names[raw_name].replace('_', ' ')} role. Pick a different person.",
+            )
+        if raw_email and raw_email in seen_emails:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Stakeholder email \"{info.get('email')}\" is already used by the "
+                f"{seen_emails[raw_email].replace('_', ' ')} role. Pick a different person.",
+            )
+        if raw_name:
+            seen_names[raw_name] = role
+        if raw_email:
+            seen_emails[raw_email] = role
+
+
 def _serialise(acc: Account, *, editable: bool) -> CSOnboardingOut:
     out = CSOnboardingOut.model_validate(acc)
     # `activated` mirrors the prototype's view-gate: tab content is alive
@@ -136,6 +169,12 @@ async def patch_cs_onboarding(
                 existing = {}
             existing.update(value or {})
             merged[role] = existing
+
+        # Dedup guard: the 3-role stakeholder map must not reuse the same
+        # person (case-insensitive name OR email) across roles. CSMs were
+        # accidentally listing the same Budget Owner as Champion which
+        # rolled up as 2 distinct stakeholders downstream.
+        _dedup_check(merged)
         real.cs_stakeholders = merged
 
     real.updated_at = datetime.now(timezone.utc)

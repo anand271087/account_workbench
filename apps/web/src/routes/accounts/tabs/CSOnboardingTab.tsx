@@ -102,6 +102,16 @@ export default function CSOnboardingTab() {
   const editable = form.is_editable;
   const activated = form.activated;
 
+  // Block save when two stakeholder roles point at the same person (server
+  // enforces the same rule with a 409; gating the button avoids the round trip).
+  const hasStakeholderDup = STAKEHOLDER_ROLES.some((r) =>
+    findStakeholderDuplicate(
+      form.cs_stakeholders,
+      r.key,
+      form.cs_stakeholders[r.key] ?? { name: null, email: null, phone: null },
+    ),
+  );
+
   return (
     <div className="space-y-4">
       {/* ---------- Card 1: Entry type picker ---------- */}
@@ -252,6 +262,8 @@ export default function CSOnboardingTab() {
           title="Stakeholder Map"
           subtitle="Three mandatory roles. Names alone are fine to start; backfill email + phone as you confirm."
         >
+          {/* Dedup banner — same person can't fill two roles. */}
+          <StakeholderDuplicateBanner stakeholders={form.cs_stakeholders} />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {STAKEHOLDER_ROLES.map((r) => {
               const cur = form.cs_stakeholders[r.key] ?? {
@@ -259,6 +271,11 @@ export default function CSOnboardingTab() {
                 email: null,
                 phone: null,
               };
+              const dup = findStakeholderDuplicate(
+                form.cs_stakeholders,
+                r.key,
+                cur,
+              );
               return (
                 <StakeholderCard
                   key={r.key}
@@ -266,6 +283,7 @@ export default function CSOnboardingTab() {
                   desc={r.desc}
                   value={cur}
                   editable={editable}
+                  duplicateOf={dup}
                   onChange={(patch) =>
                     setForm({
                       ...form,
@@ -322,7 +340,12 @@ export default function CSOnboardingTab() {
           </button>
           <button
             onClick={saveDirty}
-            disabled={!dirty || save.isPending}
+            disabled={!dirty || save.isPending || hasStakeholderDup}
+            title={
+              hasStakeholderDup
+                ? "Resolve the duplicate stakeholder before saving — each role must be a different person."
+                : ""
+            }
             className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
           >
             {save.isPending ? "Saving…" : "Save"}
@@ -453,12 +476,14 @@ function StakeholderCard({
   desc,
   value,
   editable,
+  duplicateOf,
   onChange,
 }: {
   label: string;
   desc: string;
   value: Stakeholder;
   editable: boolean;
+  duplicateOf: { roleLabel: string; field: "name" | "email" } | null;
   onChange: (patch: Partial<Stakeholder>) => void;
 }) {
   const filled = !!value.name?.trim();
@@ -466,7 +491,11 @@ function StakeholderCard({
     <div
       className={cn(
         "rounded-lg border-2 p-3 transition-colors",
-        filled ? "border-green-200 bg-green-50/30" : "border-slate-200 bg-slate-50/30",
+        duplicateOf
+          ? "border-red-300 bg-red-50/40"
+          : filled
+            ? "border-green-200 bg-green-50/30"
+            : "border-slate-200 bg-slate-50/30",
       )}
     >
       <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted mb-0.5">
@@ -501,6 +530,61 @@ function StakeholderCard({
         disabled={!editable}
         className={cn(inputCls(editable), "mt-2")}
       />
+      {duplicateOf && (
+        <div className="mt-2 text-[10px] text-red-700 font-semibold flex items-start gap-1">
+          <span>⚠</span>
+          <span>
+            Same {duplicateOf.field} as the {duplicateOf.roleLabel} role —
+            one person per role.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function findStakeholderDuplicate(
+  stakeholders: Record<string, Stakeholder>,
+  currentKey: string,
+  current: Stakeholder,
+): { roleLabel: string; field: "name" | "email" } | null {
+  const curName = (current.name ?? "").trim().toLowerCase();
+  const curEmail = (current.email ?? "").trim().toLowerCase();
+  if (!curName && !curEmail) return null;
+  for (const role of STAKEHOLDER_ROLES) {
+    if (role.key === currentKey) continue;
+    const other = stakeholders[role.key];
+    if (!other) continue;
+    const otherName = (other.name ?? "").trim().toLowerCase();
+    const otherEmail = (other.email ?? "").trim().toLowerCase();
+    if (curName && otherName && curName === otherName) {
+      return { roleLabel: role.label, field: "name" };
+    }
+    if (curEmail && otherEmail && curEmail === otherEmail) {
+      return { roleLabel: role.label, field: "email" };
+    }
+  }
+  return null;
+}
+
+function StakeholderDuplicateBanner({
+  stakeholders,
+}: {
+  stakeholders: Record<string, Stakeholder>;
+}) {
+  const dups = STAKEHOLDER_ROLES.filter((r) =>
+    findStakeholderDuplicate(stakeholders, r.key, stakeholders[r.key] ?? {
+      name: null,
+      email: null,
+      phone: null,
+    }),
+  );
+  if (dups.length === 0) return null;
+  return (
+    <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+      <span className="font-bold">⚠ Duplicate stakeholders — </span>
+      the same person appears in more than one role. Each role should be a
+      different person, otherwise the coverage rollup overcounts.
     </div>
   );
 }
