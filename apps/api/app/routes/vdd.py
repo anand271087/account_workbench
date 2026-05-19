@@ -354,3 +354,43 @@ async def unlock_vdd(
 
     invalidate_account(account_id)
     return _serialise(real, editable=True, auto_drafted=False)
+
+
+# ============================================================
+# R24 — POST /accounts/:id/value-delivery-document/redraft
+# Re-runs the auto-draft regardless of whether the VDD already has content.
+# Used by the "Draft with AI" button on the VDD tab.
+# ============================================================
+
+
+@router.post(
+    "/{account_id}/value-delivery-document/redraft", response_model=VddOut
+)
+async def redraft_vdd(
+    account_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> VddOut:
+    acc, is_assigned, is_team = await _scope(db, user, account_id)
+    if not can_write_cs_onboarding(
+        user.role, is_assigned=is_assigned, is_team=is_team
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Your role cannot draft the Value Delivery Document on this account",
+        )
+
+    real = (
+        await db.execute(select(Account).where(Account.id == account_id))
+    ).scalar_one()
+
+    if real.vdd_locked_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Value Delivery Document is locked. Unlock first to redraft.",
+        )
+
+    draft = await _auto_draft(db, account_id, real)
+    if not draft:
+        return _serialise(real, editable=True, auto_drafted=False)
+    return _serialise(real, editable=True, auto_drafted=True, override=draft)

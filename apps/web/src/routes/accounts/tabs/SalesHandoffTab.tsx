@@ -9,6 +9,7 @@
 //   3. Handover Quality Check — 4 items, auto-detected with manual overrides.
 
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
@@ -41,6 +42,7 @@ const SH_VALIDATION_OPTIONS: ShValidation[] = [
 export default function SalesHandoffTab() {
   const account = useAccountFromLayout();
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   // ---- Queries ----
   const { data: gate, isLoading: gateLoading } = useQuery<SigningGate>({
@@ -131,6 +133,10 @@ export default function SalesHandoffTab() {
     gate_signed_date: new Date().toISOString().slice(0, 10),
     gate_contract_acv: "",
     gate_contract_term: "",
+    gate_contract_modules: [],
+    gate_platform_tier: "",
+    gate_account_segment: "",
+    gate_subscribers: "",
   });
 
   if (gateLoading || solLoading || !form || !gate) {
@@ -142,7 +148,7 @@ export default function SalesHandoffTab() {
   return (
     <div className="space-y-4">
       {/* ---------- Card 1: Sales Hand-off context ---------- */}
-      <Section title="Sales Hand-off">
+      <Section title="Sales Hand-off & Signing">
         <p className="text-xs text-text-muted mb-3">
           Continues from the Solutioning lock. Sales validates the value
           definition, fills in the engagement timeline, and notes any
@@ -356,6 +362,48 @@ export default function SalesHandoffTab() {
         saving={checklist.isPending}
       />
 
+      {/* R17 — once signing is live, expose Success Management shortcuts so
+          Sales doesn't have to walk the user to the top-nav. Two cards in a
+          single row: Success Contract (M19) + Value Tracking metrics (M20). */}
+      {gate.gate_signed && !gate.gate_unlocked && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/accounts/${account.id}/success-management/contract-goals`)
+            }
+            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+          >
+            <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
+              Success Management
+            </div>
+            <div className="text-sm font-bold text-text-primary mt-0.5">
+              Open Success Contract & Goals →
+            </div>
+            <div className="text-[11px] text-text-muted mt-0.5">
+              Three-lock contract + CS goals from the value definition.
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/accounts/${account.id}/success-management/value-tracking`)
+            }
+            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+          >
+            <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
+              Value Tracking
+            </div>
+            <div className="text-sm font-bold text-text-primary mt-0.5">
+              Open Success Metrics →
+            </div>
+            <div className="text-[11px] text-text-muted mt-0.5">
+              Status engine over the metric set agreed at signing.
+            </div>
+          </button>
+        </div>
+      )}
+
       {guard.pendingHref && (
         <UnsavedChangesDialog
           pendingHref={guard.pendingHref}
@@ -511,6 +559,60 @@ function SigningGateCard({
               </select>
             </Field>
           </div>
+          {/* R18 — additional metadata captured at signing time so CS Onboarding
+              doesn't need a second PATCH right after. All optional. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+            <Field label="Modules contracted">
+              <input
+                type="text"
+                value={(signForm.gate_contract_modules ?? []).join(", ")}
+                onChange={(e) =>
+                  setSignForm({
+                    ...signForm,
+                    gate_contract_modules: e.target.value
+                      .split(",")
+                      .map((m) => m.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="MMD, Abi, SD (comma-separated)"
+                className={inputCls(true)}
+              />
+            </Field>
+            <Field label="Platform tier">
+              <input
+                type="text"
+                value={signForm.gate_platform_tier ?? ""}
+                onChange={(e) =>
+                  setSignForm({ ...signForm, gate_platform_tier: e.target.value })
+                }
+                placeholder="Enterprise / Pro / Starter"
+                className={inputCls(true)}
+              />
+            </Field>
+            <Field label="Account segment">
+              <input
+                type="text"
+                value={signForm.gate_account_segment ?? ""}
+                onChange={(e) =>
+                  setSignForm({ ...signForm, gate_account_segment: e.target.value })
+                }
+                placeholder="Enterprise / Mid-Market / SMB"
+                className={inputCls(true)}
+              />
+            </Field>
+            <Field label="Subscribers / seats">
+              <input
+                type="text"
+                value={signForm.gate_subscribers ?? ""}
+                onChange={(e) =>
+                  setSignForm({ ...signForm, gate_subscribers: e.target.value })
+                }
+                placeholder="e.g. 25 seats"
+                className={inputCls(true)}
+              />
+            </Field>
+          </div>
           <button
             onClick={() => {
               if (!signForm.gate_signed_date) {
@@ -532,6 +634,10 @@ function SigningGateCard({
           >
             {signing ? "Confirming…" : "✓ Confirm signing"}
           </button>
+          <div className="mt-2 text-[10px] text-text-muted">
+            The signed-by user + timestamp are recorded automatically from
+            your account session.
+          </div>
         </div>
       )}
 

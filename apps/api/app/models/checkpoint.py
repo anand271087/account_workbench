@@ -48,6 +48,11 @@ class Checkpoint(Base):
     )
     signed_off_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # R31 — file / recording attachments. List of {name, url}.
+    attachments: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )

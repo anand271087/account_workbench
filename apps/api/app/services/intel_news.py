@@ -165,7 +165,10 @@ def _real_generate(
         max_tokens=1800,
         system=(
             "You write concise market-intelligence items for a customer-success "
-            "team monitoring an account's external environment.\n\n"
+            "team monitoring an account's external environment. The audience is "
+            "procurement / sourcing / supply-chain leaders; every item MUST have "
+            "a clear, direct procurement angle (what should a CPO / category "
+            "manager do differently because of this news?).\n\n"
             "Output ONLY a JSON object — no markdown, no fences. Schema:\n"
             "{\n"
             '  "items": [\n'
@@ -176,7 +179,7 @@ def _real_generate(
             "digital_transformation | risk_geopolitical | product_innovation | m_and_a"
             ">,\n"
             '      "headline": <≤120 chars>,\n'
-            '      "summary": <≤300 chars, plain text>,\n'
+            '      "summary": <≤300 chars, plain text — must explicitly name the procurement implication>,\n'
             '      "source": <publication name or null>,\n'
             '      "source_url": <URL or null>,\n'
             '      "news_date": <ISO YYYY-MM-DD>,\n'
@@ -188,8 +191,16 @@ def _real_generate(
             "  - Generate 6 distinct items spanning at least 4 different categories.\n"
             "  - All news_date values within the last 60 days, none in the future.\n"
             "  - Use real plausible publication names. No fabricated URLs (null instead).\n"
+            "  - Every item MUST be procurement-relevant: financial moves that\n"
+            "    affect contracting power, supply-side shocks, supplier strategy\n"
+            "    shifts, regulatory burdens on sourcing, ESG-in-sourcing, digital\n"
+            "    procurement tooling, geopolitical sourcing risk, innovation that\n"
+            "    changes the addressable spend, M&A that changes the buying entity.\n"
+            "    REJECT marketing / consumer / HR / general business stories without\n"
+            "    a sourcing implication.\n"
             "  - signal_relevance must reflect how directly the item affects the\n"
-            "    account's procurement / sourcing posture.\n"
+            "    account's procurement / sourcing posture. Only emit signal_relevance=high\n"
+            "    when the procurement implication is unambiguous and time-sensitive.\n"
             "  - No filler. No prose outside the JSON."
         ),
         messages=[

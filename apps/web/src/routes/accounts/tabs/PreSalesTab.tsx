@@ -129,12 +129,57 @@ export default function PreSalesTab() {
 
   return (
     <div className="space-y-4">
+      {/* R13 — Signing-state banner. Surfaces here so Pre-Sales editors know
+          when the gate has been re-opened (Sales is mid-correction) or
+          locked-in, without having to bounce to the Sales Handoff tab. */}
+      {account.gate_signed && (
+        <div
+          className={cn(
+            "rounded-card border px-4 py-3 flex items-center gap-3",
+            account.gate_unlocked
+              ? "bg-amber-50 border-amber-200"
+              : "bg-emerald-50 border-emerald-200",
+          )}
+        >
+          <span className="text-[18px]">
+            {account.gate_unlocked ? "🔓" : "🔒"}
+          </span>
+          <div className="flex-1 text-[12px]">
+            {account.gate_unlocked ? (
+              <>
+                <b className="text-amber-900">Signing unlocked</b> — Sales is
+                re-confirming contract details. Engagement edits made here may
+                be revisited after re-confirmation.
+              </>
+            ) : (
+              <>
+                <b className="text-emerald-800">Signed</b>
+                {account.gate_signed_date && (
+                  <span className="text-text-secondary">
+                    {" "}
+                    on {new Date(account.gate_signed_date).toLocaleDateString()}
+                  </span>
+                )}
+                . Pre-Sales is now historical context for CS.
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/accounts/${account.id}/account-kit/sales-handoff`)}
+            className="text-[11px] font-semibold text-beroe-blue hover:underline"
+          >
+            Open Sales Hand-off →
+          </button>
+        </div>
+      )}
+
       {/* MoM uploads — first thing on Pre-Sales so the discovery story
           lives next to the engagement objective + categories. */}
       <KindUploadCard
         accountId={account.id}
         kind="mom"
-        title="Meeting minutes (MoM)"
+        title="Meeting Minutes (MoM)"
         description="Upload discovery / kick-off / cadence MoMs. Claude will summarise each and auto-extract structured fields into Engagement, Brief, and Contacts."
         emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt, .vtt or .eml onto the card above."
       />
@@ -158,29 +203,53 @@ export default function PreSalesTab() {
         </span>
       </button>
 
-      {/* M32 — Client Contacts shortcut. Prototype puts contacts as a
-          "Client Contacts" group inside Pre-Sales (line ~5874 of
-          beroe_awb_v20.html). We keep the richer M6 contacts surface
-          but funnel users into it from here so the discovery flow stays
-          intact. */}
-      <button
-        type="button"
-        onClick={() => navigate(`/accounts/${account.id}/contacts`)}
-        className="w-full bg-white rounded-card border border-beroe-card-border px-5 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-2"
-      >
-        <span className="text-sm font-bold text-text-primary">
-          Client Contacts
-        </span>
-        <span className="text-[11px] text-text-muted">
-          · SPOC, sponsor, decision-power map for {account.name}
-        </span>
-        <span className="ml-auto text-xs text-beroe-blue font-semibold">
-          Manage Contacts →
-        </span>
-      </button>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
+        {/* R14 — Engagement Info now leads the page (was in the right column). */}
+        <Section title="Engagement Info">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="SDR / lead source">
+              <BeroeUserPicker
+                value={form.sdr_lead ?? null}
+                onChange={(v) => setForm({ ...form, sdr_lead: v })}
+                disabled={!form.is_editable}
+                placeholder="Pick the SDR who sourced this account"
+              />
+            </Field>
+            <Field label="Discovery Date">
+              <input
+                type="date"
+                value={form.pre_discovery_date ?? ""}
+                max={todayISO()}
+                onChange={(e) =>
+                  setForm({ ...form, pre_discovery_date: e.target.value || null })
+                }
+                disabled={!form.is_editable}
+                className={inputCls(form.is_editable)}
+              />
+              <div className="text-[10px] text-text-muted mt-0.5">
+                Must be today or earlier — discovery is a past event.
+              </div>
+            </Field>
+            <Field label="Discovery lead">
+              <BeroeUserPicker
+                value={form.discovery_lead ?? null}
+                onChange={(v) => setForm({ ...form, discovery_lead: v })}
+                disabled={!form.is_editable}
+                placeholder="Pick the teammate running discovery"
+              />
+            </Field>
+            <Field label="Sales lead">
+              <BeroeUserPicker
+                value={form.sales_lead ?? null}
+                onChange={(v) => setForm({ ...form, sales_lead: v })}
+                disabled={!form.is_editable}
+                placeholder="Pick the sales owner for this account"
+              />
+            </Field>
+          </div>
+        </Section>
+
         {/* Engagement objective + AI quality check */}
         <Section
           title="Engagement objective"
@@ -319,50 +388,9 @@ export default function PreSalesTab() {
         </Section>
       </div>
 
-      {/* Right column — origin + people */}
+      {/* Right column — stakeholders. Engagement Info moved to the top of the
+          left column as part of R14 (Engagement Info → Objective → Maturity → Contacts). */}
       <div className="space-y-4">
-        <Section title="Origin">
-          <Field label="SDR / lead source">
-            <BeroeUserPicker
-              value={form.sdr_lead ?? null}
-              onChange={(v) => setForm({ ...form, sdr_lead: v })}
-              disabled={!form.is_editable}
-              placeholder="Pick the SDR who sourced this account"
-            />
-          </Field>
-          <Field label="Pre-discovery date">
-            <input
-              type="date"
-              value={form.pre_discovery_date ?? ""}
-              max={todayISO()}
-              onChange={(e) =>
-                setForm({ ...form, pre_discovery_date: e.target.value || null })
-              }
-              disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
-            />
-            <div className="text-[10px] text-text-muted mt-0.5">
-              Must be today or earlier — pre-discovery is a past event.
-            </div>
-          </Field>
-          <Field label="Discovery lead">
-            <BeroeUserPicker
-              value={form.discovery_lead ?? null}
-              onChange={(v) => setForm({ ...form, discovery_lead: v })}
-              disabled={!form.is_editable}
-              placeholder="Pick the teammate running discovery"
-            />
-          </Field>
-          <Field label="Sales lead">
-            <BeroeUserPicker
-              value={form.sales_lead ?? null}
-              onChange={(v) => setForm({ ...form, sales_lead: v })}
-              disabled={!form.is_editable}
-              placeholder="Pick the sales owner for this account"
-            />
-          </Field>
-        </Section>
-
         <Section title="Stakeholders">
           <Field label="SPOC">
             <input
@@ -394,6 +422,24 @@ export default function PreSalesTab() {
           </Field>
         </Section>
       </div>
+
+      {/* R14 — Client Contacts shortcut moved to the end of Pre-Sales so the
+          ordered flow is Engagement Info → Objective → Maturity → Contacts. */}
+      <button
+        type="button"
+        onClick={() => navigate(`/accounts/${account.id}/contacts`)}
+        className="lg:col-span-3 w-full bg-white rounded-card border border-beroe-card-border px-5 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-2"
+      >
+        <span className="text-sm font-bold text-text-primary">
+          Client Contacts
+        </span>
+        <span className="text-[11px] text-text-muted">
+          · SPOC, sponsor, decision-power map for {account.name}
+        </span>
+        <span className="ml-auto text-xs text-beroe-blue font-semibold">
+          Manage Contacts →
+        </span>
+      </button>
 
       {/* Handover gate */}
       {form.is_editable && (

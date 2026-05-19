@@ -407,14 +407,15 @@ function LogValueRow({
       <div className="flex gap-1.5">
         <input
           type="text"
-          placeholder="Note (optional)"
+          placeholder="Note (required)"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           className="flex-1 text-[12px] px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
         />
         <button
           onClick={() => mutation.mutate()}
-          disabled={!value.trim() || mutation.isPending}
+          disabled={!value.trim() || !note.trim() || mutation.isPending}
+          title={!note.trim() ? "A note is required to log a value" : ""}
           className="text-[12px] px-3 py-1.5 rounded-md bg-green-600 text-white font-semibold disabled:opacity-50"
         >
           {mutation.isPending ? "Saving…" : "Save"}

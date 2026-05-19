@@ -25,6 +25,11 @@ export interface SignedOffSnapshot {
   next_actions?: string | null;
 }
 
+export interface CheckpointAttachment {
+  name: string;
+  url?: string | null;
+}
+
 export interface Checkpoint {
   id: string;
   account_id: string;
@@ -36,6 +41,7 @@ export interface Checkpoint {
   signed_off_at: string | null;
   signed_off_by: string | null;
   signed_off_snapshot: SignedOffSnapshot | null;
+  attachments: CheckpointAttachment[];
   created_at: string;
   updated_at: string;
   is_editable: boolean;
@@ -57,6 +63,7 @@ export interface CheckpointUpdate {
   held_date?: string | null;
   status?: CheckpointStatus | null;
   notes?: string | null;
+  attachments?: CheckpointAttachment[] | null;
 }
 
 export interface CheckpointSignOffPayload {

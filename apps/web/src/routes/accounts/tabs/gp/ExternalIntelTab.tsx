@@ -42,6 +42,10 @@ export default function ExternalIntelTab() {
 
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
+  // R33 — default to procurement-relevant only. Hides items the AI flagged
+  // as low-relevance so the feed only carries items with an actionable
+  // sourcing implication.
+  const [procurementOnly, setProcurementOnly] = useState(true);
 
   const refreshMutation = useMutation({
     mutationFn: () =>
@@ -57,6 +61,9 @@ export default function ExternalIntelTab() {
   const filtered = useMemo(() => {
     let rows = items;
     if (filter !== "All") rows = rows.filter((r) => r.category === filter);
+    if (procurementOnly) {
+      rows = rows.filter((r) => r.signal_relevance !== "low");
+    }
     if (query.trim()) {
       const q = query.toLowerCase();
       rows = rows.filter(
@@ -67,7 +74,7 @@ export default function ExternalIntelTab() {
       );
     }
     return rows;
-  }, [items, filter, query]);
+  }, [items, filter, query, procurementOnly]);
 
   return (
     <div className="space-y-3">
@@ -145,11 +152,23 @@ export default function ExternalIntelTab() {
             );
           })}
         </div>
-        <div className="text-[11px] text-text-muted">
-          {filtered.length} result{filtered.length === 1 ? "" : "s"}
-          {filter !== "All" && (
-            <> · filtered to <b>{CATEGORY_LABELS[filter]}</b></>
-          )}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-[11px] text-text-muted">
+            {filtered.length} result{filtered.length === 1 ? "" : "s"}
+            {filter !== "All" && (
+              <> · filtered to <b>{CATEGORY_LABELS[filter]}</b></>
+            )}
+            {procurementOnly && <> · procurement-relevant only</>}
+          </div>
+          <label className="text-[11px] text-text-secondary inline-flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={procurementOnly}
+              onChange={(e) => setProcurementOnly(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            Procurement-relevant only
+          </label>
         </div>
       </div>
 

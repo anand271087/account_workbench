@@ -86,7 +86,8 @@ class MetricValueLog(BaseModel):
 
     value: str = Field(..., min_length=1, max_length=200)
     source: str | None = Field(None, max_length=600)
-    note: str | None = Field(None, max_length=600)
+    # R32 — note is mandatory so every value log carries CSM context.
+    note: str = Field(..., min_length=3, max_length=600)
 
 
 class MetricDelete(BaseModel):

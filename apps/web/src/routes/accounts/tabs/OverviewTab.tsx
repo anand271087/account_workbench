@@ -184,7 +184,7 @@ export default function OverviewTab() {
                   <div className="text-[11px] text-text-muted">
                     {solutioning.data.engagement_type.replace("_", " ")}
                     {solutioning.data.engagement_duration_months
-                      ? ` · ${solutioning.data.engagement_duration_months}mo`
+                      ? ` · ${solutioning.data.engagement_duration_months}wk`
                       : ""}
                   </div>
                 )}

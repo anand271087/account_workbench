@@ -113,7 +113,7 @@ export default function CSOnboardingTab() {
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <EntryButton
-            label="Entry A — Clean handover"
+            label="Entry A — New Account (Clean Handover)"
             desc="Sales passed a complete handover package on signing."
             active={form.cs_entry_type === "A"}
             disabled={!editable || !account.gate_signed}
@@ -126,7 +126,7 @@ export default function CSOnboardingTab() {
             onClick={() => setEntry("A")}
           />
           <EntryButton
-            label="Entry B — Mid-contract pickup"
+            label="Entry B — Existing Account (Mid-Contract Pickup)"
             desc="CSM inherited this account with no formal handover. Capture baseline."
             active={form.cs_entry_type === "B"}
             disabled={!editable}
@@ -157,6 +157,31 @@ export default function CSOnboardingTab() {
             Saves instantly. The Sales-side handshake lives on the Sales
             Hand-off tab — both columns must align.
           </p>
+          {/* R20 — auto banner: complete (green) vs. incomplete (amber). */}
+          {(() => {
+            const checked = CS_HANDOVER_ITEMS.filter(
+              (it) => !!form.cs_handover_checklist[it.key],
+            ).length;
+            const total = CS_HANDOVER_ITEMS.length;
+            const complete = checked === total;
+            return (
+              <div
+                className={cn(
+                  "mb-3 rounded-lg border px-3 py-2 text-xs font-semibold flex items-center gap-2",
+                  complete
+                    ? "bg-green-50 border-green-200 text-green-800"
+                    : "bg-amber-50 border-amber-200 text-amber-800",
+                )}
+              >
+                <span>{complete ? "✓" : "⚠"}</span>
+                <span>
+                  {complete
+                    ? "Handover complete — all 4 items confirmed."
+                    : `Handover incomplete — ${checked} of ${total} items confirmed.`}
+                </span>
+              </div>
+            );
+          })()}
           <ul className="space-y-2">
             {CS_HANDOVER_ITEMS.map((it) => {
               const checked = !!form.cs_handover_checklist[it.key];
@@ -258,27 +283,8 @@ export default function CSOnboardingTab() {
         </Section>
       )}
 
-      {/* ---------- Goals shortcut ---------- */}
-      {activated && (
-        <a
-          href={`/accounts/${account.id}/goals`}
-          className="block bg-white rounded-card border border-beroe-card-border p-5 hover:bg-slate-50 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <div className="text-sm font-bold text-text-primary">
-                Goal Validation & Alignment
-              </div>
-              <div className="text-xs text-text-muted mt-0.5">
-                Per-goal Phase A / B / C wizard, initiatives, audit history.
-              </div>
-            </div>
-            <span className="text-xs text-beroe-blue font-semibold">
-              Manage Goals →
-            </span>
-          </div>
-        </a>
-      )}
+      {/* ---------- R21 — Goal Validation & Alignment surface ---------- */}
+      {activated && <GoalAlignmentSurface accountId={account.id} />}
 
       {/* Sticky save bar — for the text-field changes (Entry B + stakeholders). */}
       {editable && (
@@ -572,4 +578,120 @@ function diff(next: CSOnboarding, prev: CSOnboarding): CSOnboardingUpdate {
     }
   }
   return out;
+}
+
+// ============================================================
+// R21 — Goal Validation & Alignment surface inside CS Onboarding
+// ============================================================
+
+type GoalRow = {
+  id: string;
+  title: string;
+  category: string;
+  alignment_status: "not_started" | "partial" | "aligned";
+  phase_a?: Record<string, unknown> | null;
+  phase_b?: Record<string, unknown> | null;
+  phase_c?: Record<string, unknown> | null;
+};
+
+function GoalAlignmentSurface({ accountId }: { accountId: string }) {
+  const { data, isLoading } = useQuery<{ items: GoalRow[] }>({
+    queryKey: ["cs-goals", accountId, false],
+    queryFn: () =>
+      api.get<{ items: GoalRow[] }>(
+        `/api/v1/accounts/${accountId}/cs-goals?include_deleted=false`,
+      ),
+  });
+  const goals = data?.items ?? [];
+  return (
+    <Section
+      title="Goal Validation & Alignment"
+      subtitle="Each goal walks through three checks: what it means, the groundwork, and the agreed target. Click any row to expand."
+    >
+      <div className="flex items-center justify-end mb-2">
+        <a
+          href={`/accounts/${accountId}/goals`}
+          className="text-xs text-beroe-blue font-semibold hover:underline"
+        >
+          Manage Goals →
+        </a>
+      </div>
+      {isLoading ? (
+        <div className="text-xs text-text-muted italic">Loading goals…</div>
+      ) : goals.length === 0 ? (
+        <div className="text-xs text-text-muted italic">
+          No goals captured yet. Add the first goal from the Manage Goals page.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {goals.map((g) => (
+            <GoalAlignmentRow key={g.id} g={g} />
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function GoalAlignmentRow({ g }: { g: GoalRow }) {
+  const dot =
+    g.alignment_status === "aligned"
+      ? "bg-emerald-500"
+      : g.alignment_status === "partial"
+        ? "bg-amber-500"
+        : "bg-slate-400";
+  const phaseA = (g.phase_a ?? {}) as Record<string, unknown>;
+  const phaseB = (g.phase_b ?? {}) as Record<string, unknown>;
+  const phaseC = (g.phase_c ?? {}) as Record<string, unknown>;
+  const meanText = [
+    phaseA.goal_type ? `Type: ${String(phaseA.goal_type).replace(/_/g, " ")}` : null,
+    phaseA.validation_note ? String(phaseA.validation_note) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ") || "Not yet captured.";
+  const groundworkText = Object.entries(phaseB)
+    .filter(([k, v]) => v && !k.endsWith("_complete") && k !== "research_requested" && k !== "research_request_date")
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${String(v).replace(/_/g, " ")}`)
+    .join(" · ") || "Not yet captured.";
+  const targetText = [
+    phaseC.agreed_target ? `Target: ${String(phaseC.agreed_target)}` : null,
+    phaseC.measure_method ? `Measure: ${String(phaseC.measure_method)}` : null,
+    phaseC.timeline ? `Due ${String(phaseC.timeline)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ") || "Not yet captured.";
+  return (
+    <li className="border border-beroe-card-border rounded-lg overflow-hidden">
+      <details>
+        <summary className="px-3 py-2 cursor-pointer hover:bg-slate-50 flex items-center gap-2">
+          <span className={cn("w-2 h-2 rounded-full", dot)} />
+          <span className="text-sm font-semibold text-text-primary">{g.title}</span>
+          <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-slate-100 text-text-muted">
+            {g.category.replace(/_/g, " ")}
+          </span>
+          <span className="ml-auto text-[10px] uppercase tracking-wider font-bold text-text-muted">
+            {g.alignment_status}
+          </span>
+        </summary>
+        <div className="px-3 py-2 grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50/40">
+          <GoalDetailBlock title="What does it mean?" body={meanText} />
+          <GoalDetailBlock title="Groundwork" body={groundworkText} />
+          <GoalDetailBlock title="Agreed target" body={targetText} />
+        </div>
+      </details>
+    </li>
+  );
+}
+
+function GoalDetailBlock({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-md px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+        {title}
+      </div>
+      <div className="text-[12px] text-text-primary mt-1 leading-snug">
+        {body}
+      </div>
+    </div>
+  );
 }

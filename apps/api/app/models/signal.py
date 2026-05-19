@@ -80,6 +80,8 @@ class SoftSignal(Base):
     )
     resolved_note: Mapped[str | None] = mapped_column(String, nullable=True)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # R29 — when the signal was actually noticed (vs. created_at = log time).
+    occurred_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     source: Mapped[str | None] = mapped_column(String, nullable=True)
     ai_extracted: Mapped[bool] = mapped_column(
         nullable=False, server_default=text("false")
@@ -118,6 +120,8 @@ class AccountActivity(Base):
         ARRAY(UUID(as_uuid=True)), nullable=False, server_default=text("'{}'")
     )
     file_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # R29 — date the activity actually happened (vs. created_at = log time).
+    occurred_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     added_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )

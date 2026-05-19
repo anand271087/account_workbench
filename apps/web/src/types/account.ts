@@ -77,6 +77,7 @@ export interface AccountDetail {
   gate_signed_date: string | null;
   gate_renewal_date: string | null;
   gate_bvd_due_date: string | null;
+  gate_unlocked: boolean;
   can_view_sales_handoff: boolean;
   // CS Onboarding (M14)
   cs_entry_type: "A" | "B" | null;

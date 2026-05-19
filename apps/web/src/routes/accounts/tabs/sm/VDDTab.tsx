@@ -98,6 +98,21 @@ export default function VDDTab() {
     onError: (e: ApiError) => setErr(e.message),
   });
 
+  // R24 — Draft with AI button: re-runs the auto-draft from M19/M20/M15
+  // (Success Contract + Success Metrics + CS Goals) ignoring existing content.
+  const redraftMutation = useMutation({
+    mutationFn: () =>
+      api.post<Vdd>(
+        `/api/v1/accounts/${account.id}/value-delivery-document/redraft`,
+      ),
+    onSuccess: (drafted) => {
+      qc.setQueryData(queryKey, drafted);
+      setForm(drafted);
+      setErr(null);
+    },
+    onError: (e: ApiError) => setErr(e.message),
+  });
+
   if (isLoading || !form) {
     return (
       <Card>
@@ -153,6 +168,31 @@ export default function VDDTab() {
                 Draft
               </span>
             )}
+            {/* R24 — Draft-with-AI + Download-PPT shortcuts. */}
+            {form.is_editable && !locked && (
+              <button
+                onClick={() => {
+                  if (
+                    confirm(
+                      "Re-draft this VDD from Success Contract + Metrics + Goals?\n\nUnsaved changes will be lost.",
+                    )
+                  ) {
+                    redraftMutation.mutate();
+                  }
+                }}
+                disabled={redraftMutation.isPending}
+                className="text-[11px] px-2 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5 disabled:opacity-50"
+              >
+                {redraftMutation.isPending ? "Drafting…" : "✨ Draft with AI"}
+              </button>
+            )}
+            <a
+              href={`/accounts/${account.id}/intel-reports/documents`}
+              className="text-[11px] px-2 py-1 rounded-md border border-beroe-card-border text-text-secondary hover:bg-slate-50"
+              title="Generate the VDD as a downloadable QBR report (HTML now; PPT in v1.1)"
+            >
+              ⬇ Download as report
+            </a>
           </div>
         </div>
       </Card>
@@ -190,6 +230,39 @@ export default function VDDTab() {
           editable={editable}
           onChange={(v) => setForm({ ...form, agreed_success_metrics: v })}
         />
+      </Card>
+
+      {/* R25 — Savings Lever Framework explanation. Shown above the per-initiative
+          approach list so readers know what each lever means + the typical
+          savings range before they pick lever pills. */}
+      <Card>
+        <SectionHeader
+          title="Savings Lever Framework"
+          hint="The 3 levers Beroe pulls to deliver value. Pick the applicable lever(s) per initiative below."
+        />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <LeverFramework
+            num={1}
+            name="Cost"
+            tone="bg-green-50 border-green-200 text-green-900"
+            range="Typical 3–12% of category spend"
+            description="Negotiation leverage, demand consolidation, e-auctions, supplier rationalisation, contract terms."
+          />
+          <LeverFramework
+            num={2}
+            name="Risk"
+            tone="bg-amber-50 border-amber-200 text-amber-900"
+            range="Avoided-cost basis · 1–5% of spend at risk"
+            description="Supplier health monitoring, alternate-source qualification, geo-risk hedging, compliance exposure."
+          />
+          <LeverFramework
+            num={3}
+            name="Adoption"
+            tone="bg-blue-50 border-blue-200 text-blue-900"
+            range="Indirect · 5–15% productivity uplift on covered spend"
+            description="Platform adoption, super-user enablement, intake compliance, self-serve insights."
+          />
+        </div>
       </Card>
 
       {/* Section 3 — Beroe's approach */}
@@ -231,6 +304,11 @@ export default function VDDTab() {
           className="w-full text-[13px] border border-beroe-card-border rounded-md px-3 py-2 disabled:bg-beroe-bg/40 disabled:text-text-muted"
         />
       </Card>
+
+      {/* R26 — VDD audit trail. Reads from the account-wide activity feed
+          and filters to value_delivery_document changes (the SQLAlchemy
+          before_flush listener auto-captures every PATCH as one audit row). */}
+      <VDDAuditTrail accountId={account.id} />
 
       {/* Sticky action bar */}
       {form.is_editable && (
@@ -286,6 +364,98 @@ export default function VDDTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// R26 — VDD audit trail
+// ============================================================
+
+function VDDAuditTrail({ accountId }: { accountId: string }) {
+  type ActivityItem = {
+    id: string;
+    field_name: string | null;
+    action: string;
+    changed_at: string;
+    changed_by_full_name: string | null;
+  };
+  const { data } = useQuery<{ items: ActivityItem[] }>({
+    queryKey: ["vdd-audit", accountId],
+    queryFn: () =>
+      api.get<{ items: ActivityItem[] }>(
+        `/api/v1/accounts/${accountId}/activity?page=1&page_size=50`,
+      ),
+  });
+  const vddItems = (data?.items ?? []).filter(
+    (it) =>
+      it.field_name === "value_delivery_document" ||
+      it.field_name === "vdd_locked_at" ||
+      it.field_name === "vdd_locked_by",
+  );
+  return (
+    <Card>
+      <SectionHeader
+        title="Change history"
+        hint="Every save, lock, and unlock recorded with who + when."
+      />
+      {vddItems.length === 0 ? (
+        <div className="text-[12px] text-text-muted italic">
+          No changes recorded yet.
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {vddItems.slice(0, 20).map((it) => (
+            <li
+              key={it.id}
+              className="text-[12px] text-text-secondary flex items-center gap-2 border-b border-beroe-card-border/60 pb-1.5 last:border-b-0 last:pb-0"
+            >
+              <span className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+                {it.action}
+              </span>
+              <span className="font-semibold text-text-primary">
+                {labelForVddField(it.field_name)}
+              </span>
+              <span className="ml-auto text-text-muted">
+                {it.changed_by_full_name ?? "—"} ·{" "}
+                {new Date(it.changed_at).toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function labelForVddField(field: string | null): string {
+  if (field === "value_delivery_document") return "VDD content saved";
+  if (field === "vdd_locked_at") return "VDD locked";
+  if (field === "vdd_locked_by") return "VDD locked-by changed";
+  return field ?? "change";
+}
+
+function LeverFramework({
+  num,
+  name,
+  tone,
+  range,
+  description,
+}: {
+  num: number;
+  name: string;
+  tone: string;
+  range: string;
+  description: string;
+}) {
+  return (
+    <div className={cn("rounded-lg border px-3 py-2.5", tone)}>
+      <div className="text-[10px] uppercase tracking-wider font-bold opacity-80">
+        Lever {num}
+      </div>
+      <div className="text-[14px] font-bold mt-0.5">{name}</div>
+      <div className="text-[11px] font-semibold mt-1 opacity-90">{range}</div>
+      <div className="text-[11px] mt-1 leading-snug opacity-80">{description}</div>
     </div>
   );
 }

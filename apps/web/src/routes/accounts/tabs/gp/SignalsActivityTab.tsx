@@ -325,6 +325,7 @@ function AddSignalModal({
     description: "",
     impact: "medium",
     category: "",
+    occurred_at: new Date().toISOString().slice(0, 10),
   });
   const [err, setErr] = useState<string | null>(null);
   const m = useMutation({
@@ -390,15 +391,26 @@ function AddSignalModal({
               ))}
             </select>
           </FormRow>
-          <FormRow label="Category (optional)">
+          <FormRow label="Date noticed">
             <input
-              value={form.category ?? ""}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              placeholder="commercial / product / strategic / relationship"
+              type="date"
+              value={form.occurred_at ?? ""}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) =>
+                setForm({ ...form, occurred_at: e.target.value || null })
+              }
               className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
             />
           </FormRow>
         </div>
+        <FormRow label="Category (optional)">
+          <input
+            value={form.category ?? ""}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            placeholder="commercial / product / strategic / relationship"
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+          />
+        </FormRow>
         {err && <div className="text-[11px] text-red-700">{err}</div>}
         <div className="flex justify-end gap-2 pt-1">
           <button
@@ -548,6 +560,7 @@ function LogActivityModal({
     summary: "",
     items: "",
     attendees: "",
+    occurred_at: new Date().toISOString().slice(0, 10),
   });
   const [err, setErr] = useState<string | null>(null);
   const m = useMutation({
@@ -580,14 +593,27 @@ function LogActivityModal({
             })}
           </div>
         </FormRow>
-        <FormRow label="Title">
-          <input
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="e.g. Weekly check-in with Jordan"
-            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
-          />
-        </FormRow>
+        <div className="grid grid-cols-2 gap-2">
+          <FormRow label="Title">
+            <input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="e.g. Weekly check-in with Jordan"
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            />
+          </FormRow>
+          <FormRow label="Date">
+            <input
+              type="date"
+              value={form.occurred_at ?? ""}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) =>
+                setForm({ ...form, occurred_at: e.target.value || null })
+              }
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            />
+          </FormRow>
+        </div>
         <FormRow label="Summary">
           <textarea
             value={form.summary ?? ""}

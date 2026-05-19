@@ -236,6 +236,32 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
         title={`Company snapshot (${form.company_snapshot.length})`}
         subtitle="Quick stat cards — revenue, headcount, key facts."
       >
+        {/* R22 — seed the standard 5 cards (Annual Revenue / Employees /
+            COGS / Priority Categories / Sustainability Priority) so the
+            CSM has the right structure to fill rather than building from
+            scratch. Only appears when no snapshot exists. */}
+        {editable && form.company_snapshot.length === 0 && (
+          <div className="mb-2">
+            <button
+              type="button"
+              onClick={() =>
+                update("company_snapshot", [
+                  { num: "", label: "Annual Revenue", sub: null },
+                  { num: "", label: "Employees Globally", sub: null },
+                  { num: "", label: "COGS", sub: null },
+                  { num: "", label: "Priority Categories", sub: null },
+                  { num: "", label: "Sustainability Priority", sub: null },
+                ])
+              }
+              className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5"
+            >
+              ✨ Seed standard cards
+            </button>
+            <span className="ml-2 text-[10px] text-text-muted">
+              Pre-fills 5 cards (Revenue · Employees · COGS · Priority Categories · Sustainability) — values stay blank for you to fill.
+            </span>
+          </div>
+        )}
         <ItemList
           items={form.company_snapshot}
           onChange={(items) => update("company_snapshot", items)}

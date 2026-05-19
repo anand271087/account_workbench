@@ -51,6 +51,11 @@ class SignedOffSnapshot(BaseModel):
     next_actions: str | None = None
 
 
+class CheckpointAttachment(BaseModel):
+    name: str = Field(..., min_length=1, max_length=240)
+    url: str | None = Field(None, max_length=2000)
+
+
 class CheckpointOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,6 +70,7 @@ class CheckpointOut(BaseModel):
     signed_off_at: datetime | None
     signed_off_by: UUID | None
     signed_off_snapshot: SignedOffSnapshot | None
+    attachments: list[CheckpointAttachment] = Field(default_factory=list)
 
     created_at: datetime
     updated_at: datetime
@@ -82,6 +88,7 @@ class CheckpointUpdate(BaseModel):
     held_date: date | None = None
     status: CheckpointStatus | None = None
     notes: str | None = Field(None, max_length=2000)
+    attachments: list[CheckpointAttachment] | None = None
 
 
 class CheckpointSignOff(BaseModel):

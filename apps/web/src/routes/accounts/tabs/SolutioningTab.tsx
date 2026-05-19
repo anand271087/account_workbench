@@ -193,11 +193,11 @@ export default function SolutioningTab() {
                 ))}
               </select>
             </Field>
-            <Field label="Duration (months)">
+            <Field label="Duration (weeks)">
               <input
                 type="number"
                 min={1}
-                max={120}
+                max={520}
                 value={form.engagement_duration_months ?? ""}
                 onChange={(e) =>
                   setForm({ ...form, engagement_duration_months: e.target.value === "" ? null : Number(e.target.value) })

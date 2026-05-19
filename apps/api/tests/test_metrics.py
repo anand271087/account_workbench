@@ -192,7 +192,11 @@ def test_log_value_updates_status_and_history(
     r = client.post(
         f"/api/v1/metrics/{metric_id}/log",
         headers=_auth(mint_jwt(admin)),
-        json={"value": "1100000", "source": "Q4 revision"},
+        json={
+            "value": "1100000",
+            "source": "Q4 revision",
+            "note": "Q4 retrace after PO clawback",
+        },
     )
     assert r.json()["status"] == "amber"
     assert len(r.json()["log_entries"]) == 2

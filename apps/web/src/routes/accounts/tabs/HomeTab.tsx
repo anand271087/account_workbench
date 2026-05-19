@@ -245,6 +245,49 @@ export default function HomeTab() {
         />
       </div>
 
+      {/* R9 — second tile row: deeper rollups (Delivery / Risk % / Pipeline / Account Pulse). */}
+      {(() => {
+        const active = signals.filter((s) => s.status === "active" && !s.hidden);
+        const riskCount = active.filter(
+          (s) => s.type === "risk" || s.type === "critical",
+        ).length;
+        const riskPct = active.length === 0
+          ? 0
+          : Math.round((riskCount / active.length) * 100);
+        const totalCp = cps.length;
+        const signedCp = cps.filter((c) => c.status === "signed_off").length;
+        const delivery =
+          totalCp === 0 ? "—" : `${signedCp}/${totalCp} signed-off`;
+        const pulse =
+          (account.health_score ?? 0) >= 70 && riskPct < 30 && overdueCp === 0
+            ? { label: "Healthy", col: "#40CC8F" }
+            : overdueCp > 0 || riskPct >= 50
+              ? { label: "At risk", col: "#e63950" }
+              : { label: "Watch", col: "#EF9637" };
+        return (
+          <div className="grid grid-cols-4 gap-2">
+            <Kpi
+              label="Delivery"
+              value={delivery}
+              color={overdueCp > 0 ? "#e63950" : "#0d1b2e"}
+            />
+            <Kpi
+              label="Risk %"
+              value={`${riskPct}%`}
+              color={
+                riskPct >= 50 ? "#e63950" : riskPct >= 25 ? "#EF9637" : "#40CC8F"
+              }
+            />
+            <Kpi
+              label="Weighted pipeline"
+              value={fmtK(pipelineTotal)}
+              color="#4A00F8"
+            />
+            <Kpi label="Account pulse" value={pulse.label} color={pulse.col} />
+          </div>
+        );
+      })()}
+
       {/* Two columns: This Week (left) + Top Signals (right) */}
       <div className="grid grid-cols-2 gap-3">
         <Card>

@@ -391,6 +391,7 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
         completeKey="phase_b_complete"
       >
         <PhaseBEditor
+          category={form.category}
           value={form.phase_b}
           onChange={(p) => setForm({ ...form, phase_b: p })}
           editable={editable}
@@ -506,8 +507,11 @@ function PhaseEditor({
   completeKey: "phase_a_complete" | "phase_b_complete" | "phase_c_complete";
   children: React.ReactNode;
 }) {
-  void category;
   const complete = !!(phase as unknown as Record<string, boolean>)[completeKey];
+  // R27 — validate before allowing the "mark complete" flip. Each phase
+  // has its own minimum-content rule; if unmet, the checkbox is disabled
+  // and a tooltip explains what's missing.
+  const missing = !complete ? validatePhaseForCompletion(completeKey, category, phase) : null;
   return (
     <details className="bg-white rounded-card border border-beroe-card-border" open>
       <summary className="px-4 py-3 cursor-pointer text-sm font-bold text-text-primary hover:bg-slate-50 flex items-center gap-2">
@@ -520,13 +524,17 @@ function PhaseEditor({
           </span>
         )}
         <label
-          className="ml-auto text-[11px] text-text-secondary inline-flex items-center gap-1 cursor-pointer"
+          className={cn(
+            "ml-auto text-[11px] text-text-secondary inline-flex items-center gap-1 cursor-pointer",
+            !!missing && "cursor-not-allowed opacity-70",
+          )}
           onClick={(e) => e.stopPropagation()}
+          title={missing ?? ""}
         >
           <input
             type="checkbox"
             checked={complete}
-            disabled={!editable}
+            disabled={!editable || !!missing}
             onChange={(e) =>
               onChange({ ...phase, [completeKey]: e.target.checked })
             }
@@ -534,9 +542,46 @@ function PhaseEditor({
           mark complete
         </label>
       </summary>
-      <div className="px-4 pb-4 pt-2">{children}</div>
+      <div className="px-4 pb-4 pt-2">
+        {!!missing && (
+          <div className="mb-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+            ⚠ Cannot mark complete yet — {missing}
+          </div>
+        )}
+        {children}
+      </div>
     </details>
   );
+}
+
+// R27 — returns null when the phase is ready to mark complete, or a
+// human-readable string naming the missing piece.
+function validatePhaseForCompletion(
+  completeKey: "phase_a_complete" | "phase_b_complete" | "phase_c_complete",
+  category: CSGoalCategory,
+  phase: PhaseA | PhaseB | PhaseC,
+): string | null {
+  const p = phase as unknown as Record<string, unknown>;
+  if (completeKey === "phase_a_complete") {
+    const a = phase as PhaseA;
+    if (!a.goal_type) return "pick a goal type";
+    if (!a.category_clarity) return "set category clarity";
+    return null;
+  }
+  if (completeKey === "phase_b_complete") {
+    const items =
+      GROUNDWORK_BY_CATEGORY[category] ?? GROUNDWORK_BY_CATEGORY.other;
+    const anySet = items.some((it) => !!p[it.key]);
+    if (!anySet) return "answer at least one groundwork item";
+    return null;
+  }
+  if (completeKey === "phase_c_complete") {
+    const c = phase as PhaseC;
+    if (!c.agreed_target?.trim()) return "agree the target";
+    if (!c.measure_method?.trim()) return "define the measurement method";
+    return null;
+  }
+  return null;
 }
 
 // ============================================================
@@ -644,41 +689,71 @@ function PhaseAEditor({
 // PhaseBEditor — groundwork
 // ============================================================
 
+// R28 — Groundwork items shown in Phase B depend on the goal category. Each
+// row maps to a jsonb key on `cs_goals.phase_b` (PhaseB schema is `extra="allow"`
+// on the backend so new keys flow through without DDL).
+const GROUNDWORK_BY_CATEGORY: Record<
+  string,
+  ReadonlyArray<{ key: string; label: string }>
+> = {
+  cost_savings: [
+    { key: "spend_analytics", label: "Spend Analytics" },
+    { key: "opportunity_assessment", label: "Opportunity Assessment" },
+    { key: "benchmarking", label: "Benchmarking" },
+  ],
+  base_rationalization: [
+    { key: "catalog_coverage", label: "Catalog Coverage" },
+    { key: "supplier_mapping", label: "Supplier Mapping" },
+    { key: "spend_visibility", label: "Spend Visibility" },
+  ],
+  risk_mitigation: [
+    { key: "risk_register", label: "Risk Register" },
+    { key: "supplier_health", label: "Supplier Health Check" },
+    { key: "contingency_coverage", label: "Contingency Coverage" },
+  ],
+  adoption: [
+    { key: "user_roster", label: "User Roster" },
+    { key: "training_plan", label: "Training Plan" },
+    { key: "champion_identified", label: "Champion Identified" },
+  ],
+  other: [
+    { key: "spend_analytics", label: "Spend Analytics" },
+    { key: "opportunity_assessment", label: "Opportunity Assessment" },
+    { key: "benchmarking", label: "Benchmarking" },
+  ],
+};
+
 function PhaseBEditor({
+  category,
   value,
   onChange,
   editable,
 }: {
+  category: string;
   value: PhaseB;
   onChange: (p: PhaseB) => void;
   editable: boolean;
 }) {
+  const items =
+    GROUNDWORK_BY_CATEGORY[category] ?? GROUNDWORK_BY_CATEGORY.other;
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Field label="Spend Analytics">
-          <GroundworkSelect
-            value={value.spend_analytics ?? null}
-            onChange={(v) => onChange({ ...value, spend_analytics: v })}
-            editable={editable}
-          />
-        </Field>
-        <Field label="Opportunity Assessment">
-          <GroundworkSelect
-            value={value.opportunity_assessment ?? null}
-            onChange={(v) =>
-              onChange({ ...value, opportunity_assessment: v })
-            }
-            editable={editable}
-          />
-        </Field>
-        <Field label="Benchmarking">
-          <GroundworkSelect
-            value={value.benchmarking ?? null}
-            onChange={(v) => onChange({ ...value, benchmarking: v })}
-            editable={editable}
-          />
-        </Field>
+        {items.map((it) => (
+          <Field key={it.key} label={it.label}>
+            <GroundworkSelect
+              value={
+                ((value as unknown as Record<string, GroundworkStatus | null>)[
+                  it.key
+                ] ?? null) as GroundworkStatus | null
+              }
+              onChange={(v) =>
+                onChange({ ...(value as PhaseB), [it.key]: v } as PhaseB)
+              }
+              editable={editable}
+            />
+          </Field>
+        ))}
       </div>
       <label className="text-xs text-text-secondary inline-flex items-center gap-2">
         <input

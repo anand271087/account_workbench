@@ -471,6 +471,7 @@ async def get_account(
         gate_signed_date=a.gate_signed_date,
         gate_renewal_date=a.gate_renewal_date,
         gate_bvd_due_date=a.gate_bvd_due_date,
+        gate_unlocked=a.gate_unlocked,
         can_view_sales_handoff=True,
         # CS Onboarding (M14) — entry type drives the inner view; the tab
         # itself is always visible so the picker is reachable.

@@ -66,6 +66,8 @@ class AccountDetail(BaseModel):
     gate_signed_date: date | None = None
     gate_renewal_date: date | None = None
     gate_bvd_due_date: date | None = None
+    # R13 — Pre-Sales surfaces a banner when signing has been reopened.
+    gate_unlocked: bool = False
 
     # New top-level tabs (M13)
     can_view_sales_handoff: bool = True

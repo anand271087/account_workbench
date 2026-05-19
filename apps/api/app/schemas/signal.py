@@ -36,6 +36,7 @@ class SoftSignalOut(BaseModel):
     resolved_by: UUID | None
     resolved_note: str | None
     valid_until: date | None
+    occurred_at: date | None
     source: str | None
     ai_extracted: bool
     added_by: UUID | None
@@ -57,6 +58,7 @@ class SoftSignalCreate(BaseModel):
     description: str | None = Field(None, max_length=2000)
     impact: SignalImpact = "medium"
     valid_until: date | None = None
+    occurred_at: date | None = None
     source: str | None = Field(None, max_length=240)
 
 
@@ -69,6 +71,7 @@ class SoftSignalUpdate(BaseModel):
     description: str | None = Field(None, max_length=2000)
     impact: SignalImpact | None = None
     valid_until: date | None = None
+    occurred_at: date | None = None
     source: str | None = Field(None, max_length=240)
     hidden: bool | None = None
 
@@ -94,6 +97,7 @@ class ActivityOut(BaseModel):
     attendees: str | None
     linked_metrics: list[UUID]
     file_name: str | None
+    occurred_at: date | None
     added_by: UUID | None
     hidden: bool
     created_at: datetime
@@ -114,6 +118,7 @@ class ActivityCreate(BaseModel):
     attendees: str | None = Field(None, max_length=600)
     linked_metrics: list[UUID] = Field(default_factory=list)
     file_name: str | None = Field(None, max_length=240)
+    occurred_at: date | None = None
 
 
 class ActivityUpdate(BaseModel):
@@ -124,4 +129,5 @@ class ActivityUpdate(BaseModel):
     attendees: str | None = Field(None, max_length=600)
     linked_metrics: list[UUID] | None = None
     file_name: str | None = Field(None, max_length=240)
+    occurred_at: date | None = None
     hidden: bool | None = None

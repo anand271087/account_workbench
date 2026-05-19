@@ -31,6 +31,7 @@ export interface SoftSignal {
   resolved_by: string | null;
   resolved_note: string | null;
   valid_until: string | null;
+  occurred_at: string | null;
   source: string | null;
   ai_extracted: boolean;
   added_by: string | null;
@@ -52,6 +53,7 @@ export interface SoftSignalCreate {
   description?: string | null;
   impact?: SignalImpact;
   valid_until?: string | null;
+  occurred_at?: string | null;
   source?: string | null;
 }
 
@@ -65,6 +67,7 @@ export interface Activity {
   attendees: string | null;
   linked_metrics: string[];
   file_name: string | null;
+  occurred_at: string | null;
   added_by: string | null;
   hidden: boolean;
   created_at: string;
@@ -85,6 +88,7 @@ export interface ActivityCreate {
   attendees?: string | null;
   linked_metrics?: string[];
   file_name?: string | null;
+  occurred_at?: string | null;
 }
 
 // Mirrors prototype SIG.

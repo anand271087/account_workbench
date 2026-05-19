@@ -20,6 +20,7 @@ import {
   STATUS_TONES,
   TYPE_ICONS,
   type Checkpoint,
+  type CheckpointAttachment,
   type CheckpointListResponse,
   type CheckpointSignOffPayload,
   type CheckpointUpdate,
@@ -324,6 +325,9 @@ function CheckpointCard({
           )
         )}
       </div>
+
+      {/* R31 — attachments (files / recordings). Stored as { name, url } pairs. */}
+      <AttachmentsRow cp={cp} editable={editable && !isSignedOff} accountId={accountId} />
 
       {/* Signed-off snapshot */}
       {isSignedOff && cp.signed_off_snapshot && (
@@ -661,6 +665,138 @@ function Modal({
       >
         {children}
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// R31 — Attachments
+// ============================================================
+
+function AttachmentsRow({
+  cp,
+  editable,
+  accountId,
+}: {
+  cp: Checkpoint;
+  editable: boolean;
+  accountId: string;
+}) {
+  const qc = useQueryClient();
+  const queryKey = ["checkpoints", accountId];
+  const attachments = cp.attachments ?? [];
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+
+  const patch = useMutation({
+    mutationFn: (next: CheckpointAttachment[]) =>
+      api.patch<Checkpoint>(`/api/v1/checkpoints/${cp.id}`, {
+        attachments: next,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey }),
+  });
+
+  const addOne = () => {
+    if (!name.trim()) return;
+    patch.mutate([...attachments, { name: name.trim(), url: url.trim() || null }]);
+    setName("");
+    setUrl("");
+    setAdding(false);
+  };
+  const removeAt = (idx: number) =>
+    patch.mutate(attachments.filter((_, i) => i !== idx));
+
+  if (attachments.length === 0 && !editable) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-beroe-card-border/60">
+      <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1.5">
+        Attachments
+      </div>
+      {attachments.length === 0 ? (
+        <div className="text-[11px] text-text-muted italic">
+          No files or recordings attached.
+        </div>
+      ) : (
+        <ul className="space-y-1">
+          {attachments.map((a, i) => (
+            <li
+              key={i}
+              className="flex items-center gap-2 text-[11px] bg-slate-50 border border-beroe-card-border rounded-md px-2 py-1"
+            >
+              <span className="text-[14px]">📎</span>
+              {a.url ? (
+                <a
+                  href={a.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-beroe-blue font-semibold hover:underline"
+                >
+                  {a.name}
+                </a>
+              ) : (
+                <span className="font-semibold text-text-primary">{a.name}</span>
+              )}
+              {editable && (
+                <button
+                  onClick={() => removeAt(i)}
+                  className="ml-auto text-text-muted hover:text-red-700"
+                  title="Remove attachment"
+                >
+                  ✕
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {editable && (
+        <div className="mt-1.5">
+          {adding ? (
+            <div className="flex flex-col gap-1.5">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="File / recording name (e.g. QBR-deck.pdf, call-recording.mp4)"
+                className="text-[12px] px-2 py-1 rounded-md border border-beroe-card-border"
+              />
+              <input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="URL (optional — paste a link to the file)"
+                className="text-[12px] px-2 py-1 rounded-md border border-beroe-card-border"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={addOne}
+                  disabled={!name.trim() || patch.isPending}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => {
+                    setAdding(false);
+                    setName("");
+                    setUrl("");
+                  }}
+                  className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="text-[11px] text-beroe-blue font-semibold"
+            >
+              + Attach file / recording
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

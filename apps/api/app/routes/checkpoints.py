@@ -255,7 +255,7 @@ async def patch_checkpoint(
             "Checkpoint is signed off and cannot be edited",
         )
 
-    payload = body.model_dump(exclude_unset=True, mode="json")
+    payload = body.model_dump(exclude_unset=True)
     for k, v in payload.items():
         setattr(cp, k, v)
     cp.updated_at = datetime.now(timezone.utc)
