@@ -24,6 +24,11 @@ class Account(Base):
     industry: Mapped[str | None] = mapped_column(String, nullable=True)
     region: Mapped[str | None] = mapped_column(String, nullable=True)
     country: Mapped[str | None] = mapped_column(String, nullable=True)
+    # M16.1 — header chips populated by MoM extraction. `tier_band` lives on
+    # the existing `tier` column; the rest are dedicated string columns.
+    headquarters: Mapped[str | None] = mapped_column(String, nullable=True)
+    annual_revenue_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    sf_link: Mapped[str | None] = mapped_column(String, nullable=True)
 
     csm_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     co_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

@@ -100,6 +100,16 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             </>
           )}
 
+          {/* M24 — Leadership view (director/VP/admin only). */}
+          {me.permissions.can_view_leadership && (
+            <>
+              <SbSection>Leadership</SbSection>
+              <SbBtn href="/leadership" icon="📈" active={isPath("/leadership")}>
+                Portfolio view
+              </SbBtn>
+            </>
+          )}
+
           {me.permissions.is_global_admin && (
             <>
               <SbSection>Admin</SbSection>

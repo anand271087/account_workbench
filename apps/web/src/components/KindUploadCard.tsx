@@ -115,11 +115,21 @@ export function KindUploadCard({
         brief: hasAnyBrief(r.brief) ? r.brief : undefined,
       });
       const stats = await createExtractedContacts(accountId, r.contacts || []);
+      // M16.1 — also land account-header chips. Fill-blank-only semantics
+      // (same pattern as VPD candidate writes) so CSM edits aren't clobbered
+      // by a re-extracted MoM.
+      const accountUpdated = await applyExtractedAccountFields(
+        accountId,
+        r.account_fields,
+      );
       // Persist the applied marker so reloads don't re-create contacts.
       localStorage.setItem(appliedKey(d.id), new Date().toISOString());
       const parts: string[] = [];
       if (hasAnyEngagement(r.engagement)) parts.push("engagement");
       if (hasAnyBrief(r.brief)) parts.push("brief");
+      if (accountUpdated > 0) {
+        parts.push(`${accountUpdated} account field${accountUpdated === 1 ? "" : "s"}`);
+      }
       if (stats.created > 0) parts.push(`${stats.created} contact${stats.created === 1 ? "" : "s"}`);
       const skipped = stats.skipped > 0 ? ` · ${stats.skipped} duplicate contact skipped` : "";
       setExtractionToast(
@@ -130,6 +140,9 @@ export function KindUploadCard({
       qc.invalidateQueries({ queryKey: ["engagement", accountId] });
       qc.invalidateQueries({ queryKey: ["meeting-brief", accountId] });
       qc.invalidateQueries({ queryKey: ["contacts", accountId] });
+      if (accountUpdated > 0) {
+        qc.invalidateQueries({ queryKey: ["account", accountId] });
+      }
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.items, kind, accountId]);
@@ -776,6 +789,60 @@ function hasAnyBrief(b: MomExtractionResult["brief"] | undefined): boolean {
     (b.email_insights?.length ?? 0) > 0 || (b.cheat_sheet_never_say?.length ?? 0) > 0 ||
     (b.cheat_sheet_opening_asks?.length ?? 0) > 0,
   );
+}
+
+// M16.1 — apply MoM-extracted account-header chips to the account header.
+// Returns how many fields actually got written. Fill-blank-only: if a field
+// is already set on the account (e.g. CSM edited it after handoff), the
+// extraction won't overwrite it. Maps tier_band → tier.
+async function applyExtractedAccountFields(
+  accountId: string,
+  fields: {
+    industry: string | null;
+    country: string | null;
+    headquarters: string | null;
+    annual_revenue_text: string | null;
+    tier_band: string | null;
+    sf_link: string | null;
+  } | null | undefined,
+): Promise<number> {
+  if (!fields) return 0;
+  let current: {
+    industry: string | null;
+    country: string | null;
+    headquarters: string | null;
+    annual_revenue_text: string | null;
+    tier: string | null;
+    sf_link: string | null;
+  };
+  try {
+    current = await api.get(`/api/v1/accounts/${accountId}`);
+  } catch {
+    return 0;
+  }
+  const patch: Record<string, string> = {};
+  const setIfBlank = (
+    key: "industry" | "country" | "headquarters" | "annual_revenue_text" | "tier" | "sf_link",
+    incoming: string | null | undefined,
+  ) => {
+    if (!incoming) return;
+    const existing = (current as Record<string, string | null>)[key];
+    if (existing && existing.trim()) return;
+    patch[key] = incoming;
+  };
+  setIfBlank("industry", fields.industry);
+  setIfBlank("country", fields.country);
+  setIfBlank("headquarters", fields.headquarters);
+  setIfBlank("annual_revenue_text", fields.annual_revenue_text);
+  setIfBlank("tier", fields.tier_band);
+  setIfBlank("sf_link", fields.sf_link);
+  if (Object.keys(patch).length === 0) return 0;
+  try {
+    await api.patch(`/api/v1/accounts/${accountId}`, patch);
+    return Object.keys(patch).length;
+  } catch {
+    return 0;
+  }
 }
 
 async function createExtractedContacts(

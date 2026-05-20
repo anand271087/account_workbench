@@ -56,6 +56,8 @@ class Permissions(BaseModel):
     can_view_inside_sales: bool
     can_view_admin_panel: bool
     can_manage_users: bool
+    # M24 — leadership view (cross-account portfolio dashboard).
+    can_view_leadership: bool = False
 
 
 class MeResponse(BaseModel):

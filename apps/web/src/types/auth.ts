@@ -47,6 +47,7 @@ export interface Permissions {
   can_view_inside_sales: boolean;
   can_view_admin_panel: boolean;
   can_manage_users: boolean;
+  can_view_leadership: boolean;
 }
 
 export interface MeResponse {

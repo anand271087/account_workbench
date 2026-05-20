@@ -35,6 +35,8 @@ _CACHE: dict[UUID, tuple[float, dict]] = {}
 _TTL_SECONDS = 30.0
 _FIELDS = (
     "id", "name", "slug", "industry", "region", "country",
+    # M16.1 — header chips applied from MoM extraction.
+    "headquarters", "annual_revenue_text", "sf_link",
     "csm_user_id", "co_user_id", "category", "tier",
     "account_type", "segment", "current_acv", "target_acv",
     "contract_start", "contract_end", "renewal_date",

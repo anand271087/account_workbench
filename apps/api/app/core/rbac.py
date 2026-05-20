@@ -94,6 +94,20 @@ def can_view_audit_log(role: str) -> bool:
     return role in AUDIT_VIEWER_ROLES
 
 
+def can_view_leadership(role: str) -> bool:
+    """M24 — Leadership view: cross-account portfolio dashboard. Surfaces
+    every account's renewal outcome, VDD totals, open red flags, and overdue
+    checkpoints. Restricted to director / VP / admin tier."""
+    return role in {
+        "admin",
+        "cs_director",
+        "vp_csm",
+        "vp_sales",
+        "vp_inside_sales",
+        "vp_solutioning",
+    }
+
+
 def can_bulk_import(role: str) -> bool:
     """Bulk Import (CSV) — matrix: CS Director + VP — CSM + Admin only."""
     return role in {"admin", "cs_director", "vp_csm"}
@@ -295,6 +309,7 @@ def permissions_for(role: str) -> Permissions:
         can_view_inside_sales=can_view_inside_sales(role),
         can_view_admin_panel=can_view_admin_panel(role),
         can_manage_users=can_manage_users(role),
+        can_view_leadership=can_view_leadership(role),
     )
 
 

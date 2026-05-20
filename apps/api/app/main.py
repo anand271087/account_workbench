@@ -25,6 +25,7 @@ from app.routes import delivery_renewal as delivery_renewal_routes
 from app.routes import meeting_brief as meeting_brief_routes
 from app.routes import metrics as metric_routes
 from app.routes import intel_news as intel_news_routes
+from app.routes import leadership as leadership_routes
 from app.routes import platform_intel as platform_intel_routes
 from app.routes import plays as play_routes
 from app.routes import reports as report_routes
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(signal_routes.activity_router)
     app.include_router(intel_news_routes.account_router)
     app.include_router(intel_news_routes.intel_router)
+    app.include_router(leadership_routes.router)
     app.include_router(platform_intel_routes.router)
     app.include_router(report_routes.router)
     app.include_router(meeting_brief_routes.router)

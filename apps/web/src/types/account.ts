@@ -46,6 +46,10 @@ export interface AccountDetail {
   industry: string | null;
   region: string | null;
   country: string | null;
+  // M16.1 — MoM-extraction header chips applied via PATCH /accounts/:id.
+  headquarters: string | null;
+  annual_revenue_text: string | null;
+  sf_link: string | null;
   csm_user_id: string | null;
   co_user_id: string | null;
   csm_full_name: string | null;

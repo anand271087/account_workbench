@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AccountListItem(BaseModel):
@@ -60,8 +60,6 @@ class AccountListResponse(BaseModel):
 class AccountCreate(BaseModel):
     """Body for POST /api/v1/accounts (admin/cs_director/vp_csm)."""
 
-    from pydantic import Field
-
     name: str = Field(..., min_length=2, max_length=200)
     industry: str | None = Field(None, max_length=80)
     country: str | None = Field(None, max_length=80)
@@ -81,6 +79,21 @@ class AccountCreate(BaseModel):
     contract_end: date | None = None
     renewal_date: date | None = None
     health_score: int | None = Field(None, ge=0, le=100)
+
+
+class AccountHeaderUpdate(BaseModel):
+    """M16.1 — PATCH /accounts/:id body for the 5 header chips that MoM
+    extraction surfaces. All fields optional; only the keys present in the
+    request body are applied (None is treated as a clear)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    industry: str | None = Field(None, max_length=120)
+    country: str | None = Field(None, max_length=120)
+    headquarters: str | None = Field(None, max_length=200)
+    annual_revenue_text: str | None = Field(None, max_length=80)
+    tier: str | None = Field(None, max_length=40)
+    sf_link: str | None = Field(None, max_length=2000)
 
 
 class AccountListFilters(BaseModel):

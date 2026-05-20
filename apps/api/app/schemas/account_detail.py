@@ -22,6 +22,10 @@ class AccountDetail(BaseModel):
     industry: str | None
     region: str | None
     country: str | None
+    # M16.1 — MoM-extraction header chips.
+    headquarters: str | None = None
+    annual_revenue_text: str | None = None
+    sf_link: str | None = None
 
     csm_user_id: UUID | None
     co_user_id: UUID | None

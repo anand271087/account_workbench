@@ -26,6 +26,7 @@ from app.core.rbac import (
     can_edit_account,
     can_reassign_account_owner,
     can_view_account,
+    can_write_engagement,
     is_global_admin,
 )
 from app.db.session import get_db
@@ -35,7 +36,12 @@ from app.models.checkpoint import Checkpoint
 from app.models.contact import ClientContact
 from app.models.cs_goal import CSGoal
 from app.models.user import User
-from app.schemas.account import AccountCreate, AccountListItem, AccountListResponse
+from app.schemas.account import (
+    AccountCreate,
+    AccountHeaderUpdate,
+    AccountListItem,
+    AccountListResponse,
+)
 from app.schemas.account_detail import AccountDetail, ActivityFeedResponse, ActivityItem
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["accounts"])
@@ -445,6 +451,9 @@ async def get_account(
     return AccountDetail(
         id=a.id, name=a.name, slug=a.slug,
         industry=a.industry, region=a.region, country=a.country,
+        headquarters=a.headquarters,
+        annual_revenue_text=a.annual_revenue_text,
+        sf_link=a.sf_link,
         csm_user_id=a.csm_user_id, co_user_id=a.co_user_id,
         csm_full_name=row[1], co_full_name=row[4],
         category=a.category, tier=a.tier,
@@ -580,6 +589,57 @@ class ReassignOwnerBody(BaseModel):
 class BulkReassignBody(BaseModel):
     account_ids: list[UUID]
     csm_user_id: UUID
+
+
+# ============================================================
+# M16.1 — PATCH account header chips
+# ============================================================
+#
+# Surfaces the 5 header fields (industry / country / headquarters /
+# annual_revenue_text / tier / sf_link) so the MomExtractionReview modal can
+# land what the AI extracts. Same write set as engagement edits — CSM/Team
+# Manager on their account, plus admin/CS Director/VP CSM.
+
+
+@router.patch("/{account_id}", response_model=AccountDetail)
+async def patch_account_header(
+    account_id: Annotated[UUID, Path()],
+    body: AccountHeaderUpdate,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AccountDetail:
+    from app.core.scope import get_account_row, invalidate_account
+
+    acc = await get_account_row(db, account_id)
+    is_assigned = (acc.csm_user_id == user.id) or (acc.co_user_id == user.id)
+    team_ids = (
+        await _team_member_ids(db, user) if user.role == "cs_team_manager" else set()
+    )
+    is_team = acc.csm_user_id in team_ids if team_ids else False
+
+    if not can_write_engagement(
+        user.role, is_assigned=is_assigned, is_team=is_team
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Your role cannot edit account header fields on this account",
+        )
+
+    real = (
+        await db.execute(select(Account).where(Account.id == account_id))
+    ).scalar_one_or_none()
+    if real is None or real.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+
+    # Only persist keys the caller actually sent. None is a valid "clear".
+    payload = body.model_dump(exclude_unset=True)
+    for key, value in payload.items():
+        setattr(real, key, value)
+
+    await db.commit()
+    invalidate_account(account_id)
+
+    return await get_account(account_id=account_id, user=user, db=db)
 
 
 @router.patch("/{account_id}/owner", response_model=AccountListItem)

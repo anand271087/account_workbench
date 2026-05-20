@@ -205,9 +205,27 @@ export default function AccountProfileLayout() {
               )}
             </div>
             <div className="text-[11px] text-text-secondary mt-0.5">
-              {data.industry ?? "—"} · {data.country ?? "—"} ·{" "}
+              {data.industry ?? "—"} · {data.country ?? "—"}
+              {data.annual_revenue_text && (
+                <> · <span className="font-semibold">{data.annual_revenue_text}</span></>
+              )}
+              {data.headquarters && <> · HQ {data.headquarters}</>}
+              {" · "}
               <span className="font-semibold">{data.csm_full_name ?? "Unassigned"}</span>{" "}
               <span className="text-text-muted">CSM</span>
+              {data.sf_link && (
+                <>
+                  {" · "}
+                  <a
+                    href={data.sf_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-beroe-blue hover:underline font-semibold"
+                  >
+                    Salesforce ↗
+                  </a>
+                </>
+              )}
             </div>
           </div>
 

@@ -29,6 +29,7 @@ import SalesHandoffTab from "@/routes/accounts/tabs/SalesHandoffTab";
 import SolutioningTab from "@/routes/accounts/tabs/SolutioningTab";
 import UsersPage from "@/routes/admin/UsersPage";
 import CategoriesPage from "@/routes/admin/CategoriesPage";
+import LeadershipPage from "@/routes/LeadershipPage";
 import { useAuth } from "@/components/AuthProvider";
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,15 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
   if (isLoading) return null;
   if (!me?.permissions.is_global_admin) {
     return <Navigate to="/access-denied" replace />;
+  }
+  return <>{children}</>;
+}
+
+function RequireLeadership({ children }: { children: React.ReactNode }) {
+  const { me, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (!me?.permissions.can_view_leadership) {
+    return <Navigate to="/access-denied?detail=Leadership+view+is+restricted+to+director%2FVP%2Fadmin+roles" replace />;
   }
   return <>{children}</>;
 }
@@ -85,6 +95,16 @@ export default function App() {
         element={
           <RequireAuth>
             <AccountListPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/leadership"
+        element={
+          <RequireAuth>
+            <RequireLeadership>
+              <LeadershipPage />
+            </RequireLeadership>
           </RequireAuth>
         }
       />
