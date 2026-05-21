@@ -382,7 +382,7 @@ export function KindUploadCard({
       <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
         <div className="px-5 py-3 border-b border-beroe-card-border/60 flex items-center justify-between">
           <h3 className="text-sm font-bold text-text-primary">
-            {DOC_KIND_LABELS[kind]}s ({visible.length})
+            {DOC_KIND_LABELS[kind]} ({visible.length})
           </h3>
         </div>
         {isLoading ? (
