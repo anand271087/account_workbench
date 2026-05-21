@@ -98,10 +98,39 @@ def _derive_dates(signed_date: date, term: str) -> tuple[date | None, date | Non
     return renewal, bvd
 
 
+async def _resolve_user_name(
+    db: AsyncSession, user_id: UUID | None
+) -> str | None:
+    if user_id is None:
+        return None
+    from app.models.user import User
+
+    row = (
+        await db.execute(
+            select(User.full_name).where(User.id == user_id, User.deleted_at.is_(None))
+        )
+    ).scalar_one_or_none()
+    return row
+
+
 def _serialise(acc: Account, *, can_sign: bool, can_unlock: bool) -> SigningGateOut:
     out = SigningGateOut.model_validate(acc)
     out.can_sign = can_sign
     out.can_unlock = can_unlock
+    return out
+
+
+async def _serialise_with_name(
+    acc: Account,
+    db: AsyncSession,
+    *,
+    can_sign: bool,
+    can_unlock: bool,
+) -> SigningGateOut:
+    """Same as _serialise but resolves gate_confirmed_by → user.full_name
+    (H41 — surfaces the Sales person's name on the signed display)."""
+    out = _serialise(acc, can_sign=can_sign, can_unlock=can_unlock)
+    out.gate_confirmed_by_name = await _resolve_user_name(db, acc.gate_confirmed_by)
     return out
 
 
@@ -117,8 +146,9 @@ async def get_signing_gate(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SigningGateOut:
     acc, is_assigned, is_team = await _scope(db, user, account_id)
-    return _serialise(
+    return await _serialise_with_name(
         acc,
+        db,
         can_sign=can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team),
         can_unlock=can_unlock_signing(user.role),
     )

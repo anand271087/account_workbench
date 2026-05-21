@@ -362,9 +362,13 @@ export default function SalesHandoffTab() {
         saving={checklist.isPending}
       />
 
-      {/* R17 — once signing is live, expose Success Management shortcuts so
-          Sales doesn't have to walk the user to the top-nav. Two cards in a
-          single row: Success Contract (M19) + Value Tracking metrics (M20). */}
+      {/* H40 — Success Metrics live INSIDE Sales Handoff after signing
+          (was previously just a link card). Read-only summary with a
+          "Manage in Value Tracking →" footer that deep-links the user out. */}
+      {gate.gate_signed && !gate.gate_unlocked && (
+        <InlineSuccessMetricsCard accountId={account.id} />
+      )}
+
       {gate.gate_signed && !gate.gate_unlocked && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <button
@@ -395,10 +399,10 @@ export default function SalesHandoffTab() {
               Value Tracking
             </div>
             <div className="text-sm font-bold text-text-primary mt-0.5">
-              Open Success Metrics →
+              Manage Success Metrics →
             </div>
             <div className="text-[11px] text-text-muted mt-0.5">
-              Status engine over the metric set agreed at signing.
+              Add / log values on the full Value Tracking surface.
             </div>
           </button>
         </div>
@@ -643,31 +647,41 @@ function SigningGateCard({
 
       {/* Signed metadata footer */}
       {isSigned && !gate.gate_unlocked && (
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          {gate.gate_contract_modules.map((m) => (
-            <span
-              key={m}
-              className="inline-block text-[10px] px-2 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30"
-            >
-              {m}
-            </span>
-          ))}
-          {gate.gate_platform_tier && (
-            <span className="text-[11px] text-text-muted">
-              Tier: <b className="text-text-primary">{gate.gate_platform_tier}</b>
-            </span>
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            {gate.gate_contract_modules.map((m) => (
+              <span
+                key={m}
+                className="inline-block text-[10px] px-2 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30"
+              >
+                {m}
+              </span>
+            ))}
+            {gate.gate_platform_tier && (
+              <span className="text-[11px] text-text-muted">
+                Tier: <b className="text-text-primary">{gate.gate_platform_tier}</b>
+              </span>
+            )}
+            {gate.gate_account_segment && (
+              <span className="text-[11px] text-text-muted">
+                Segment: <b className="text-text-primary">{gate.gate_account_segment}</b>
+              </span>
+            )}
+            {gate.gate_subscribers && (
+              <span className="text-[11px] text-text-muted">
+                Subscribers: <b className="text-text-primary">{gate.gate_subscribers}</b>
+              </span>
+            )}
+          </div>
+          {/* H41 — "Confirmed by NAME on DATE" line. */}
+          {gate.gate_confirmed_by_name && gate.gate_confirmed_at && (
+            <div className="text-[11px] text-text-muted mb-3">
+              ✓ Confirmed by{" "}
+              <b className="text-text-primary">{gate.gate_confirmed_by_name}</b>{" "}
+              on <b>{fmtDateTime(gate.gate_confirmed_at)}</b>
+            </div>
           )}
-          {gate.gate_account_segment && (
-            <span className="text-[11px] text-text-muted">
-              Segment: <b className="text-text-primary">{gate.gate_account_segment}</b>
-            </span>
-          )}
-          {gate.gate_subscribers && (
-            <span className="text-[11px] text-text-muted">
-              Subscribers: <b className="text-text-primary">{gate.gate_subscribers}</b>
-            </span>
-          )}
-        </div>
+        </>
       )}
 
       {/* Contract doc */}
@@ -925,4 +939,112 @@ function shDiff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
     }
   }
   return out as SolutioningUpdate;
+}
+
+// H40 — inline Success Metrics summary embedded in Sales Handoff. Read-only;
+// edits go through the full Value Tracking surface via the deep-link below.
+function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
+  type Met = {
+    id: string;
+    name: string;
+    metric_type: string;
+    target_value: string | null;
+    current_value: string | null;
+    status: "green" | "amber" | "red" | "grey";
+  };
+  const { data, isLoading } = useQuery<{ items: Met[]; total: number }>({
+    queryKey: ["metrics", accountId],
+    queryFn: () =>
+      api.get<{ items: Met[]; total: number }>(
+        `/api/v1/accounts/${accountId}/metrics`,
+      ),
+  });
+  const navigate = useNavigate();
+  const items = data?.items ?? [];
+  const counts = {
+    green: items.filter((m) => m.status === "green").length,
+    amber: items.filter((m) => m.status === "amber").length,
+    red: items.filter((m) => m.status === "red").length,
+    grey: items.filter((m) => m.status === "grey").length,
+  };
+  const dot = (s: Met["status"]) =>
+    s === "green"
+      ? "bg-emerald-500"
+      : s === "amber"
+        ? "bg-amber-500"
+        : s === "red"
+          ? "bg-red-500"
+          : "bg-slate-300";
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-text-primary">Success Metrics</h3>
+          <p className="text-[11px] text-text-muted">
+            Agreed at signing — tracked live. Edits happen on the Value Tracking tab.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">
+            ✓ {counts.green}
+          </span>
+          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">
+            ⚠ {counts.amber}
+          </span>
+          <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 font-semibold">
+            ✕ {counts.red}
+          </span>
+          {counts.grey > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-700 font-semibold">
+              ○ {counts.grey}
+            </span>
+          )}
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="text-xs text-text-muted italic">Loading metrics…</div>
+      ) : items.length === 0 ? (
+        <div className="text-xs text-text-muted italic">
+          No metrics captured yet. Define them on the Value Tracking tab so the
+          signing snapshot has measurement teeth.
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.slice(0, 6).map((m) => (
+            <li
+              key={m.id}
+              className="flex items-center gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
+            >
+              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", dot(m.status))} />
+              <span className="font-semibold text-text-primary flex-1 truncate">
+                {m.name}
+              </span>
+              <span className="text-[11px] text-text-muted">
+                {m.current_value ?? "—"}
+                {m.target_value && (
+                  <span className="text-text-muted/70"> / {m.target_value}</span>
+                )}
+              </span>
+            </li>
+          ))}
+          {items.length > 6 && (
+            <li className="text-[10px] text-text-muted italic pt-1">
+              + {items.length - 6} more on Value Tracking
+            </li>
+          )}
+        </ul>
+      )}
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() =>
+            navigate(`/accounts/${accountId}/success-management/value-tracking`)
+          }
+          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+        >
+          → Open Value Tracking to add or log values
+        </button>
+      </div>
+    </div>
+  );
 }

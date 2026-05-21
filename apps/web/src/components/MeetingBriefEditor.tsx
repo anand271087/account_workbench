@@ -24,6 +24,7 @@ import {
 import type { ExtractedBrief } from "@/types/mom_extraction";
 import {
   BRIEF_CALL_TYPE_LABELS,
+  DISCOVERY_CATEGORIES,
   emptyBrief,
   SCENARIO_LABELS,
   SEVERITY_LABELS,
@@ -146,6 +147,93 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
 
   const editable = form.is_editable;
 
+  // H45/H46 — append AI-generated suggestions onto an existing brief section.
+  // Each section's suggestion shape matches the section's item shape so we
+  // can drop them straight onto the form state.
+  const aiSuggest = async (
+    section:
+      | "company_snapshot"
+      | "discovery_questions"
+      | "minefields"
+      | "objectives"
+      | "value_anchors"
+      | "cheat_sheet",
+  ) => {
+    try {
+      const r = await api.post<{ section: string; suggestions: unknown[] }>(
+        `/api/v1/accounts/${accountId}/brief/ai-suggest`,
+        { section },
+      );
+      const suggestions = r.suggestions ?? [];
+      if (suggestions.length === 0) return;
+      if (section === "cheat_sheet") {
+        // Suggestions look like {meta, bullets[]}; merge into never_say +
+        // opening_asks depending on the meta hint.
+        const nextNever = [...form.cheat_sheet_never_say];
+        const nextAsks = [...form.cheat_sheet_opening_asks];
+        for (const s of suggestions as { meta?: string; bullets?: string[] }[]) {
+          if (!s?.bullets) continue;
+          if ((s.meta || "").toLowerCase().includes("never") ||
+              (s.meta || "").toLowerCase().includes("disqualif")) {
+            nextNever.push(...s.bullets);
+          } else {
+            nextAsks.push(...s.bullets);
+          }
+        }
+        setForm({
+          ...form,
+          cheat_sheet_never_say: nextNever,
+          cheat_sheet_opening_asks: nextAsks,
+        });
+      } else if (section === "company_snapshot") {
+        setForm({ ...form, company_snapshot: [...form.company_snapshot, ...(suggestions as SnapshotStat[])] });
+      } else if (section === "discovery_questions") {
+        const startRank = form.discovery_questions.length + 1;
+        const augmented = (suggestions as Partial<DiscoveryQuestion>[]).map((q, i) => ({
+          objective: q.objective ?? "",
+          rank: startRank + i,
+          person: q.person ?? "",
+          from_email: false,
+          text: q.text ?? "",
+          category: q.category ?? null,
+        }));
+        setForm({ ...form, discovery_questions: [...form.discovery_questions, ...augmented] });
+      } else if (section === "minefields") {
+        setForm({ ...form, minefields: [...form.minefields, ...(suggestions as Minefield[])] });
+      } else if (section === "objectives") {
+        setForm({ ...form, objectives: [...form.objectives, ...(suggestions as Objective[])] });
+      } else if (section === "value_anchors") {
+        setForm({ ...form, value_anchors: [...form.value_anchors, ...(suggestions as ValueAnchor[])] });
+      }
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "AI suggest failed";
+      setSavingError(msg);
+    }
+  };
+
+  const SuggestBtn = ({
+    section,
+    label,
+  }: {
+    section:
+      | "company_snapshot"
+      | "discovery_questions"
+      | "minefields"
+      | "objectives"
+      | "value_anchors"
+      | "cheat_sheet";
+    label?: string;
+  }) => (
+    <button
+      type="button"
+      onClick={() => aiSuggest(section)}
+      disabled={!editable}
+      className="text-[11px] px-2 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5 disabled:opacity-50"
+    >
+      ✨ {label ?? "AI suggest"}
+    </button>
+  );
+
   return (
     <div className="space-y-3">
       {/* Call info — open by default */}
@@ -253,10 +341,11 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
                   { num: "", label: "Sustainability Priority", sub: null },
                 ])
               }
-              className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5"
+              className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5 mr-2"
             >
               ✨ Seed standard cards
             </button>
+            <SuggestBtn section="company_snapshot" label="AI suggest values" />
             <span className="ml-2 text-[10px] text-text-muted">
               Pre-fills 5 cards (Revenue · Employees · COGS · Priority Categories · Sustainability) — values stay blank for you to fill.
             </span>
@@ -447,6 +536,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       {/* Minefields */}
       <BriefSection
         title={`Minefields (${form.minefields.length})`}
+        actions={editable ? <SuggestBtn section="minefields" /> : null}
         subtitle="Things to avoid in the call — and why."
       >
         <ItemList
@@ -508,6 +598,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       {/* Objectives */}
       <BriefSection
         title={`Objectives (${form.objectives.length})`}
+        actions={editable ? <SuggestBtn section="objectives" /> : null}
         subtitle="Ranked priorities for the call, with Beroe's response."
       >
         <ItemList
@@ -591,6 +682,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       <BriefSection
         title={`Discovery questions (${form.discovery_questions.length})`}
         subtitle="Per objective, ranked. Mark questions sourced from prior emails."
+        actions={editable ? <SuggestBtn section="discovery_questions" /> : null}
       >
         <ItemList
           items={form.discovery_questions}
@@ -634,15 +726,36 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
                 value={q.text}
                 onChange={(e) => set({ ...q, text: e.target.value })}
               />
-              <label className="text-xs text-text-secondary inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={q.from_email}
-                  disabled={!editable}
-                  onChange={(e) => set({ ...q, from_email: e.target.checked })}
-                />
-                Sourced from email correspondence
-              </label>
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* H46 — Discovery question category dropdown. */}
+                <label className="text-[11px] text-text-muted inline-flex items-center gap-1.5">
+                  Category
+                  <select
+                    value={q.category ?? ""}
+                    onChange={(e) =>
+                      set({ ...q, category: e.target.value || null })
+                    }
+                    disabled={!editable}
+                    className="text-[12px] px-2 py-1 rounded border border-beroe-card-border"
+                  >
+                    <option value="">—</option>
+                    {DISCOVERY_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs text-text-secondary inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={q.from_email}
+                    disabled={!editable}
+                    onChange={(e) => set({ ...q, from_email: e.target.checked })}
+                  />
+                  Sourced from email correspondence
+                </label>
+              </div>
             </div>
           )}
           emptyStat={(): DiscoveryQuestion => ({
@@ -651,6 +764,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
             person: "",
             from_email: false,
             text: "",
+            category: null,
           })}
           editable={editable}
           addLabel="+ Question"
@@ -661,6 +775,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       <BriefSection
         title={`Value anchors (${form.value_anchors.length})`}
         subtitle="Proof points grouped by objective."
+        actions={editable ? <SuggestBtn section="value_anchors" /> : null}
       >
         <ItemList
           items={form.value_anchors}
@@ -983,8 +1098,27 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
         />
       </BriefSection>
 
+      {/* H46 — Categories tab. Free-form list of procurement categories
+          in scope for this meeting / account. */}
+      <BriefSection
+        title={`Categories (${form.categories.length})`}
+        subtitle="Procurement categories in scope for this call."
+      >
+        <StringListField
+          label="Categories"
+          items={form.categories}
+          editable={editable}
+          onChange={(v) => update("categories", v)}
+          placeholder="Add a category (e.g. Cocoa, Aluminium, Logistics)"
+        />
+      </BriefSection>
+
       {/* Cheat sheet */}
-      <BriefSection title="Cheat sheet" subtitle="Quick prompts the meeting lead glances at.">
+      <BriefSection
+        title="Cheat sheet"
+        subtitle="Quick prompts the meeting lead glances at."
+        actions={editable ? <SuggestBtn section="cheat_sheet" /> : null}
+      >
         <Field label="Short win condition">
           <input
             type="text"
@@ -1104,11 +1238,13 @@ function BriefSection({
   subtitle,
   children,
   defaultOpen,
+  actions,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  actions?: React.ReactNode;
 }) {
   return (
     <details
@@ -1120,6 +1256,18 @@ function BriefSection({
         {subtitle && (
           <span className="text-[11px] font-normal text-text-muted ml-1">
             · {subtitle}
+          </span>
+        )}
+        {actions && (
+          <span
+            className="ml-auto"
+            onClick={(e) => {
+              // Don't toggle the <details> when interacting with the actions.
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+          >
+            {actions}
           </span>
         )}
       </summary>
@@ -1319,6 +1467,7 @@ function diff(next: MeetingBrief, prev: MeetingBrief): MeetingBriefUpdate {
     "closing_scenarios",
     "cheat_sheet_never_say",
     "cheat_sheet_opening_asks",
+    "categories",
   ] as const;
   const out: Record<string, unknown> = {};
   for (const k of keys) {

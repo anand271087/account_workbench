@@ -72,6 +72,10 @@ class DiscoveryQuestion(BaseModel):
     person: str = Field(..., max_length=120)
     from_email: bool = False
     text: str = Field(..., max_length=600)
+    # H46 — Category dropdown on Discovery questions. Free-form so prototype
+    # categories (Commercial / Risk / People / Process / Sustainability /
+    # Technology) and any future ones flow through without schema churn.
+    category: str | None = Field(None, max_length=60)
 
 
 class ValueAnchorPoint(BaseModel):
@@ -150,6 +154,9 @@ class MeetingBriefOut(BaseModel):
     closing_scenarios: list[ClosingScenario] = Field(default_factory=list)
     cheat_sheet_never_say: list[str] = Field(default_factory=list)
     cheat_sheet_opening_asks: list[str] = Field(default_factory=list)
+    # H46 — "Categories" tab in the prototype's brief. Free-form strings so
+    # prototype vocab (commodity / category names) flows through.
+    categories: list[str] = Field(default_factory=list)
 
     updated_at: datetime
     updated_by: UUID | None
@@ -182,3 +189,4 @@ class MeetingBriefUpdate(BaseModel):
     closing_scenarios: list[ClosingScenario] | None = None
     cheat_sheet_never_say: list[str] | None = None
     cheat_sheet_opening_asks: list[str] | None = None
+    categories: list[str] | None = None

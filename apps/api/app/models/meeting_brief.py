@@ -55,6 +55,8 @@ class MeetingBrief(Base):
     closing_scenarios: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
     cheat_sheet_never_say: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
     cheat_sheet_opening_asks: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
+    # H46 — Categories tab on the brief.
+    categories: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False

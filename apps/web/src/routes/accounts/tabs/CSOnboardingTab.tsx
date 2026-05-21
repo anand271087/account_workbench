@@ -709,7 +709,7 @@ function GoalAlignmentSurface({ accountId }: { accountId: string }) {
       ) : (
         <ul className="space-y-2">
           {goals.map((g) => (
-            <GoalAlignmentRow key={g.id} g={g} />
+            <GoalAlignmentRow key={g.id} g={g} accountId={accountId} />
           ))}
         </ul>
       )}
@@ -717,7 +717,14 @@ function GoalAlignmentSurface({ accountId }: { accountId: string }) {
   );
 }
 
-function GoalAlignmentRow({ g }: { g: GoalRow }) {
+function GoalAlignmentRow({
+  g,
+  accountId,
+}: {
+  g: GoalRow;
+  accountId: string;
+}) {
+  const qc = useQueryClient();
   const dot =
     g.alignment_status === "aligned"
       ? "bg-emerald-500"
@@ -727,23 +734,14 @@ function GoalAlignmentRow({ g }: { g: GoalRow }) {
   const phaseA = (g.phase_a ?? {}) as Record<string, unknown>;
   const phaseB = (g.phase_b ?? {}) as Record<string, unknown>;
   const phaseC = (g.phase_c ?? {}) as Record<string, unknown>;
-  const meanText = [
-    phaseA.goal_type ? `Type: ${String(phaseA.goal_type).replace(/_/g, " ")}` : null,
-    phaseA.validation_note ? String(phaseA.validation_note) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ") || "Not yet captured.";
-  const groundworkText = Object.entries(phaseB)
-    .filter(([k, v]) => v && !k.endsWith("_complete") && k !== "research_requested" && k !== "research_request_date")
-    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${String(v).replace(/_/g, " ")}`)
-    .join(" · ") || "Not yet captured.";
-  const targetText = [
-    phaseC.agreed_target ? `Target: ${String(phaseC.agreed_target)}` : null,
-    phaseC.measure_method ? `Measure: ${String(phaseC.measure_method)}` : null,
-    phaseC.timeline ? `Due ${String(phaseC.timeline)}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ") || "Not yet captured.";
+
+  // H42/43/44 — single PATCH-on-save mutation reused by all three editors.
+  const patch = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.patch(`/api/v1/cs-goals/${g.id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cs-goals", accountId, false] }),
+  });
+
   return (
     <li className="border border-beroe-card-border rounded-lg overflow-hidden">
       <details>
@@ -758,24 +756,351 @@ function GoalAlignmentRow({ g }: { g: GoalRow }) {
           </span>
         </summary>
         <div className="px-3 py-2 grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50/40">
-          <GoalDetailBlock title="What does it mean?" body={meanText} />
-          <GoalDetailBlock title="Groundwork" body={groundworkText} />
-          <GoalDetailBlock title="Agreed target" body={targetText} />
+          <PhaseAEditableBlock
+            title="What does it mean?"
+            phase={phaseA}
+            saving={patch.isPending}
+            onSave={(next) => patch.mutate({ phase_a: next })}
+          />
+          <PhaseBEditableBlock
+            title="Groundwork"
+            category={g.category}
+            phase={phaseB}
+            saving={patch.isPending}
+            onSave={(next) => patch.mutate({ phase_b: next })}
+          />
+          <PhaseCEditableBlock
+            title="Agreed target"
+            phase={phaseC}
+            saving={patch.isPending}
+            onSave={(next) => patch.mutate({ phase_c: next })}
+          />
         </div>
       </details>
     </li>
   );
 }
 
-function GoalDetailBlock({ title, body }: { title: string; body: string }) {
+// ---- Phase A editable block (validation note + goal type) ----
+function PhaseAEditableBlock({
+  title,
+  phase,
+  saving,
+  onSave,
+}: {
+  title: string;
+  phase: Record<string, unknown>;
+  saving: boolean;
+  onSave: (next: Record<string, unknown>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState({
+    goal_type: String(phase.goal_type ?? ""),
+    validation_note: String(phase.validation_note ?? ""),
+  });
+  const empty = !phase.goal_type && !phase.validation_note;
+  const summary = empty
+    ? "Not yet captured. Click to add."
+    : [phase.goal_type ? `Type: ${String(phase.goal_type).replace(/_/g, " ")}` : null, phase.validation_note]
+        .filter(Boolean)
+        .join(" · ");
+  return (
+    <EditableShell title={title} open={open} setOpen={setOpen} summary={summary} empty={empty}>
+      <input
+        type="text"
+        value={draft.goal_type}
+        placeholder="Goal type (e.g. cost_savings, base_rationalization)"
+        onChange={(e) => setDraft({ ...draft, goal_type: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
+      />
+      <textarea
+        rows={3}
+        value={draft.validation_note}
+        placeholder="What does this goal mean to the client?"
+        onChange={(e) => setDraft({ ...draft, validation_note: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1"
+      />
+      <EditableActions
+        saving={saving}
+        onSave={() => {
+          onSave({
+            goal_type: draft.goal_type || null,
+            validation_note: draft.validation_note || null,
+          });
+          setOpen(false);
+        }}
+        onCancel={() => {
+          setDraft({
+            goal_type: String(phase.goal_type ?? ""),
+            validation_note: String(phase.validation_note ?? ""),
+          });
+          setOpen(false);
+        }}
+      />
+    </EditableShell>
+  );
+}
+
+// ---- Phase B editable block (3 groundwork selects, category-aware) ----
+const GROUNDWORK_ITEMS_BY_CATEGORY: Record<string, { key: string; label: string }[]> = {
+  cost_savings: [
+    { key: "spend_analytics", label: "Spend Analytics" },
+    { key: "opportunity_assessment", label: "Opportunity Assessment" },
+    { key: "benchmarking", label: "Benchmarking" },
+  ],
+  base_rationalization: [
+    { key: "catalog_coverage", label: "Catalog Coverage" },
+    { key: "supplier_mapping", label: "Supplier Mapping" },
+    { key: "spend_visibility", label: "Spend Visibility" },
+  ],
+  risk_mitigation: [
+    { key: "risk_register", label: "Risk Register" },
+    { key: "supplier_health", label: "Supplier Health Check" },
+    { key: "contingency_coverage", label: "Contingency Coverage" },
+  ],
+  adoption: [
+    { key: "user_roster", label: "User Roster" },
+    { key: "training_plan", label: "Training Plan" },
+    { key: "champion_identified", label: "Champion Identified" },
+  ],
+  other: [
+    { key: "spend_analytics", label: "Spend Analytics" },
+    { key: "opportunity_assessment", label: "Opportunity Assessment" },
+    { key: "benchmarking", label: "Benchmarking" },
+  ],
+};
+
+const GROUNDWORK_OPTIONS = [
+  { v: "", l: "— Select —" },
+  { v: "done_current", l: "Done — current" },
+  { v: "done_outdated", l: "Done — outdated" },
+  { v: "not_done", l: "Not done" },
+  { v: "unknown", l: "Unknown" },
+];
+
+function PhaseBEditableBlock({
+  title,
+  category,
+  phase,
+  saving,
+  onSave,
+}: {
+  title: string;
+  category: string;
+  phase: Record<string, unknown>;
+  saving: boolean;
+  onSave: (next: Record<string, unknown>) => void;
+}) {
+  const items =
+    GROUNDWORK_ITEMS_BY_CATEGORY[category] ?? GROUNDWORK_ITEMS_BY_CATEGORY.other;
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    items.forEach((it) => {
+      init[it.key] = String(phase[it.key] ?? "");
+    });
+    return init;
+  });
+  const anyFilled = items.some((it) => phase[it.key]);
+  const summary = anyFilled
+    ? items
+        .filter((it) => phase[it.key])
+        .map((it) => `${it.label}: ${String(phase[it.key]).replace(/_/g, " ")}`)
+        .join(" · ")
+    : "Not yet captured. Click to fill.";
+  return (
+    <EditableShell title={title} open={open} setOpen={setOpen} summary={summary} empty={!anyFilled}>
+      {items.map((it) => (
+        <div key={it.key} className="mb-1.5">
+          <label className="block text-[10px] text-text-muted mb-0.5">{it.label}</label>
+          <select
+            value={draft[it.key] ?? ""}
+            onChange={(e) => setDraft({ ...draft, [it.key]: e.target.value })}
+            className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1"
+          >
+            {GROUNDWORK_OPTIONS.map((o) => (
+              <option key={o.v} value={o.v}>{o.l}</option>
+            ))}
+          </select>
+        </div>
+      ))}
+      <EditableActions
+        saving={saving}
+        onSave={() => {
+          const payload: Record<string, unknown> = {};
+          for (const it of items) {
+            payload[it.key] = draft[it.key] || null;
+          }
+          onSave(payload);
+          setOpen(false);
+        }}
+        onCancel={() => {
+          const reset: Record<string, string> = {};
+          items.forEach((it) => {
+            reset[it.key] = String(phase[it.key] ?? "");
+          });
+          setDraft(reset);
+          setOpen(false);
+        }}
+      />
+    </EditableShell>
+  );
+}
+
+// ---- Phase C editable block (agreed target / measure / timeline) ----
+function PhaseCEditableBlock({
+  title,
+  phase,
+  saving,
+  onSave,
+}: {
+  title: string;
+  phase: Record<string, unknown>;
+  saving: boolean;
+  onSave: (next: Record<string, unknown>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState({
+    agreed_target: String(phase.agreed_target ?? ""),
+    measure_method: String(phase.measure_method ?? ""),
+    timeline: String(phase.timeline ?? ""),
+    baseline: String(phase.baseline ?? ""),
+  });
+  const empty = !phase.agreed_target && !phase.measure_method && !phase.timeline;
+  const summary = empty
+    ? "Not yet captured. Click to fill."
+    : [
+        phase.agreed_target ? `Target: ${String(phase.agreed_target)}` : null,
+        phase.measure_method ? `Measure: ${String(phase.measure_method)}` : null,
+        phase.timeline ? `Due ${String(phase.timeline)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+  return (
+    <EditableShell title={title} open={open} setOpen={setOpen} summary={summary} empty={empty}>
+      <input
+        type="text"
+        value={draft.agreed_target}
+        placeholder="Agreed target (e.g. 5% savings on indirect spend)"
+        onChange={(e) => setDraft({ ...draft, agreed_target: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
+      />
+      <input
+        type="text"
+        value={draft.measure_method}
+        placeholder="How will it be measured?"
+        onChange={(e) => setDraft({ ...draft, measure_method: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
+      />
+      <input
+        type="date"
+        value={draft.timeline}
+        onChange={(e) => setDraft({ ...draft, timeline: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
+      />
+      <input
+        type="text"
+        value={draft.baseline}
+        placeholder="Baseline (optional)"
+        onChange={(e) => setDraft({ ...draft, baseline: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1"
+      />
+      <EditableActions
+        saving={saving}
+        onSave={() => {
+          onSave({
+            agreed_target: draft.agreed_target || null,
+            measure_method: draft.measure_method || null,
+            timeline: draft.timeline || null,
+            baseline: draft.baseline || null,
+          });
+          setOpen(false);
+        }}
+        onCancel={() => {
+          setDraft({
+            agreed_target: String(phase.agreed_target ?? ""),
+            measure_method: String(phase.measure_method ?? ""),
+            timeline: String(phase.timeline ?? ""),
+            baseline: String(phase.baseline ?? ""),
+          });
+          setOpen(false);
+        }}
+      />
+    </EditableShell>
+  );
+}
+
+function EditableShell({
+  title,
+  open,
+  setOpen,
+  summary,
+  empty,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  summary: string;
+  empty: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className="bg-white border border-beroe-card-border rounded-md px-2.5 py-2">
-      <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
-        {title}
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+          {title}
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="text-[10px] text-beroe-blue font-semibold hover:underline"
+        >
+          {open ? "Close" : empty ? "+ Add" : "Edit"}
+        </button>
       </div>
-      <div className="text-[12px] text-text-primary mt-1 leading-snug">
-        {body}
-      </div>
+      {!open && (
+        <div
+          className={cn(
+            "text-[12px] mt-1 leading-snug cursor-pointer",
+            empty ? "text-text-muted italic" : "text-text-primary",
+          )}
+          onClick={() => setOpen(true)}
+        >
+          {summary}
+        </div>
+      )}
+      {open && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
+
+function EditableActions({
+  saving,
+  onSave,
+  onCancel,
+}: {
+  saving: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex gap-2 mt-2">
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving}
+        className="text-[11px] px-2.5 py-1 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save"}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border text-text-secondary"
+      >
+        Cancel
+      </button>
     </div>
   );
 }

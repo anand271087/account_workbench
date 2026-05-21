@@ -12,6 +12,7 @@ export interface SigningGate {
 
   gate_confirmed_by: string | null;
   gate_confirmed_at: string | null;      // ISO datetime
+  gate_confirmed_by_name: string | null; // H41 — resolved server-side
 
   gate_unlocked: boolean;
   gate_unlock_reason: string | null;

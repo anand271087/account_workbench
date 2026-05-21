@@ -57,7 +57,21 @@ export interface DiscoveryQuestion {
   person: string;
   from_email: boolean;
   text: string;
+  // H46 — Category dropdown on Discovery questions.
+  category?: string | null;
 }
+
+export const DISCOVERY_CATEGORIES = [
+  "Commercial",
+  "Risk",
+  "People",
+  "Process",
+  "Sustainability",
+  "Technology",
+  "Adoption",
+] as const;
+
+export type DiscoveryCategory = (typeof DISCOVERY_CATEGORIES)[number];
 
 export interface ValueAnchorPoint {
   text: string;
@@ -130,6 +144,8 @@ export interface MeetingBrief {
   closing_scenarios: ClosingScenario[];
   cheat_sheet_never_say: string[];
   cheat_sheet_opening_asks: string[];
+  // H46 — Categories tab.
+  categories: string[];
 
   updated_at: string;
   updated_by: string | null;
@@ -184,6 +200,7 @@ export function emptyBrief(accountId: string): MeetingBrief {
     closing_scenarios: [],
     cheat_sheet_never_say: [],
     cheat_sheet_opening_asks: [],
+    categories: [],
     updated_at: new Date().toISOString(),
     updated_by: null,
     is_editable: false,

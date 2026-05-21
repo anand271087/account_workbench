@@ -44,6 +44,10 @@ class SigningGateOut(BaseModel):
 
     gate_confirmed_by: UUID | None
     gate_confirmed_at: datetime | None
+    # H41 — Display name of the user who confirmed signing. Resolved by the
+    # route handler from gate_confirmed_by → users.full_name; None when no
+    # one has signed yet or the user has been deleted.
+    gate_confirmed_by_name: str | None = None
 
     gate_unlocked: bool
     gate_unlock_reason: str | None

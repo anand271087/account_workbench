@@ -67,6 +67,7 @@ def _blank_brief(account_id: UUID) -> MeetingBrief:
         closing_scenarios=[],
         cheat_sheet_never_say=[],
         cheat_sheet_opening_asks=[],
+        categories=[],
         updated_at=datetime.now(timezone.utc),
     )
 

@@ -45,6 +45,11 @@ import {
 import type { Checkpoint, CheckpointListResponse } from "@/types/checkpoint";
 import type { MetricListResponse, SuccessMetric } from "@/types/metric";
 import type { DeliveryRenewal } from "@/types/delivery_renewal";
+import type { SigningGate } from "@/types/signing";
+
+// H36 — Product score = % of Beroe modules contracted (out of 8 named modules).
+// Mirrors prototype `bProductSaturation` denominator.
+const TOTAL_BEROE_MODULES = 8;
 
 type PriorityKey =
   | "entry"
@@ -97,6 +102,12 @@ export default function HomeTab() {
     queryKey: ["activities", aid],
     queryFn: () =>
       api.get<ActivityListResponse>(`/api/v1/accounts/${aid}/activities`),
+  });
+  // H36/H38 — signing gate carries modules + tier + segment + subscribers
+  // which drive the Product score on the Health tile + Account Pulse card.
+  const gateQ = useQuery<SigningGate>({
+    queryKey: ["signing-gate", aid],
+    queryFn: () => api.get<SigningGate>(`/api/v1/accounts/${aid}/sign`),
   });
   const drQ = useQuery<DeliveryRenewal>({
     queryKey: ["delivery-renewal", aid],
@@ -207,45 +218,10 @@ export default function HomeTab() {
       {/* Priority Action Card */}
       {activePriority && <PriorityCard priority={activePriority} aid={aid} />}
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-4 gap-2">
-        <Kpi
-          label="Current ACV"
-          value={formatACV(account.current_acv)}
-          color="#0d1b2e"
-        />
-        <Kpi
-          label="Renewal"
-          value={renewal.label}
-          color={
-            renewal.tone === "danger"
-              ? "#e63950"
-              : renewal.tone === "warn"
-                ? "#EF9637"
-                : "#40CC8F"
-          }
-        />
-        <Kpi
-          label="Health"
-          value={String(account.health_score ?? "—")}
-          color={
-            (account.health_score ?? 0) >= 70
-              ? "#40CC8F"
-              : (account.health_score ?? 0) >= 40
-                ? "#EF9637"
-                : "#e63950"
-          }
-        />
-        <Kpi
-          label="Open signals"
-          value={String(
-            signals.filter((s) => s.status === "active" && !s.hidden).length,
-          )}
-          color="#4A00F8"
-        />
-      </div>
-
-      {/* R9 — second tile row: deeper rollups (Delivery / Risk % / Pipeline / Account Pulse). */}
+      {/* H34/H35/H36/H38 — enriched KPI tiles. Each surfaces a sublabel
+          with the relevant ratio / supporting metric the prototype shows
+          (target / gap / pipeline on ACV, product score on Health,
+          declining-signal + checkpoint hints on Risk %). */}
       {(() => {
         const active = signals.filter((s) => s.status === "active" && !s.hidden);
         const riskCount = active.filter(
@@ -254,39 +230,187 @@ export default function HomeTab() {
         const riskPct = active.length === 0
           ? 0
           : Math.round((riskCount / active.length) * 100);
-        const totalCp = cps.length;
-        const signedCp = cps.filter((c) => c.status === "signed_off").length;
-        const delivery =
-          totalCp === 0 ? "—" : `${signedCp}/${totalCp} signed-off`;
-        const pulse =
-          (account.health_score ?? 0) >= 70 && riskPct < 30 && overdueCp === 0
-            ? { label: "Healthy", col: "#40CC8F" }
-            : overdueCp > 0 || riskPct >= 50
-              ? { label: "At risk", col: "#e63950" }
-              : { label: "Watch", col: "#EF9637" };
+        const currentAcvNum = parseFloat(String(account.current_acv ?? "0")) || 0;
+        const targetAcvNum = parseFloat(String(account.target_acv ?? "0")) || 0;
+        const gap = Math.max(0, targetAcvNum - currentAcvNum);
+        const modules = gateQ.data?.gate_contract_modules ?? [];
+        const productScore = Math.min(
+          100,
+          Math.round((modules.length / TOTAL_BEROE_MODULES) * 100),
+        );
+        const hs = account.health_score ?? 0;
         return (
-          <div className="grid grid-cols-4 gap-2">
-            <Kpi
-              label="Delivery"
-              value={delivery}
-              color={overdueCp > 0 ? "#e63950" : "#0d1b2e"}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-2">
+            {/* ACV — Current with Target / Gap / Pipeline subline (H35). */}
+            <RichTile
+              label="Current ACV"
+              value={formatACV(account.current_acv)}
+              color="#0d1b2e"
+              sublines={[
+                {
+                  k: "Target",
+                  v: account.target_acv ? formatACV(account.target_acv) : "—",
+                },
+                { k: "Gap", v: gap > 0 ? formatACV(String(gap)) : "—" },
+                {
+                  k: "Pipeline",
+                  v: pipelineTotal > 0 ? fmtK(pipelineTotal) : "—",
+                },
+              ]}
             />
-            <Kpi
+            {/* Renewal — countdown (unchanged behaviour, RichTile shape). */}
+            <RichTile
+              label="Renewal"
+              value={renewal.label}
+              color={
+                renewal.tone === "danger"
+                  ? "#e63950"
+                  : renewal.tone === "warn"
+                    ? "#EF9637"
+                    : "#40CC8F"
+              }
+              sublines={[
+                {
+                  k: "Date",
+                  v: account.gate_renewal_date
+                    ? new Date(account.gate_renewal_date).toLocaleDateString()
+                    : account.renewal_date
+                      ? new Date(account.renewal_date).toLocaleDateString()
+                      : "—",
+                },
+              ]}
+            />
+            {/* Health — score + Product score subline (H36). */}
+            <RichTile
+              label="Health"
+              value={String(account.health_score ?? "—")}
+              color={
+                hs >= 70 ? "#40CC8F" : hs >= 40 ? "#EF9637" : "#e63950"
+              }
+              sublines={[
+                {
+                  k: "Product",
+                  v: modules.length === 0 ? "—" : `${productScore}%`,
+                },
+                {
+                  k: "Signals",
+                  v: active.length === 0 ? "—" : `${active.length} open`,
+                },
+              ]}
+            />
+            {/* Risk % — share of active risk/critical signals (H34). */}
+            <RichTile
               label="Risk %"
               value={`${riskPct}%`}
               color={
                 riskPct >= 50 ? "#e63950" : riskPct >= 25 ? "#EF9637" : "#40CC8F"
               }
+              sublines={[
+                {
+                  k: "Critical",
+                  v: String(
+                    active.filter((s) => s.type === "critical").length,
+                  ),
+                },
+                {
+                  k: "Overdue CP",
+                  v: overdueCp === 0 ? "0" : `${overdueCp} ⚠`,
+                },
+                {
+                  k: "Declining",
+                  v: String(
+                    mets.filter((m) => m.status === "red").length,
+                  ),
+                },
+              ]}
             />
-            <Kpi
-              label="Weighted pipeline"
-              value={fmtK(pipelineTotal)}
-              color="#4A00F8"
-            />
-            <Kpi label="Account pulse" value={pulse.label} color={pulse.col} />
           </div>
         );
       })()}
+
+      {/* Secondary row: Delivery + Weighted pipeline + Open signals */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
+        {(() => {
+          const totalCp = cps.length;
+          const signedCp = cps.filter((c) => c.status === "signed_off").length;
+          const heldCp = cps.filter((c) => c.status === "held").length;
+          return (
+            <RichTile
+              label="Delivery"
+              value={
+                totalCp === 0 ? "—" : `${signedCp}/${totalCp}`
+              }
+              color={overdueCp > 0 ? "#e63950" : "#0d1b2e"}
+              sublines={[
+                { k: "Held", v: String(heldCp) },
+                { k: "Overdue", v: String(overdueCp) },
+              ]}
+            />
+          );
+        })()}
+        <RichTile
+          label="Weighted pipeline"
+          value={fmtK(pipelineTotal)}
+          color="#4A00F8"
+          sublines={[
+            {
+              k: "Plays",
+              v: String(
+                plays.filter((p) => !p.hidden).length,
+              ),
+            },
+            {
+              k: "Expand-mode",
+              v: String(
+                plays.filter(
+                  (p) => !p.hidden && p.modes.includes("expand"),
+                ).length,
+              ),
+            },
+          ]}
+        />
+        <RichTile
+          label="Open signals"
+          value={String(
+            signals.filter((s) => s.status === "active" && !s.hidden).length,
+          )}
+          color="#4A00F8"
+          sublines={[
+            {
+              k: "Critical",
+              v: String(
+                signals.filter(
+                  (s) =>
+                    s.status === "active" && !s.hidden && s.type === "critical",
+                ).length,
+              ),
+            },
+            {
+              k: "Risk",
+              v: String(
+                signals.filter(
+                  (s) =>
+                    s.status === "active" && !s.hidden && s.type === "risk",
+                ).length,
+              ),
+            },
+          ]}
+        />
+      </div>
+
+      {/* H38 — Account Pulse card. Replaces the previous tile-only Pulse.
+          Surfaces: Value Tracking link, Adoption %, Modules, Depth/User
+          and Metric snapshot. */}
+      <AccountPulseCard
+        aid={aid}
+        modules={gateQ.data?.gate_contract_modules ?? []}
+        tier={gateQ.data?.gate_platform_tier ?? null}
+        subscribers={gateQ.data?.gate_subscribers ?? null}
+        metrics={mets}
+      />
+
+      {/* H37 — AI Account Brief (server-side Claude call). */}
+      <AIAccountBriefCard aid={aid} accountName={account.name} />
 
       {/* Two columns: This Week (left) + Top Signals (right) */}
       <div className="grid grid-cols-2 gap-3">
@@ -741,21 +865,200 @@ function CardTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Kpi({
+function RichTile({
   label,
   value,
   color,
+  sublines,
 }: {
   label: string;
   value: string;
   color: string;
+  sublines?: { k: string; v: string }[];
 }) {
   return (
-    <div className="bg-white border border-beroe-card-border rounded-card px-3 py-3 text-center">
-      <div className="text-[18px] font-extrabold" style={{ color }}>
-        {value}
+    <div className="bg-white border border-beroe-card-border rounded-card px-3 py-2.5">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[18px] font-extrabold" style={{ color }}>
+          {value}
+        </span>
+        <span className="text-[10px] text-text-muted">{label}</span>
       </div>
-      <div className="text-[10px] text-text-muted mt-0.5">{label}</div>
+      {sublines && sublines.length > 0 && (
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1">
+          {sublines.map((s) => (
+            <span key={s.k} className="text-[10px] text-text-muted">
+              {s.k}{" "}
+              <b className="text-text-primary font-semibold">{s.v}</b>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+// H38 — Account Pulse: Value Tracking link + Adoption % + Modules count +
+// Depth/User (subscribers) + Metric snapshot.
+function AccountPulseCard({
+  aid,
+  modules,
+  tier,
+  subscribers,
+  metrics,
+}: {
+  aid: string;
+  modules: string[];
+  tier: string | null;
+  subscribers: string | null;
+  metrics: SuccessMetric[];
+}) {
+  const adoption =
+    modules.length === 0
+      ? 0
+      : Math.round((modules.length / TOTAL_BEROE_MODULES) * 100);
+  const greenMetrics = metrics.filter((m) => m.status === "green").length;
+  const totalMetrics = metrics.length;
+  const metricsHealth =
+    totalMetrics === 0 ? 0 : Math.round((greenMetrics / totalMetrics) * 100);
+  return (
+    <Card>
+      <div className="flex items-baseline justify-between mb-2">
+        <div className="text-[13px] font-bold">⚡ Account Pulse</div>
+        <Link
+          to={`/accounts/${aid}/success-management/value-tracking`}
+          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+        >
+          → Value Tracking
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <PulseStat
+          label="Adoption"
+          value={modules.length === 0 ? "—" : `${adoption}%`}
+          tone={adoption >= 50 ? "green" : adoption >= 25 ? "amber" : "slate"}
+        />
+        <PulseStat
+          label="Modules"
+          value={
+            modules.length === 0
+              ? "—"
+              : `${modules.length}/${TOTAL_BEROE_MODULES}`
+          }
+          tone="slate"
+        />
+        <PulseStat
+          label="Tier"
+          value={tier ?? "—"}
+          tone={tier ? "blue" : "slate"}
+        />
+        <PulseStat
+          label="Depth / User"
+          value={subscribers ?? "—"}
+          tone="slate"
+        />
+        <PulseStat
+          label="Metrics on-track"
+          value={
+            totalMetrics === 0
+              ? "—"
+              : `${greenMetrics}/${totalMetrics} (${metricsHealth}%)`
+          }
+          tone={
+            metricsHealth >= 70 ? "green" : metricsHealth >= 40 ? "amber" : "red"
+          }
+        />
+      </div>
+    </Card>
+  );
+}
+
+function PulseStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "slate" | "blue" | "green" | "amber" | "red";
+}) {
+  const toneCls =
+    tone === "green"
+      ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+      : tone === "amber"
+        ? "bg-amber-50 text-amber-900 border-amber-200"
+        : tone === "red"
+          ? "bg-red-50 text-red-900 border-red-200"
+          : tone === "blue"
+            ? "bg-blue-50 text-blue-900 border-blue-200"
+            : "bg-slate-50 text-slate-900 border-slate-200";
+  return (
+    <div className={cn("rounded-md border px-2.5 py-1.5", toneCls)}>
+      <div className="text-[10px] uppercase tracking-wider font-bold opacity-75">
+        {label}
+      </div>
+      <div className="text-[13px] font-bold mt-0.5 leading-tight">{value}</div>
+    </div>
+  );
+}
+
+// H37 — AI Account Brief tile. Calls server-side Claude with the account
+// context (engagement / signals / metrics / appetite) and renders a short
+// narrative. Cached for 6 hours.
+function AIAccountBriefCard({
+  aid,
+  accountName,
+}: {
+  aid: string;
+  accountName: string;
+}) {
+  const { data, isLoading, refetch, isFetching } = useQuery<{
+    brief: string;
+    is_stub: boolean;
+    generated_at: string;
+  }>({
+    queryKey: ["ai-account-brief", aid],
+    queryFn: () =>
+      api.get(`/api/v1/accounts/${aid}/ai-brief`),
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: false,
+  });
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[13px] font-bold">✨ AI Account Brief</div>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="text-[11px] text-beroe-blue font-semibold hover:underline disabled:opacity-50"
+        >
+          {isFetching ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+      {isLoading ? (
+        <div className="text-[12px] text-text-muted italic">
+          Generating Claude summary for {accountName}…
+        </div>
+      ) : !data ? (
+        <div className="text-[12px] text-text-muted italic">
+          Couldn't load the AI brief.
+        </div>
+      ) : (
+        <>
+          <div className="text-[12px] text-text-primary leading-relaxed whitespace-pre-wrap">
+            {data.brief}
+          </div>
+          <div className="text-[10px] text-text-muted mt-2">
+            Generated{" "}
+            {new Date(data.generated_at).toLocaleString()}
+            {data.is_stub && (
+              <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wider font-semibold text-[9px]">
+                Stub AI
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
