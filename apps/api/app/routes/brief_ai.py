@@ -45,6 +45,7 @@ Section = Literal[
     "objectives",
     "value_anchors",
     "cheat_sheet",
+    "attendees",
 ]
 
 
@@ -174,6 +175,50 @@ def _stub_cheat_sheet(name: str) -> list[dict]:
     ]
 
 
+def _stub_attendees(name: str, industry: str | None) -> list[dict]:
+    """3 hypothetical attendees with role-typical background + opening ask.
+    The frontend uses this to suggest "The Room" content when AI is hit."""
+    ind = industry or "the industry"
+    return [
+        {
+            "initials": "JD",
+            "name": "Jordan Davis",
+            "role": "VP Procurement",
+            "primary_objective": "Cost savings",
+            "objectives": ["Cost savings", "Supplier consolidation"],
+            "background": [
+                f"Joined {name} in 2023; previously led category sourcing at a peer in {ind}.",
+                "Looking to consolidate from 3+ intelligence vendors to a single platform.",
+            ],
+            "opening_ask": "What's the one thing none of your current vendors get right on top-spend categories?",
+        },
+        {
+            "initials": "PM",
+            "name": "Priya Menon",
+            "role": "Director, Strategic Sourcing",
+            "primary_objective": "Risk visibility",
+            "objectives": ["Risk visibility", "Supplier health"],
+            "background": [
+                f"Owns supplier risk frameworks across {ind} sourcing corridor.",
+                "Recently flagged single-source exposure in indirect categories.",
+            ],
+            "opening_ask": "Where does your team feel blind on supplier risk today?",
+        },
+        {
+            "initials": "GB",
+            "name": "Gunter Braun",
+            "role": "Category Manager",
+            "primary_objective": "Commodity price intel",
+            "objectives": ["Commodity Price Intelligence"],
+            "background": [
+                "Frontline buyer for top 3 commodity categories.",
+                "Has been burned by under-forecast price spikes twice in the last 18 months.",
+            ],
+            "opening_ask": "How far ahead do you currently have reliable price forecasts on your top 3 commodities?",
+        },
+    ]
+
+
 _STUBS = {
     "company_snapshot": _stub_company_snapshot,
     "discovery_questions": _stub_discovery_questions,
@@ -181,6 +226,7 @@ _STUBS = {
     "objectives": _stub_objectives,
     "value_anchors": _stub_value_anchors,
     "cheat_sheet": lambda n, i: _stub_cheat_sheet(n),
+    "attendees": _stub_attendees,
 }
 
 
@@ -261,6 +307,12 @@ _PROMPTS: dict[str, str] = {
     "cheat_sheet": (
         "Produce 2 cheat-sheet cards: {meta, bullets[]}. "
         "meta in {'Power phrases', 'Disqualifiers', 'Opening hooks'}."
+    ),
+    "attendees": (
+        "Produce 3 hypothetical attendees for a procurement-led sales call. "
+        "Each item: {initials, name, role, primary_objective, objectives:[], "
+        "background:[2 bullets], opening_ask}. Bias roles to procurement / "
+        "sourcing / category leads, not commercial / IT."
     ),
 }
 

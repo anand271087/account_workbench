@@ -157,7 +157,8 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       | "minefields"
       | "objectives"
       | "value_anchors"
-      | "cheat_sheet",
+      | "cheat_sheet"
+      | "attendees",
   ) => {
     try {
       const r = await api.post<{ section: string; suggestions: unknown[] }>(
@@ -204,6 +205,23 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
         setForm({ ...form, objectives: [...form.objectives, ...(suggestions as Objective[])] });
       } else if (section === "value_anchors") {
         setForm({ ...form, value_anchors: [...form.value_anchors, ...(suggestions as ValueAnchor[])] });
+      } else if (section === "attendees") {
+        // The Room — AI assisted attendees. Each suggestion is a full Attendee
+        // shape; the apply step uses default avatar_color + company so the
+        // row renders correctly in the existing editor.
+        const enriched = (suggestions as Partial<Attendee>[]).map((a) => ({
+          initials: a.initials ?? "??",
+          name: a.name ?? "",
+          role: a.role ?? null,
+          company: (a as { company?: AttendeeCompany }).company ?? "client" as AttendeeCompany,
+          is_self: false,
+          avatar_color: null,
+          objectives: a.objectives ?? [],
+          primary_objective: a.primary_objective ?? null,
+          background: a.background ?? [],
+          opening_ask: a.opening_ask ?? null,
+        }));
+        setForm({ ...form, attendees: [...form.attendees, ...enriched] });
       }
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "AI suggest failed";
@@ -221,7 +239,8 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       | "minefields"
       | "objectives"
       | "value_anchors"
-      | "cheat_sheet";
+      | "cheat_sheet"
+      | "attendees";
     label?: string;
   }) => (
     <button
@@ -236,6 +255,63 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
 
   return (
     <div className="space-y-3">
+      {/* Row 22 — "Brief should be automatically generated as intended."
+          One-click full-brief AI generation: runs ai-suggest on every section
+          in parallel and merges all the suggestions onto the form. Only the
+          sections that currently have no content get suggestions, so an
+          existing brief is never clobbered. */}
+      {editable && (
+        <div className="bg-violet-50 border border-violet-200 rounded-card px-4 py-3 flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-[13px] font-bold text-violet-900">
+              ✨ Generate full brief with AI
+            </div>
+            <div className="text-[11px] text-violet-800/80">
+              Fills empty sections (snapshot · attendees · objectives ·
+              discovery · minefields · value anchors · cheat sheet) in one
+              click. Existing entries stay untouched.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              const sections: (
+                | "company_snapshot"
+                | "attendees"
+                | "objectives"
+                | "discovery_questions"
+                | "minefields"
+                | "value_anchors"
+                | "cheat_sheet"
+              )[] = [];
+              if (form.company_snapshot.length === 0) sections.push("company_snapshot");
+              if (form.attendees.length === 0) sections.push("attendees");
+              if (form.objectives.length === 0) sections.push("objectives");
+              if (form.discovery_questions.length === 0) sections.push("discovery_questions");
+              if (form.minefields.length === 0) sections.push("minefields");
+              if (form.value_anchors.length === 0) sections.push("value_anchors");
+              if (
+                form.cheat_sheet_never_say.length === 0 &&
+                form.cheat_sheet_opening_asks.length === 0
+              )
+                sections.push("cheat_sheet");
+              if (sections.length === 0) {
+                setSavingError(
+                  "Every section already has content. Clear a section first if you want AI to regenerate it.",
+                );
+                return;
+              }
+              for (const s of sections) {
+                await aiSuggest(s);
+              }
+            }}
+            className="text-[12px] px-3 py-1.5 rounded-md bg-violet-600 text-white font-semibold hover:bg-violet-700"
+          >
+            ✨ Generate full brief
+          </button>
+        </div>
+      )}
+
       {/* Call info — open by default */}
       <BriefSection title="Call info" defaultOpen>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -422,10 +498,11 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
         />
       </BriefSection>
 
-      {/* Attendees */}
+      {/* Attendees — H46 Row 23 sub-item 2: "The Room — AI assisted". */}
       <BriefSection
         title={`The room — attendees (${form.attendees.length})`}
         subtitle="Each attendee gets a name, role, side, opening ask."
+        actions={editable ? <SuggestBtn section="attendees" label="AI suggest attendees" /> : null}
       >
         <ItemList
           items={form.attendees}
