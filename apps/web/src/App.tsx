@@ -33,10 +33,20 @@ import LeadershipPage from "@/routes/LeadershipPage";
 import { useAuth } from "@/components/AuthProvider";
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
+  // LIVE-003/007 — admin pages (Users + Categories) are admin-EXACT per the
+  // matrix. is_global_admin includes vp_csm + cs_director, which made it
+  // possible for VP Sales builds to bleed in here on cached states. The
+  // server-side endpoints already require admin-only via can_manage_users
+  // / can_view_admin_panel, so we now mirror that on the route gate.
   const { me, isLoading } = useAuth();
   if (isLoading) return null;
-  if (!me?.permissions.is_global_admin) {
-    return <Navigate to="/access-denied" replace />;
+  if (!me?.permissions.can_view_admin_panel) {
+    return (
+      <Navigate
+        to="/access-denied?detail=This+page+is+restricted+to+Admin+role+only"
+        replace
+      />
+    );
   }
   return <>{children}</>;
 }

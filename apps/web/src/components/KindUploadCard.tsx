@@ -852,10 +852,40 @@ async function createExtractedContacts(
   let created = 0;
   let skipped = 0;
   let failed = 0;
+
+  // LIVE-008 — pre-filter against existing contacts so duplicates don't
+  // generate noisy 409 errors in the browser console. The dedup rule
+  // (name OR email, case-insensitive) is mirrored client-side. Server-side
+  // unique index is still the source of truth on the rare race.
+  type ExistingContact = { name: string | null; email: string | null };
+  let existing: ExistingContact[] = [];
+  try {
+    const r = await api.get<{ items: ExistingContact[] }>(
+      `/api/v1/accounts/${accountId}/contacts`,
+    );
+    existing = r.items ?? [];
+  } catch {
+    /* fall through; server-side dedup will catch dupes */
+  }
+  const existingNames = new Set(
+    existing.map((c) => (c.name ?? "").trim().toLowerCase()).filter(Boolean),
+  );
+  const existingEmails = new Set(
+    existing.map((c) => (c.email ?? "").trim().toLowerCase()).filter(Boolean),
+  );
+
+  // ExtractedContact has no email field, so we dedup on name only here.
+  // existingEmails is kept for future MoM schemas that include email.
+  void existingEmails;
   await Promise.all(
     contacts
       .filter((c) => !c.is_internal_beroe && c.name)
       .map(async (c) => {
+        const nm = (c.name ?? "").trim().toLowerCase();
+        if (existingNames.has(nm)) {
+          skipped += 1;
+          return;
+        }
         const payload: ContactCreate = {
           name: c.name,
           title: c.title,

@@ -208,7 +208,7 @@ export default function HomeTab() {
                 {MODE_CONF[appetite.current_mode].label}
               </div>
               <div className="text-[10px] text-text-muted mt-0.5">
-                Score: <b>{appetite.score}/100</b>
+                Appetite Score: <b>{appetite.score}/100</b>
               </div>
             </div>
           )}

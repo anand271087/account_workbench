@@ -110,7 +110,8 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             </>
           )}
 
-          {me.permissions.is_global_admin && (
+          {/* LIVE-003 — Admin section is admin-exact (matches RequireAdmin). */}
+          {me.permissions.can_view_admin_panel && (
             <>
               <SbSection>Admin</SbSection>
               <SbBtn href="/admin/users" icon="👥" active={isPath("/admin/users")}>Users</SbBtn>
