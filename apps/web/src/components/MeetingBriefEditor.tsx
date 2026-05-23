@@ -70,6 +70,8 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
 
   const [form, setForm] = useState<MeetingBrief | null>(null);
   const [savingError, setSavingError] = useState<string | null>(null);
+  // 22-May Row 49 — per-section AI suggest in-flight indicator.
+  const [suggesting, setSuggesting] = useState<string | null>(null);
 
   useEffect(() => {
     if (data && !form) {
@@ -242,16 +244,31 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       | "cheat_sheet"
       | "attendees";
     label?: string;
-  }) => (
-    <button
-      type="button"
-      onClick={() => aiSuggest(section)}
-      disabled={!editable}
-      className="text-[11px] px-2 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5 disabled:opacity-50"
-    >
-      ✨ {label ?? "AI suggest"}
-    </button>
-  );
+  }) => {
+    const busy = suggesting === section;
+    return (
+      <button
+        type="button"
+        onClick={async (e) => {
+          // Belt-and-braces: stop bubbling so no parent click handler
+          // can swallow this. (Was previously inside <summary>.)
+          e.preventDefault();
+          e.stopPropagation();
+          if (busy) return;
+          setSuggesting(section);
+          try {
+            await aiSuggest(section);
+          } finally {
+            setSuggesting(null);
+          }
+        }}
+        disabled={!editable || busy}
+        className="text-[11px] px-2 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5 disabled:opacity-50"
+      >
+        {busy ? "✨ Suggesting…" : `✨ ${label ?? "AI suggest"}`}
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -1314,42 +1331,33 @@ function BriefSection({
   title,
   subtitle,
   children,
-  defaultOpen,
   actions,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  /** Legacy prop — sections are always open now. Kept for source compat. */
   defaultOpen?: boolean;
   actions?: React.ReactNode;
 }) {
+  // 22-May Row 48/49 — single-page Brief: drop the <details>/<summary>
+  // collapse behaviour entirely. Every section is always-open so the brief
+  // reads as one printable page (mirrors prototype `bMomBrief`). That also
+  // moves the AI suggest button out of a <summary>, fixing the click-eaten-
+  // by-toggle bug behind Row 49.
   return (
-    <details
-      className="bg-white rounded-card border border-beroe-card-border overflow-hidden"
-      open={defaultOpen}
-    >
-      <summary className="px-4 py-3 cursor-pointer text-sm font-bold text-text-primary hover:bg-slate-50 transition-colors flex items-center gap-2">
-        <span>{title}</span>
+    <section className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
+      <header className="px-4 py-3 border-b border-beroe-card-border/60 bg-slate-50/40 flex items-center gap-2 flex-wrap">
+        <h3 className="text-sm font-bold text-text-primary">{title}</h3>
         {subtitle && (
-          <span className="text-[11px] font-normal text-text-muted ml-1">
+          <span className="text-[11px] font-normal text-text-muted">
             · {subtitle}
           </span>
         )}
-        {actions && (
-          <span
-            className="ml-auto"
-            onClick={(e) => {
-              // Don't toggle the <details> when interacting with the actions.
-              e.stopPropagation();
-              e.preventDefault();
-            }}
-          >
-            {actions}
-          </span>
-        )}
-      </summary>
-      <div className="px-4 pb-4 pt-2 space-y-2">{children}</div>
-    </details>
+        {actions && <span className="ml-auto">{actions}</span>}
+      </header>
+      <div className="px-4 py-3 space-y-2">{children}</div>
+    </section>
   );
 }
 

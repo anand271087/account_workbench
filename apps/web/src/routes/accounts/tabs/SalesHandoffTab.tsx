@@ -645,42 +645,59 @@ function SigningGateCard({
         </div>
       )}
 
-      {/* Signed metadata footer */}
+      {/* Signed metadata footer — 22-May Row 47: ALWAYS show all 4 metadata
+          fields in a labelled grid (with "—" placeholder when empty) so the
+          structure is visible even if those fields weren't captured during
+          signing. */}
       {isSigned && !gate.gate_unlocked && (
         <>
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            {gate.gate_contract_modules.map((m) => (
-              <span
-                key={m}
-                className="inline-block text-[10px] px-2 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30"
-              >
-                {m}
-              </span>
-            ))}
-            {gate.gate_platform_tier && (
-              <span className="text-[11px] text-text-muted">
-                Tier: <b className="text-text-primary">{gate.gate_platform_tier}</b>
-              </span>
-            )}
-            {gate.gate_account_segment && (
-              <span className="text-[11px] text-text-muted">
-                Segment: <b className="text-text-primary">{gate.gate_account_segment}</b>
-              </span>
-            )}
-            {gate.gate_subscribers && (
-              <span className="text-[11px] text-text-muted">
-                Subscribers: <b className="text-text-primary">{gate.gate_subscribers}</b>
-              </span>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+            <SignedStat
+              label="Modules contracted"
+              value={
+                gate.gate_contract_modules.length > 0
+                  ? gate.gate_contract_modules.join(", ")
+                  : "—"
+              }
+            />
+            <SignedStat
+              label="Platform tier"
+              value={gate.gate_platform_tier || "—"}
+            />
+            <SignedStat
+              label="Segment"
+              value={gate.gate_account_segment || "—"}
+            />
+            <SignedStat
+              label="Subscribers"
+              value={gate.gate_subscribers || "—"}
+            />
           </div>
-          {/* H41 — "Confirmed by NAME on DATE" line. */}
-          {gate.gate_confirmed_by_name && gate.gate_confirmed_at && (
-            <div className="text-[11px] text-text-muted mb-3">
-              ✓ Confirmed by{" "}
-              <b className="text-text-primary">{gate.gate_confirmed_by_name}</b>{" "}
-              on <b>{fmtDateTime(gate.gate_confirmed_at)}</b>
-            </div>
-          )}
+          {/* H41 — "Confirmed by NAME on DATE" line — always shown when signed. */}
+          <div className="text-[11px] text-text-muted mb-3">
+            ✓ Confirmed by{" "}
+            <b className="text-text-primary">
+              {gate.gate_confirmed_by_name ?? "—"}
+            </b>{" "}
+            on{" "}
+            <b>
+              {gate.gate_confirmed_at
+                ? fmtDateTime(gate.gate_confirmed_at)
+                : "—"}
+            </b>
+          </div>
+          {/* Inline edit hint when fields are empty + user can sign. */}
+          {gate.can_sign &&
+            (gate.gate_contract_modules.length === 0 ||
+              !gate.gate_platform_tier ||
+              !gate.gate_account_segment ||
+              !gate.gate_subscribers) && (
+              <div className="text-[10px] text-amber-700 mb-3 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+                Some signing-metadata fields are empty. Use{" "}
+                <b>🔓 Unlock for correction</b> below to re-confirm with the
+                missing values.
+              </div>
+            )}
         </>
       )}
 
