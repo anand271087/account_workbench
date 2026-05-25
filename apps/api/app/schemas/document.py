@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DocKind = Literal["mom", "vpd", "recording", "transcript", "email", "other"]
+DocKind = Literal["mom", "vpd", "recording", "transcript", "email", "other", "contract"]
 AiStatus = Literal["pending", "processing", "complete", "failed"]
 
 

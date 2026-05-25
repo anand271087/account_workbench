@@ -8,7 +8,7 @@
 //      with renewal date + VDD due date derived from term.
 //   3. Handover Quality Check — 4 items, auto-detected with manual overrides.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -701,50 +701,16 @@ function SigningGateCard({
         </>
       )}
 
-      {/* Contract doc */}
+      {/* Contract document — 25-May Row 50: real file upload + last-3
+          download dropdown. Files flow through the Documents API
+          (kind='contract'). The gate_contract_doc scalar stays in sync as
+          the latest-uploaded-filename pointer. */}
       {isSigned && (
-        <div className="border-t border-slate-200 pt-3 mt-3">
-          <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold mb-1">
-            Contract document
-          </div>
-          {gate.gate_contract_doc ? (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="px-2 py-1 rounded-md bg-green-50 border border-green-200 text-green-800 font-semibold">
-                📄 {gate.gate_contract_doc}
-              </span>
-              {gate.gate_contract_doc_at && (
-                <span className="text-text-muted">
-                  uploaded {fmtDate(gate.gate_contract_doc_at)}
-                </span>
-              )}
-              {gate.can_sign && (
-                <button
-                  onClick={() => {
-                    if (confirm("Remove the contract doc reference?")) {
-                      onContractDoc(null);
-                    }
-                  }}
-                  className="ml-auto text-text-muted hover:text-red-700"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ) : gate.can_sign ? (
-            <input
-              type="text"
-              placeholder="Filename of the signed contract (uploaded via Documents)"
-              maxLength={400}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v) onContractDoc(v);
-              }}
-              className={inputCls(true)}
-            />
-          ) : (
-            <div className="text-xs text-text-muted italic">Not yet uploaded.</div>
-          )}
-        </div>
+        <ContractDocSection
+          accountId={gate.account_id}
+          canUpload={gate.can_sign}
+          onLatest={(filename) => onContractDoc(filename)}
+        />
       )}
 
       {/* Unlock action */}
@@ -1065,3 +1031,167 @@ function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
     </div>
   );
 }
+
+// ============================================================
+// Row 50 — Contract document upload + last-3 download dropdown
+// ============================================================
+
+function ContractDocSection({
+  accountId,
+  canUpload,
+  onLatest,
+}: {
+  accountId: string;
+  canUpload: boolean;
+  onLatest: (filename: string | null) => void;
+}) {
+  const qc = useQueryClient();
+  const queryKey = ["documents", accountId, "contract"];
+  const { data, isLoading } = useQuery<{ items: ContractDoc[]; total: number }>({
+    queryKey,
+    queryFn: () =>
+      api.get<{ items: ContractDoc[]; total: number }>(
+        `/api/v1/accounts/${accountId}/documents?kind=contract`,
+      ),
+  });
+  const [open, setOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", "contract");
+      return api.postForm<{ document: ContractDoc }>(
+        `/api/v1/accounts/${accountId}/documents`,
+        fd,
+      );
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey });
+      // Keep gate_contract_doc in sync as the "latest filename" pointer
+      // so the existing scalar-based logic elsewhere still works.
+      onLatest(r.document.filename);
+      setUploadErr(null);
+    },
+    onError: (e: ApiError) => setUploadErr(e.message),
+  });
+
+  const items = (data?.items ?? [])
+    .filter((d) => !d.deleted_at)
+    .slice(0, 3);
+
+  return (
+    <div className="border-t border-slate-200 pt-3 mt-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold">
+          Contract document
+        </div>
+        <div className="flex items-center gap-2 relative">
+          {canUpload && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.docx,.doc,.png,.jpg,.jpeg"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) upload.mutate(f);
+                  if (e.target) e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={upload.isPending}
+                className="text-[11px] px-2.5 py-1 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+              >
+                {upload.isPending ? "Uploading…" : "📤 Upload"}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            disabled={items.length === 0}
+            className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border font-semibold disabled:opacity-50"
+            title={
+              items.length === 0
+                ? "No contract documents uploaded yet"
+                : `Download from last ${items.length} upload(s)`
+            }
+          >
+            ⬇ Download
+          </button>
+          {open && items.length > 0 && (
+            <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-beroe-card-border rounded-md shadow-lg min-w-[280px]">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted px-3 py-1.5 border-b border-beroe-card-border/60">
+                Last {items.length} upload{items.length === 1 ? "" : "s"}
+              </div>
+              <ul className="py-1">
+                {items.map((d) => (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setOpen(false);
+                        try {
+                          const r = await api.get<{ url: string }>(
+                            `/api/v1/documents/${d.id}/download-url`,
+                          );
+                          window.open(r.url, "_blank", "noopener");
+                        } catch (e) {
+                          alert(
+                            e instanceof ApiError ? e.message : "Download failed",
+                          );
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-[12px]"
+                    >
+                      <span>📄</span>
+                      <span className="flex-1 truncate font-medium">
+                        {d.filename}
+                      </span>
+                      <span className="text-[10px] text-text-muted whitespace-nowrap">
+                        {new Date(d.uploaded_at).toLocaleDateString()}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+      {uploadErr && (
+        <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mb-2">
+          {uploadErr}
+        </div>
+      )}
+      {isLoading ? (
+        <div className="text-xs text-text-muted italic">Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="text-xs text-text-muted italic">
+          {canUpload
+            ? "No contract documents uploaded yet — click Upload to add one."
+            : "No contract documents uploaded yet."}
+        </div>
+      ) : (
+        <div className="text-[11px] text-text-muted">
+          Latest:{" "}
+          <b className="text-text-primary">{items[0].filename}</b>{" "}
+          · uploaded{" "}
+          {new Date(items[0].uploaded_at).toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type ContractDoc = {
+  id: string;
+  filename: string;
+  uploaded_at: string;
+  deleted_at: string | null;
+};

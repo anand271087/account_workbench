@@ -9,9 +9,7 @@ Three walls of enforcement:
   3) Postgres RLS policies (third wall — even with bugs above, DB rejects).
 """
 
-from typing import Annotated
 
-from fastapi import Depends
 
 from app.core.deps import CurrentUser, ForbiddenError
 from app.models.user import User
@@ -251,14 +249,25 @@ def can_unlock_signing(role: str) -> bool:
 
 
 def can_write_documents(role: str, *, is_assigned: bool, is_team: bool, kind: str) -> bool:
-    """Meeting Records (MOM) and Solutioning Documents (VPD).
+    """Meeting Records (MOM), Solutioning Documents (VPD), and Contracts.
 
     MOM matrix: F (own/team/all) for CS roles + Solutioning Manager F (all).
     VPD matrix: only CS Director / VP — CSM / Solutioning Manager / Admin write.
                 CSM = V; CS Team Manager = V (team); Inside Sales = V.
+    Contract uploads: same write set as can_sign_account — admin / VP Sales /
+    VP Inside Sales + CO/ISM on own. Surfaced as Client Signed → upload.
     """
     if is_global_admin(role):
         return True
+    if kind == "contract":
+        # Mirrors can_sign_account exactly (M13).
+        if role in {"vp_sales", "vp_inside_sales"}:
+            return True
+        if role == "commercial_owner":
+            return is_assigned
+        if role == "inside_sales_manager":
+            return is_assigned
+        return False
     if role == "solutioning_manager":
         return True
     if kind == "vpd":

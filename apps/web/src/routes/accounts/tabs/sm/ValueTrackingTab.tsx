@@ -79,6 +79,12 @@ export default function ValueTrackingTab() {
         ))}
       </div>
 
+      {/* Row 52 (25-May) — Overall Value Delivered. Three-bucket rollup that
+          mirrors the VDD's CSM-attributed value totals so Value Tracking
+          tells a unified story. Reads from the saved VDD jsonb on the
+          account; the tab also links to the editable VDD surface. */}
+      <OverallValueDelivered accountId={account.id} />
+
       {showCreate && (
         <CreateMetricModal
           accountId={account.id}
@@ -584,6 +590,106 @@ function DeleteConfirm({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Row 52 (25-May-2026) — Overall Value Delivered rollup
+// ============================================================
+
+function OverallValueDelivered({ accountId }: { accountId: string }) {
+  type ValueRow = {
+    initiative_name?: string;
+    identified_musd?: number | null;
+    committed_musd?: number | null;
+    implemented_musd?: number | null;
+  };
+  type Vdd = {
+    value_delivered?: ValueRow[];
+    locked_at: string | null;
+    exec_summary: string | null;
+  };
+  const { data, isLoading } = useQuery<Vdd>({
+    queryKey: ["vdd", accountId],
+    queryFn: () =>
+      api.get<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`),
+  });
+  const rows: ValueRow[] = data?.value_delivered ?? [];
+  const sum = (k: keyof ValueRow) =>
+    rows.reduce((acc, r) => {
+      const v = Number(r[k]);
+      return acc + (Number.isFinite(v) ? v : 0);
+    }, 0);
+  const ident = sum("identified_musd");
+  const comm = sum("committed_musd");
+  const impl = sum("implemented_musd");
+  const fmt = (n: number) => `$${n.toFixed(2)}M`;
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-[14px] font-bold">💰 Overall Value Delivered</div>
+          <div className="text-[11px] text-text-muted mt-0.5">
+            Three-bucket rollup from the Value Delivery Document.
+          </div>
+        </div>
+        <a
+          href={`/accounts/${accountId}/success-management/vdd`}
+          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+        >
+          → Edit in VDD
+        </a>
+      </div>
+      {isLoading ? (
+        <div className="text-[12px] text-text-muted italic">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-[12px] text-text-muted italic">
+          No value-delivered entries yet. Add them on the Value Delivery
+          Document.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-md border bg-slate-50 border-slate-200 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+                Identified
+              </div>
+              <div className="text-[18px] font-extrabold text-slate-900 mt-0.5">
+                {fmt(ident)}
+              </div>
+            </div>
+            <div className="rounded-md border bg-amber-50 border-amber-200 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-amber-800">
+                Committed
+              </div>
+              <div className="text-[18px] font-extrabold text-amber-900 mt-0.5">
+                {fmt(comm)}
+              </div>
+            </div>
+            <div className="rounded-md border bg-emerald-50 border-emerald-200 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-800">
+                Implemented
+              </div>
+              <div className="text-[18px] font-extrabold text-emerald-900 mt-0.5">
+                {fmt(impl)}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 text-[11px] text-text-muted">
+            Across <b className="text-text-primary">{rows.length}</b>{" "}
+            initiative{rows.length === 1 ? "" : "s"}
+            {data?.locked_at && (
+              <>
+                {" "}· 🔒 VDD locked on{" "}
+                <b className="text-text-primary">
+                  {new Date(data.locked_at).toLocaleDateString()}
+                </b>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

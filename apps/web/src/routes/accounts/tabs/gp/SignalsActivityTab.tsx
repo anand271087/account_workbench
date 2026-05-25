@@ -561,6 +561,7 @@ function LogActivityModal({
     items: "",
     attendees: "",
     occurred_at: new Date().toISOString().slice(0, 10),
+    linked_metrics: [],
   });
   const [err, setErr] = useState<string | null>(null);
   const m = useMutation({
@@ -638,6 +639,14 @@ function LogActivityModal({
             rows={2}
             placeholder="• action 1\n• action 2"
             className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+          />
+        </FormRow>
+        {/* Row 57 — link the activity to one or more Success Metrics. */}
+        <FormRow label="Link to metrics (optional)">
+          <LinkedMetricsPicker
+            accountId={accountId}
+            value={form.linked_metrics ?? []}
+            onChange={(ids) => setForm({ ...form, linked_metrics: ids })}
           />
         </FormRow>
         {err && <div className="text-[11px] text-red-700">{err}</div>}
@@ -720,3 +729,65 @@ function ModalShell({
 // `ActivityType` is only re-exported as a type-import marker so eslint
 // doesn't flag the import as unused.
 export type { ActivityType };
+
+// ============================================================
+// Row 57 — Linked-metrics picker (multi-select)
+// ============================================================
+
+function LinkedMetricsPicker({
+  accountId,
+  value,
+  onChange,
+}: {
+  accountId: string;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  type MetricRow = { id: string; name: string; status: string };
+  const { data, isLoading } = useQuery<{ items: MetricRow[] }>({
+    queryKey: ["metrics", accountId],
+    queryFn: () =>
+      api.get<{ items: MetricRow[] }>(`/api/v1/accounts/${accountId}/metrics`),
+  });
+  const metrics = data?.items ?? [];
+  const selected = new Set(value);
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange([...next]);
+  };
+  if (isLoading) {
+    return <div className="text-[11px] text-text-muted italic">Loading metrics…</div>;
+  }
+  if (metrics.length === 0) {
+    return (
+      <div className="text-[11px] text-text-muted italic">
+        No metrics defined yet. Add some on Value Tracking first.
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {metrics.map((m) => {
+        const on = selected.has(m.id);
+        return (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => toggle(m.id)}
+            className={cn(
+              "text-[10px] px-2 py-1 rounded-full border-[1.5px] transition-colors",
+              on
+                ? "bg-beroe-blue/10 border-beroe-blue text-beroe-blue font-semibold"
+                : "bg-white border-beroe-card-border text-text-muted hover:border-beroe-blue/40",
+            )}
+          >
+            {on ? "✓ " : ""}
+            {m.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

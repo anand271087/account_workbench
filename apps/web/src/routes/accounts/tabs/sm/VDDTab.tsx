@@ -186,13 +186,35 @@ export default function VDDTab() {
                 {redraftMutation.isPending ? "Drafting…" : "✨ Draft with AI"}
               </button>
             )}
-            <a
-              href={`/accounts/${account.id}/intel-reports/documents`}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const r = await api.get<{
+                    html: string;
+                    filename: string;
+                    type: string;
+                  }>(`/api/v1/accounts/${account.id}/reports/vdd`);
+                  const blob = new Blob([r.html], { type: "text/html" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = r.filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                } catch (e) {
+                  setErr(
+                    e instanceof ApiError ? e.message : "VDD download failed",
+                  );
+                }
+              }}
               className="text-[11px] px-2 py-1 rounded-md border border-beroe-card-border text-text-secondary hover:bg-slate-50"
-              title="Generate the VDD as a downloadable QBR report (HTML now; PPT in v1.1)"
+              title="Download VDD as standalone HTML — PPT export lands in v1.1"
             >
-              ⬇ Download as report
-            </a>
+              ⬇ Download VDD
+            </button>
           </div>
         </div>
       </Card>

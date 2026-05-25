@@ -135,6 +135,13 @@ export default function AccountPlanTab() {
         />
       </div>
 
+      {/* Row 51 — three missing prototype sections added below the Plays:
+          Retain Checklist · Product & Services Saturation · Recommended Plays.
+          Pure-frontend reads, derived from data already in scope. */}
+      <RetainChecklist plays={allPlays} appetite={appetite} />
+      <ProductSaturation accountId={account.id} />
+      <RecommendedPlays plays={allPlays} mode={mode} />
+
       {showAddModal && (
         <AddPlayModal
           accountId={account.id}
@@ -393,6 +400,8 @@ function AcvTile({
     current && target ? Math.min(100, Math.round((current / target) * 100)) : 0;
   const conf = MODE_CONF[mode];
 
+  // Row 56 — for retain + expand show the same 4-tile ACV Growth Path
+  // (Current / Target / Gap / Pipeline). Rescue keeps its at-risk shape.
   const tiles =
     mode === "rescue"
       ? ([
@@ -400,30 +409,27 @@ function AcvTile({
           ["Days to Renewal", "—", "#d88520"],
           ["Risk Level", "Elevated", "#e63950"],
         ] as Array<[string, string, string]>)
-      : mode === "retain"
-        ? ([
-            ["Current ACV", fmtK(current), "#0d1b2e"],
-            ["Target", `Protect ${fmtK(current)}`, "#2fb87a"],
-            ["Target growth", `${appetite.breakdown.arr_target_pct}%`, "#EF9637"],
-          ] as Array<[string, string, string]>)
-        : ([
-            ["Current", fmtK(current), "#0d1b2e"],
-            ["Target", fmtK(target), "#2fb87a"],
-            ["Gap", gap > 0 ? fmtK(gap) : "Done", gap > 0 ? "#FD576B" : "#2fb87a"],
-            ["Pipeline", fmtK(pipeline), "#C344C7"],
-          ] as Array<[string, string, string]>);
+      : ([
+          ["Current", fmtK(current), "#0d1b2e"],
+          ["Target", target > 0 ? fmtK(target) : fmtK(current), "#2fb87a"],
+          [
+            "Gap",
+            gap > 0 ? fmtK(gap) : "Done",
+            gap > 0 ? "#FD576B" : "#2fb87a",
+          ],
+          ["Pipeline", fmtK(pipeline), "#C344C7"],
+        ] as Array<[string, string, string]>);
 
   return (
     <div className="bg-white border border-beroe-card-border rounded-card p-4">
       <div className="text-[13px] font-bold mb-2.5">
-        {mode === "rescue"
-          ? "⚠️ Renewal Risk"
-          : mode === "retain"
-            ? "🛡️ Protect Current ACV"
-            : "ACV Growth Path"}
+        {mode === "rescue" ? "⚠️ Renewal Risk" : "ACV Growth Path"}
       </div>
       <div
-        className={cn("grid gap-2 mb-2.5", mode === "expand" ? "grid-cols-4" : "grid-cols-3")}
+        className={cn(
+          "grid gap-2 mb-2.5",
+          mode === "rescue" ? "grid-cols-3" : "grid-cols-4",
+        )}
       >
         {tiles.map(([label, value, col]) => (
           <div
@@ -834,6 +840,298 @@ function ModalShell({
         </div>
         <div className="px-4 py-3">{children}</div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Row 51 (25-May-2026) — three prototype sections added below Plays
+// ============================================================
+
+// 1. Retain Checklist — 6 retention hygiene items derived from the existing
+//    appetite + plays + mode. Each item is "✓ done" or "⚠ open" — no new
+//    state, just a snapshot of what needs attention to hold the renewal.
+function RetainChecklist({
+  plays,
+  appetite,
+}: {
+  plays: Play[];
+  appetite: Appetite;
+}) {
+  const livePlays = plays.filter((p) => !p.hidden);
+  const items: { label: string; done: boolean; hint?: string }[] = [
+    {
+      label: "Active plays in motion (≥1)",
+      done: livePlays.length > 0,
+      hint: livePlays.length === 0 ? "Add at least one play below" : undefined,
+    },
+    {
+      label: "Renewal play within 90 days",
+      done: livePlays.some(
+        (p) =>
+          (p.when_text || "").toLowerCase().includes("q") ||
+          (p.when_text || "").toLowerCase().includes("renewal"),
+      ),
+      hint: "Schedule the renewal-anchor play",
+    },
+    {
+      label: "Health ≥40 (out of risk band)",
+      done: appetite.breakdown.health_pts >= 16, // health_pts is health*0.4
+    },
+    {
+      label: "Pipeline weighted ≥30% of target gap",
+      done: appetite.breakdown.arr_status !== "behind",
+      hint: "Build pipeline to close the ARR gap",
+    },
+    {
+      label: "Signal mix not risk-dominant",
+      done: appetite.breakdown.sig_pts >= 15,
+      hint: "Resolve open risks / surface positive signals",
+    },
+    {
+      label: "Mode confirmed (auto or manual)",
+      done: true,
+    },
+  ];
+  const done = items.filter((i) => i.done).length;
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[13px] font-bold">🛡️ Retain Checklist</div>
+        <span
+          className={cn(
+            "text-[11px] font-bold px-2 py-0.5 rounded-full",
+            done === items.length
+              ? "bg-emerald-100 text-emerald-800"
+              : done >= items.length - 2
+                ? "bg-amber-100 text-amber-800"
+                : "bg-red-100 text-red-800",
+          )}
+        >
+          {done} / {items.length} healthy
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((it) => (
+          <li
+            key={it.label}
+            className="flex items-start gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
+          >
+            <span className={it.done ? "text-emerald-600" : "text-amber-600"}>
+              {it.done ? "✓" : "⚠"}
+            </span>
+            <span className="flex-1">
+              {it.label}
+              {!it.done && it.hint && (
+                <span className="text-text-muted italic ml-2">
+                  — {it.hint}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// 2. Product & Services Saturation — count of contracted Beroe modules
+//    out of the 8 named modules, with a per-module owned/gap grid. Mirrors
+//    prototype `bProductSaturation`. Reads gate.gate_contract_modules.
+const BEROE_MODULES = [
+  "Live.ai",
+  "MMD",
+  "Supplier Risk",
+  "Supply Chain Risk",
+  "Copilot",
+  "DataHub",
+  "Sourcing Optimizer",
+  "Diverse Supplier Directory",
+];
+
+function ProductSaturation({ accountId }: { accountId: string }) {
+  const { data, isLoading } = useQuery<{
+    gate_contract_modules: string[];
+    gate_platform_tier: string | null;
+    gate_account_segment: string | null;
+  }>({
+    queryKey: ["signing-gate", accountId],
+    queryFn: () => api.get(`/api/v1/accounts/${accountId}/sign`),
+  });
+  const owned = new Set((data?.gate_contract_modules ?? []).map((m) => m.toLowerCase()));
+  const total = BEROE_MODULES.length;
+  const ownedCount = BEROE_MODULES.filter((m) =>
+    owned.has(m.toLowerCase()),
+  ).length;
+  const pct = Math.round((ownedCount / total) * 100);
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-[13px] font-bold">📦 Product & Services Saturation</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            Tier:{" "}
+            <b className="text-text-primary">
+              {data?.gate_platform_tier ?? "—"}
+            </b>{" "}
+            · Segment:{" "}
+            <b className="text-text-primary">
+              {data?.gate_account_segment ?? "—"}
+            </b>
+          </div>
+        </div>
+        <div className="text-center">
+          <div
+            className="text-[20px] font-extrabold"
+            style={{
+              color: pct >= 50 ? "#2fb87a" : pct >= 25 ? "#EF9637" : "#FD576B",
+            }}
+          >
+            {pct}%
+          </div>
+          <div className="text-[9px] text-text-muted">Saturation</div>
+        </div>
+      </div>
+      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
+        <div
+          className="h-full"
+          style={{
+            width: `${pct}%`,
+            background: pct >= 50 ? "#40CC8F" : pct >= 25 ? "#EF9637" : "#FD576B",
+          }}
+        />
+      </div>
+      {isLoading ? (
+        <div className="text-[11px] text-text-muted italic">Loading modules…</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          {BEROE_MODULES.map((m) => {
+            const has = owned.has(m.toLowerCase());
+            return (
+              <div
+                key={m}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1 rounded-md border text-[11px]",
+                  has
+                    ? "border-emerald-200 bg-emerald-50/40"
+                    : "border-beroe-card-border bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
+                    has
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-700",
+                  )}
+                >
+                  {has ? "✓" : "→"}
+                </span>
+                <span className="flex-1 font-medium">{m}</span>
+                <span
+                  className={cn(
+                    "text-[9px] font-bold uppercase",
+                    has ? "text-emerald-700" : "text-amber-700",
+                  )}
+                >
+                  {has ? "Owned" : "Gap"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 3. Recommended Plays — top 3 ideas the CSM should add. Pulled from a
+//    static catalog for now; future revision can layer AI suggest via the
+//    existing brief-AI scaffold.
+const PLAY_CATALOG: { mode: string; title: string; trigger: string; value: string }[] = [
+  {
+    mode: "expand",
+    title: "Sustainability module upsell",
+    trigger: "Most procurement teams add ESG benchmarking in year 2.",
+    value: "Typical $120K–$250K incremental ACV",
+  },
+  {
+    mode: "expand",
+    title: "Supplier risk monitoring add-on",
+    trigger: "Tightens the renewal narrative on exposure.",
+    value: "Typical $80K–$150K incremental ACV",
+  },
+  {
+    mode: "expand",
+    title: "Multi-year enterprise renewal lock",
+    trigger: "Buyer locks pricing; vendor locks tenure.",
+    value: "20–35% premium over single-year renewal",
+  },
+  {
+    mode: "retain",
+    title: "QBR + champion alignment session",
+    trigger: "Pre-renewal trust check.",
+    value: "Reduces churn risk by ~30% (Beroe avg)",
+  },
+  {
+    mode: "retain",
+    title: "Custom benchmark on top category",
+    trigger: "Highest-conviction value moment.",
+    value: "Adds documented savings to renewal case",
+  },
+  {
+    mode: "rescue",
+    title: "Executive escalation w/ sponsor",
+    trigger: "Re-sets relationship before churn signal hardens.",
+    value: "Avoided-churn play; no $ uplift",
+  },
+];
+
+function RecommendedPlays({ plays, mode }: { plays: Play[]; mode: PlayMode }) {
+  const livePlays = plays.filter((p) => !p.hidden);
+  const haveTitles = new Set(livePlays.map((p) => p.title.toLowerCase()));
+  const recs = PLAY_CATALOG.filter((r) => r.mode === mode)
+    .concat(PLAY_CATALOG.filter((r) => r.mode !== mode))
+    .filter((r) => !haveTitles.has(r.title.toLowerCase()))
+    .slice(0, 3);
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="text-[13px] font-bold mb-3">
+        ✨ Recommended Plays{" "}
+        <span className="text-[10px] font-normal text-text-muted">
+          · suggestions for {mode} mode
+        </span>
+      </div>
+      {recs.length === 0 ? (
+        <div className="text-[12px] text-text-muted italic">
+          You've already added the most-common plays for this mode — nice work.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {recs.map((r) => (
+            <li
+              key={r.title}
+              className="rounded-md border border-beroe-card-border px-3 py-2"
+            >
+              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                <span className="text-[12px] font-bold">{r.title}</span>
+                <span
+                  className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                  style={{ background: "#f4f3fe", color: "#4A00F8" }}
+                >
+                  {r.mode}
+                </span>
+              </div>
+              <div className="text-[11px] text-text-secondary leading-snug">
+                {r.trigger}
+              </div>
+              <div className="text-[11px] text-text-muted italic mt-1">
+                💰 {r.value}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

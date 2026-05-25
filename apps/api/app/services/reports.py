@@ -343,3 +343,157 @@ def generate_utilization_html(*, account: Any, super_users: list[dict]) -> str:
   © Beroe — Confidential. Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
 </div>
 </body></html>"""
+
+
+# ============================================================
+# VDD (Value Delivery Document) — Row 53 (25-May-2026)
+# ============================================================
+
+
+def generate_vdd_html(*, account: Any) -> str:
+    """Render the saved VDD jsonb as a downloadable single-page HTML doc.
+
+    Pulls from `accounts.value_delivery_document` directly so the export
+    mirrors what the user sees in the M22 VDD tab. PPT export remains
+    v1.1 backlog (needs python-pptx templates).
+    """
+    vdd = account.value_delivery_document or {}
+    locked_at = getattr(account, "vdd_locked_at", None)
+
+    priorities = vdd.get("client_strategic_priorities") or []
+    metrics = vdd.get("agreed_success_metrics") or []
+    approach = vdd.get("beroes_approach") or []
+    value_delivered = vdd.get("value_delivered") or []
+    exec_summary = vdd.get("exec_summary") or ""
+
+    def _sum(rows, key):
+        total = 0.0
+        for r in rows:
+            try:
+                total += float(r.get(key) or 0)
+            except (TypeError, ValueError):
+                continue
+        return round(total, 2)
+
+    ident = _sum(value_delivered, "identified_musd")
+    comm = _sum(value_delivered, "committed_musd")
+    impl = _sum(value_delivered, "implemented_musd")
+
+    def _list_items(items: list, label_keys: list[str]) -> str:
+        if not items:
+            return f"<div class='sub'>No {label_keys[0]} captured.</div>"
+        rows_html = ""
+        for it in items:
+            if isinstance(it, str):
+                rows_html += f"<li>{_escape(it)}</li>"
+                continue
+            primary = next(
+                (str(it.get(k)) for k in label_keys if it.get(k)), str(it)
+            )
+            rows_html += f"<li>{_escape(primary)}</li>"
+        return f"<ul>{rows_html}</ul>"
+
+    metrics_table = ""
+    if metrics:
+        rows = "".join(
+            f"<tr><td><b>{_escape(m.get('name'))}</b></td>"
+            f"<td>{_escape(m.get('target') or '—')}</td>"
+            f"<td>{_escape(m.get('current') or '—')}</td>"
+            f"<td>{_escape(m.get('status') or '—')}</td></tr>"
+            for m in metrics
+        )
+        metrics_table = (
+            "<table><thead><tr><th>Metric</th><th>Target</th>"
+            "<th>Current</th><th>Status</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table>"
+        )
+
+    approach_table = ""
+    if approach:
+        rows = "".join(
+            f"<tr><td><b>{_escape(a.get('initiative_name'))}</b></td>"
+            f"<td>{_escape(', '.join(a.get('levers') or []) or '—')}</td>"
+            f"<td>{_escape(a.get('stage') or '—')}</td>"
+            f"<td>{_escape(a.get('approach') or '—')}</td></tr>"
+            for a in approach
+        )
+        approach_table = (
+            "<table><thead><tr><th>Initiative</th><th>Levers</th>"
+            "<th>Stage</th><th>Approach</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table>"
+        )
+
+    delivered_table = ""
+    if value_delivered:
+        rows = "".join(
+            f"<tr><td><b>{_escape(v.get('initiative_name'))}</b></td>"
+            f"<td>${_escape(v.get('identified_musd') or 0)}M</td>"
+            f"<td>${_escape(v.get('committed_musd') or 0)}M</td>"
+            f"<td>${_escape(v.get('implemented_musd') or 0)}M</td>"
+            f"<td>{_escape(v.get('note') or '')}</td></tr>"
+            for v in value_delivered
+        )
+        delivered_table = (
+            "<table><thead><tr><th>Initiative</th>"
+            "<th>$ Identified</th><th>$ Committed</th>"
+            "<th>$ Implemented</th><th>Note</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table>"
+        )
+
+    locked_banner = (
+        f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;'
+        f'border-radius:8px;padding:8px 12px;margin-bottom:12px;'
+        f'font-size:11px;color:#166534">🔒 Locked on '
+        f'{locked_at.strftime("%d %b %Y")}</div>'
+        if locked_at
+        else ""
+    )
+    exec_section = (
+        f'<section style="{_section_style("#0D1117")}">'
+        f'<h2>Executive summary</h2>'
+        f'<p style="white-space:pre-wrap;font-size:12px;line-height:1.55">'
+        f'{_escape(exec_summary)}</p></section>'
+        if exec_summary
+        else ""
+    )
+
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Value Delivery Document — {_escape(account.name)}</title>
+<style>{_frame_styles()}</style></head><body>
+{_header(account.name, 'Value Delivery Document', 'Renewal-readiness evidence')}
+
+{locked_banner}
+
+<section style="{_section_style('#4A00F8')}">
+  <h2>CSM-attributed value rollup</h2>
+  <div class="kpi"><div class="kpi-v">${ident}M</div><div class="kpi-l">Identified</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:#EF9637">${comm}M</div><div class="kpi-l">Committed</div></div>
+  <div class="kpi"><div class="kpi-v" style="color:#40CC8F">${impl}M</div><div class="kpi-l">Implemented</div></div>
+</section>
+
+<section style="{_section_style('#4A00F8')}">
+  <h2>Client strategic priorities</h2>
+  {_list_items(priorities, ['text', 'name', 'title'])}
+</section>
+
+<section style="{_section_style('#EF9637')}">
+  <h2>Agreed success metrics</h2>
+  {metrics_table or '<div class="sub">No metrics captured.</div>'}
+</section>
+
+<section style="{_section_style('#a830b0')}">
+  <h2>Beroe's approach per initiative</h2>
+  {approach_table or '<div class="sub">No approach captured.</div>'}
+</section>
+
+<section style="{_section_style('#40CC8F')}">
+  <h2>Value delivered</h2>
+  {delivered_table or '<div class="sub">No value-delivered entries.</div>'}
+</section>
+
+{exec_section}
+
+<div style="margin-top:18px;font-size:10px;color:#94a3b8;text-align:right">
+  © Beroe — Confidential. Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+</div>
+</body></html>"""

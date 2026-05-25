@@ -20,7 +20,6 @@ from supabase import Client, create_client
 
 from app.core.config import get_settings
 
-
 _BUCKET_FOR_KIND: dict[str, str] = {
     "vpd": "vpd",
     "mom": "meeting_records",
@@ -28,6 +27,7 @@ _BUCKET_FOR_KIND: dict[str, str] = {
     "recording": "meeting_records",
     "email": "meeting_records",
     "other": "meeting_records",
+    "contract": "contracts",
 }
 
 

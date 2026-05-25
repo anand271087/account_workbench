@@ -19,10 +19,17 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit & { isFormData?: boolean },
+): Promise<T> {
   const token = await authProvider.getAccessToken();
   const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
+  // Multipart upload: let the browser set Content-Type (with the boundary).
+  // Default to JSON for everything else.
+  if (!init?.isFormData) {
+    headers.set("Content-Type", "application/json");
+  }
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const r = await fetch(`${BASE}${path}`, { ...init, headers });
@@ -61,6 +68,9 @@ export const api = {
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  // Multipart upload — e.g. contract document upload (Row 50).
+  postForm: <T>(path: string, formData: FormData) =>
+    request<T>(path, { method: "POST", body: formData, isFormData: true }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   // DELETE accepts an optional body — needed for soft-delete endpoints

@@ -244,6 +244,62 @@ function IntelCard({
     onError: (e: ApiError) => alert(e.message),
   });
 
+  const slug = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "intel";
+
+  const handleDownload = () => {
+    const lines = [
+      `${item.headline}`,
+      "",
+      `Category: ${CATEGORY_LABELS[item.category]}`,
+      `Date: ${item.news_date ? new Date(item.news_date).toLocaleDateString() : "—"}`,
+      `Source: ${item.source ?? "—"}`,
+      `Relevance: ${RELEVANCE_LABELS[item.signal_relevance]}`,
+      "",
+      "Summary:",
+      item.summary ?? "—",
+      "",
+      item.source_url ? `Source link: ${item.source_url}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `intel-${slug(item.headline)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleEmail = () => {
+    const subject = `[Intel] ${item.headline}`;
+    const body = [
+      `Category: ${CATEGORY_LABELS[item.category]}`,
+      `Date: ${item.news_date ? new Date(item.news_date).toLocaleDateString() : "—"}`,
+      `Source: ${item.source ?? "—"}`,
+      `Relevance: ${RELEVANCE_LABELS[item.signal_relevance]}`,
+      "",
+      item.summary ?? "",
+      "",
+      item.source_url ? `Source: ${item.source_url}` : "",
+      "",
+      "—",
+      "Shared from Beroe Account Workbench",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    window.location.href = `mailto:?subject=${encodeURIComponent(
+      subject,
+    )}&body=${encodeURIComponent(body)}`;
+  };
+
   return (
     <div
       className={cn(
@@ -334,6 +390,20 @@ function IntelCard({
                 </button>
               )
             )}
+            <button
+              onClick={handleDownload}
+              className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
+              title="Download this intel item as a text file"
+            >
+              ⬇ Download
+            </button>
+            <button
+              onClick={handleEmail}
+              className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
+              title="Open your email client pre-filled with this intel item"
+            >
+              ✉ Email to team
+            </button>
             {editable && (
               <button
                 onClick={() => {

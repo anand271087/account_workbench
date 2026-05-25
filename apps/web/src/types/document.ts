@@ -1,6 +1,6 @@
 // Mirrors apps/api/app/schemas/document.py.
 
-export type DocKind = "mom" | "vpd" | "recording" | "transcript" | "email" | "other";
+export type DocKind = "mom" | "vpd" | "recording" | "transcript" | "email" | "other" | "contract";
 export type AiStatus = "pending" | "processing" | "complete" | "failed";
 
 export interface ExtractedEntities {
@@ -77,6 +77,7 @@ export const DOC_KIND_LABELS: Record<DocKind, string> = {
   transcript: "Transcript",
   email: "Email",
   other: "Other",
+  contract: "Contract",
 };
 
 export const AI_STATUS_LABELS: Record<AiStatus, string> = {

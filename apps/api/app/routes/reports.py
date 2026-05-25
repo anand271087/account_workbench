@@ -31,6 +31,7 @@ from app.services.reports import (
     generate_mbr_html,
     generate_qbr_html,
     generate_utilization_html,
+    generate_vdd_html,
 )
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["reports"])
@@ -125,6 +126,19 @@ async def get_mbr(
 # ============================================================
 # Utilization
 # ============================================================
+
+
+@router.get("/{account_id}/reports/vdd")
+async def get_vdd_report(
+    account_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Row 53 — Value Delivery Document download. HTML for now;
+    PPT in v1.1 (python-pptx)."""
+    acc = await _scope(db, user, account_id)
+    html_str = generate_vdd_html(account=acc)
+    return {"html": html_str, "filename": f"{acc.slug}-vdd.html", "type": "vdd"}
 
 
 @router.get("/{account_id}/reports/utilization")

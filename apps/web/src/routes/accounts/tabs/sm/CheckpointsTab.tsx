@@ -102,6 +102,8 @@ export default function CheckpointsTab() {
         </div>
       )}
 
+      <CheckpointReferenceCard />
+
       {isLoading && <div className="text-sm text-text-muted">Loading checkpoints…</div>}
 
       {!isLoading && items.length === 0 && (
@@ -797,6 +799,169 @@ function AttachmentsRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// Reference — What Must Be Shown at Each Checkpoint
+// ============================================================
+
+const CHECKPOINT_GUIDE: Record<
+  CheckpointType,
+  { tagline: string; review: string[]; decide: string[]; signoff: string[] }
+> = {
+  Kickoff: {
+    tagline: "Set scope, success metrics, owners, cadence.",
+    review: [
+      "Engagement scope + categories in play",
+      "Stakeholder map (sponsor, champion, budget owner)",
+      "Baseline data + starting metrics",
+    ],
+    decide: [
+      "Primary success metric + measurement method",
+      "Cadence (MBR/QBR dates, monthly check-ins)",
+      "Engagement plan + first 90-day initiatives",
+    ],
+    signoff: [
+      "Success contract (3 locks)",
+      "Initiatives committed for first quarter",
+      "Client acknowledgement of scope + cadence",
+    ],
+  },
+  MBR: {
+    tagline: "Usage trajectory + early wins after first 90 days.",
+    review: [
+      "Logins, active users, module adoption vs target",
+      "Initiatives in flight + blockers",
+      "Early value identified (savings, risk avoided, time saved)",
+    ],
+    decide: [
+      "Course-correct stalled initiatives",
+      "Onboard new users / categories if usage lagging",
+      "Confirm QBR agenda + invitees",
+    ],
+    signoff: [
+      "Updated success metrics with current vs target",
+      "Next-90-day initiative list",
+      "Client acknowledgement on usage trend",
+    ],
+  },
+  QBR: {
+    tagline: "Value delivered + commercial signal half-way through term.",
+    review: [
+      "All success metrics with green/amber/red status",
+      "Value delivered ($ identified / committed / implemented)",
+      "Adoption + super-user roster",
+      "Soft signals (positive + risk) since Kickoff",
+    ],
+    decide: [
+      "Renewal posture (expand / retain / at-risk)",
+      "Expansion plays to pitch (modules, categories, geos)",
+      "Renewal Readiness gaps to close before T−14d",
+    ],
+    signoff: [
+      "Value Delivery Document checkpoint snapshot",
+      "Initiatives for next 90 days + expansion proposal",
+      "Client acknowledgement on renewal direction",
+    ],
+  },
+  Renewal: {
+    tagline: "Lock the outcome — renewed / at-risk / not renewed.",
+    review: [
+      "Full-term Value Delivery Document (all 4 sections)",
+      "Final ARR delivered vs committed",
+      "Outstanding red flags + resolution status",
+      "Renewal Readiness 3-question grid",
+    ],
+    decide: [
+      "Renewal terms (ACV, modules, duration)",
+      "Outcome: renewed / at-risk / not renewed",
+      "Hand-off plan if not renewing",
+    ],
+    signoff: [
+      "Signed renewal contract OR documented exit",
+      "Final VDD locked",
+      "Outcome stamped on Delivery & Renewal",
+    ],
+  },
+};
+
+const CHECKPOINT_TONES: Record<CheckpointType, string> = {
+  Kickoff: "border-sky-200 bg-sky-50",
+  MBR: "border-indigo-200 bg-indigo-50",
+  QBR: "border-violet-200 bg-violet-50",
+  Renewal: "border-amber-200 bg-amber-50",
+};
+
+function CheckpointReferenceCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-beroe-card-border rounded-card bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left"
+      >
+        <div>
+          <div className="text-[12px] font-bold text-text-primary">
+            What must be shown at each checkpoint
+          </div>
+          <p className="text-[10px] text-text-muted">
+            Stakeholder reference — what to review, decide, and sign off at
+            Kickoff · MBR · QBR · Renewal.
+          </p>
+        </div>
+        <span className="text-[11px] text-text-muted">{open ? "▴ Hide" : "▾ Show"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-beroe-card-border p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {TYPES.map((type) => {
+            const g = CHECKPOINT_GUIDE[type];
+            return (
+              <div
+                key={type}
+                className={cn(
+                  "rounded-lg border p-3",
+                  CHECKPOINT_TONES[type],
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[14px]">{TYPE_ICONS[type]}</span>
+                  <span className="text-[12px] font-bold text-text-primary">
+                    {type}
+                  </span>
+                </div>
+                <p className="text-[10px] text-text-muted mb-2 italic">
+                  {g.tagline}
+                </p>
+                <div className="space-y-1.5">
+                  <ReferenceList label="Review" items={g.review} />
+                  <ReferenceList label="Decide" items={g.decide} />
+                  <ReferenceList label="Sign off" items={g.signoff} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReferenceList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div>
+      <div className="text-[9px] uppercase tracking-wide font-semibold text-text-muted">
+        {label}
+      </div>
+      <ul className="mt-0.5 space-y-0.5">
+        {items.map((it, i) => (
+          <li key={i} className="text-[11px] text-text-secondary leading-snug">
+            • {it}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

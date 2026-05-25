@@ -160,6 +160,10 @@ export default function DeliveryRenewalTab() {
         </div>
       </Card>
 
+      {/* Row 55 (25-May) — VDD summary card embedded at the top of D&R.
+          Reads the value_delivery_document jsonb; deep-links to the editor. */}
+      <VddSummaryCard accountId={account.id} />
+
       {/* Dual-track top row */}
       <div className="grid grid-cols-12 gap-4">
         <Track1Card track1={form.track1} className="col-span-5" />
@@ -779,5 +783,106 @@ function ReadinessGrid({
         );
       })}
     </div>
+  );
+}
+
+// ============================================================
+// Row 55 (25-May-2026) — VDD summary card embedded on D&R
+// ============================================================
+
+function VddSummaryCard({ accountId }: { accountId: string }) {
+  type ValueRow = {
+    initiative_name?: string;
+    identified_musd?: number | null;
+    committed_musd?: number | null;
+    implemented_musd?: number | null;
+  };
+  type Vdd = {
+    value_delivered?: ValueRow[];
+    client_strategic_priorities?: unknown[];
+    locked_at: string | null;
+    exec_summary?: string | null;
+  };
+  const { data, isLoading } = useQuery<Vdd>({
+    queryKey: ["vdd", accountId],
+    queryFn: () =>
+      api.get<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`),
+  });
+  const rows: ValueRow[] = data?.value_delivered ?? [];
+  const sum = (k: keyof ValueRow) =>
+    rows.reduce((acc, r) => {
+      const v = Number(r[k]);
+      return acc + (Number.isFinite(v) ? v : 0);
+    }, 0);
+  const ident = sum("identified_musd");
+  const comm = sum("committed_musd");
+  const impl = sum("implemented_musd");
+  const fmt = (n: number) => `$${n.toFixed(2)}M`;
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <div className="text-[13px] font-bold">📄 Value Delivery Document</div>
+          <div className="text-[11px] text-text-muted mt-0.5">
+            Evidence of delivered value for the renewal conversation.
+          </div>
+        </div>
+        <a
+          href={`/accounts/${accountId}/success-management/vdd`}
+          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+        >
+          → Open / edit VDD
+        </a>
+      </div>
+      {isLoading ? (
+        <div className="text-[12px] text-text-muted italic">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-[12px] text-text-muted italic">
+          No value-delivered entries on the VDD yet. Open VDD to populate.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-md border bg-slate-50 border-slate-200 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+                Identified
+              </div>
+              <div className="text-[16px] font-extrabold text-slate-900">
+                {fmt(ident)}
+              </div>
+            </div>
+            <div className="rounded-md border bg-amber-50 border-amber-200 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-amber-800">
+                Committed
+              </div>
+              <div className="text-[16px] font-extrabold text-amber-900">
+                {fmt(comm)}
+              </div>
+            </div>
+            <div className="rounded-md border bg-emerald-50 border-emerald-200 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-800">
+                Implemented
+              </div>
+              <div className="text-[16px] font-extrabold text-emerald-900">
+                {fmt(impl)}
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 text-[11px] text-text-muted">
+            {rows.length} initiative{rows.length === 1 ? "" : "s"} · {" "}
+            {(data?.client_strategic_priorities ?? []).length} priorit
+            {(data?.client_strategic_priorities ?? []).length === 1 ? "y" : "ies"}
+            {data?.locked_at && (
+              <>
+                {" "}·{" "}
+                <span className="text-emerald-700 font-semibold">
+                  🔒 Locked {new Date(data.locked_at).toLocaleDateString()}
+                </span>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
