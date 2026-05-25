@@ -55,14 +55,14 @@ _JSON_OBJECT_RE = re.compile(r"\{[\s\S]*\}")
 
 
 def extract_from_mom(document_id, text: str) -> MomExtractionResult:
-    """Single public surface. Picks real-Claude or stub based on the API key."""
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value()
-    if not _key_looks_real(key):
+    """Single public surface. Picks real LLM (gateway or Anthropic) or stub."""
+    from app.services import llm
+
+    if not llm.is_configured():
         result = _stub_extract(text)
     else:
         digest = hashlib.sha256(
-            f"mom|{settings.anthropic_model}|{text}".encode("utf-8")
+            f"mom|{llm.backend_label()}|{text}".encode("utf-8")
         ).hexdigest()
         now = time.time()
         cached = _cache.get(digest)
@@ -167,22 +167,13 @@ OUTPUT RULES:
 
 
 def _real_extract(text: str) -> MomExtractionResult:
-    settings = get_settings()
-    from anthropic import Anthropic  # type: ignore
+    from app.services import llm
 
-    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
-    msg = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=4000,
+    raw = llm.chat_text(
         system=_SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": f"MOM TEXT:\n\n{_truncate_for_prompt(text)}",
-            }
-        ],
+        user_content=f"MOM TEXT:\n\n{_truncate_for_prompt(text)}",
+        max_tokens=4000,
     )
-    raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     cleaned = _JSON_FENCE_RE.sub("", raw).strip()
     m = _JSON_OBJECT_RE.search(cleaned)
     candidate = m.group(0) if m else cleaned

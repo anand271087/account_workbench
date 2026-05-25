@@ -154,14 +154,11 @@ def _real_generate(
     industry: str | None,
     today: date,
 ) -> list[dict[str, Any]]:
-    """One Claude call → 6 news items as structured JSON."""
-    settings = get_settings()
-    from anthropic import Anthropic  # type: ignore
+    """One LLM call → 6 news items as structured JSON."""
+    from app.services import llm
 
-    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
     industry_label = industry or "procurement"
-    msg = client.messages.create(
-        model=settings.anthropic_model,
+    raw = llm.chat_text(
         max_tokens=1800,
         system=(
             "You write concise market-intelligence items for a customer-success "
@@ -203,17 +200,11 @@ def _real_generate(
             "    when the procurement implication is unambiguous and time-sensitive.\n"
             "  - No filler. No prose outside the JSON."
         ),
-        messages=[
-            {
-                "role": "user",
-                "content": _truncate_for_prompt(
-                    f"Account name: {account_name}\nIndustry: {industry_label}\n"
-                    f"Today's date: {today.isoformat()}"
-                ),
-            }
-        ],
+        user_content=_truncate_for_prompt(
+            f"Account name: {account_name}\nIndustry: {industry_label}\n"
+            f"Today's date: {today.isoformat()}"
+        ),
     )
-    raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     cleaned = _JSON_FENCE_RE.sub("", raw).strip()
     m = _JSON_OBJECT_RE.search(cleaned)
     candidate = m.group(0) if m else cleaned
@@ -258,13 +249,13 @@ def generate_intel_news(
 ) -> tuple[list[dict[str, Any]], bool]:
     """Public entry point. Returns (items, is_stub)."""
     today = today or date.today()
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value()
-    if not _key_looks_real(key):
+    from app.services import llm
+
+    if not llm.is_configured():
         return stub_generate(account_name=account_name, industry=industry, today=today), True
 
     digest = hashlib.sha256(
-        f"intel|{settings.anthropic_model}|{account_name}|{industry or ''}".encode()
+        f"intel|{llm.backend_label()}|{account_name}|{industry or ''}".encode()
     ).hexdigest()
     now = time.time()
     cached = _doc_cache.get(digest)

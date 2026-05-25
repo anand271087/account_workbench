@@ -21,6 +21,7 @@ import time
 
 from app.core.config import get_settings
 from app.schemas.engagement import QualityCheckResponse
+from app.services import llm
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,16 @@ _REAL_CACHE_TTL_SECONDS = 24 * 3600
 
 
 def _key_looks_real(key: str) -> bool:
-    """Anthropic API keys start with `sk-ant-` and are ~95+ chars. Anything else is a stub."""
+    """LEGACY — only used as a tiebreaker. Real gating is `llm.is_configured()`
+    which also accepts the Bifrost gateway. Kept for the rare path where
+    callers pass a raw key string."""
     return bool(key) and key.startswith("sk-ant-") and "stub" not in key and len(key) > 30
+
+
+def _llm_ready() -> bool:
+    """True when either the Bifrost gateway or Anthropic SDK can answer.
+    All stub-or-real switches in this module route through here."""
+    return llm.is_configured()
 
 
 def _word_count(text: str) -> int:
@@ -111,15 +120,7 @@ def _extract_score_comment(raw: str) -> tuple[int, str]:
 
 def _real_anthropic_call(text: str) -> QualityCheckResponse:
     """One request to Claude. Raises anthropic exceptions on transient failure."""
-    settings = get_settings()
-    # Anthropic SDK is heavy; import lazily so the rest of the API boots cleanly
-    # even when the key is a stub or the package isn't installed in this venv.
-    from anthropic import Anthropic  # type: ignore
-
-    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
-    msg = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=300,
+    raw = llm.chat_text(
         system=(
             "You score procurement engagement objectives 1-5 on three dimensions:\n"
             "  - specificity (named outcome / category / target)\n"
@@ -134,19 +135,14 @@ def _real_anthropic_call(text: str) -> QualityCheckResponse:
             "  - Output ONLY JSON. No markdown, no fences, no preamble.\n"
             "  - Schema: {\"score\": <1|2|3|4|5>, \"comment\": \"<≤25 words actionable critique>\"}\n"
         ),
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    "Score this objective. Output only the JSON object. "
-                    "Do not ask for more context or paraphrase the input.\n\n"
-                    "OBJECTIVE TEXT:\n"
-                    f"{text}"
-                ),
-            }
-        ],
+        user_content=(
+            "Score this objective. Output only the JSON object. "
+            "Do not ask for more context or paraphrase the input.\n\n"
+            "OBJECTIVE TEXT:\n"
+            f"{text}"
+        ),
+        max_tokens=300,
     )
-    raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     score, comment = _extract_score_comment(raw)
     score = max(1, min(5, score))
     return QualityCheckResponse(
@@ -155,7 +151,12 @@ def _real_anthropic_call(text: str) -> QualityCheckResponse:
 
 
 def _is_transient_anthropic_error(e: BaseException) -> bool:
-    """Return True for Anthropic errors worth retrying once."""
+    """Return True for LLM errors worth retrying once.
+
+    Covers both the Anthropic SDK exception classes and the httpx ones that
+    surface when we hit the Bifrost gateway (timeouts, connection drops,
+    5xx). Either family is retry-able once before falling back to stubs."""
+    # Anthropic SDK family — only available when the package is installed.
     try:
         from anthropic import (
             APIConnectionError,
@@ -164,9 +165,41 @@ def _is_transient_anthropic_error(e: BaseException) -> bool:
             OverloadedError,
             RateLimitError,
         )  # type: ignore
+
+        if isinstance(
+            e,
+            (
+                APIConnectionError,
+                APITimeoutError,
+                InternalServerError,
+                OverloadedError,
+                RateLimitError,
+            ),
+        ):
+            return True
     except ImportError:
-        return False
-    return isinstance(e, (APIConnectionError, APITimeoutError, InternalServerError, OverloadedError, RateLimitError))
+        pass
+    # httpx family — Bifrost gateway path.
+    try:
+        import httpx
+
+        if isinstance(
+            e,
+            (
+                httpx.ConnectError,
+                httpx.ConnectTimeout,
+                httpx.ReadTimeout,
+                httpx.WriteTimeout,
+                httpx.PoolTimeout,
+                httpx.RemoteProtocolError,
+            ),
+        ):
+            return True
+        if isinstance(e, httpx.HTTPStatusError):
+            return 500 <= e.response.status_code < 600 or e.response.status_code == 429
+    except ImportError:
+        pass
+    return False
 
 
 def _real_score_cached(prompt_hash: str, text: str) -> QualityCheckResponse:
@@ -203,12 +236,14 @@ def _real_score_cached(prompt_hash: str, text: str) -> QualityCheckResponse:
 
 
 def quality_check_engagement_objective(text: str) -> QualityCheckResponse:
-    """Public entry point. Routes to real Claude or to the deterministic stub."""
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value()
-    if not _key_looks_real(key):
+    """Public entry point. Routes to LLM (gateway or Anthropic) or deterministic stub."""
+    if not _llm_ready():
         return _stub_score(text)
-    digest = hashlib.sha256((settings.anthropic_model + "|" + text).encode("utf-8")).hexdigest()
+    settings = get_settings()
+    digest = hashlib.sha256(
+        (llm.backend_label() + "|" + text).encode("utf-8")
+    ).hexdigest()
+    _ = settings  # kept for parity with siblings
     return _real_score_cached(digest, text)
 
 
@@ -257,14 +292,8 @@ def _stub_doc_summary(text: str, kind: str) -> dict:
 
 
 def _real_doc_summary(text: str, kind: str) -> dict:
-    """One Claude call → 200-word summary + structured entities."""
-    settings = get_settings()
-    from anthropic import Anthropic  # type: ignore
-
-    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
-    msg = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=900,
+    """One LLM call → 200-word summary + structured entities."""
+    raw = llm.chat_text(
         system=(
             "You summarise procurement engagement documents — meeting minutes (MOM), "
             "value-proposition decks (VPD), transcripts, and emails — for a Beroe CSM "
@@ -281,16 +310,11 @@ def _real_doc_summary(text: str, kind: str) -> dict:
             "  - Be concise. Skip pleasantries and filler.\n"
             "  - If a list has no items, return [] — not omitted.\n"
         ),
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Document kind: {kind}\n\nDOCUMENT TEXT:\n{_truncate_for_prompt(text)}"
-                ),
-            }
-        ],
+        user_content=(
+            f"Document kind: {kind}\n\nDOCUMENT TEXT:\n{_truncate_for_prompt(text)}"
+        ),
+        max_tokens=900,
     )
-    raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     cleaned = _JSON_FENCE_RE.sub("", raw).strip()
     m = _JSON_OBJECT_RE.search(cleaned)
     candidate = m.group(0) if m else cleaned
@@ -317,14 +341,12 @@ def _real_doc_summary(text: str, kind: str) -> dict:
 
 
 def summarise_document(text: str, kind: str) -> dict:
-    """Public entry — stub-or-real based on key, cached by content hash."""
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value()
-    if not _key_looks_real(key):
+    """Public entry — stub-or-LLM based on availability, cached by content hash."""
+    if not _llm_ready():
         return _stub_doc_summary(text, kind)
 
     digest = hashlib.sha256(
-        f"doc|{settings.anthropic_model}|{kind}|{text}".encode("utf-8")
+        f"doc|{llm.backend_label()}|{kind}|{text}".encode("utf-8")
     ).hexdigest()
     now = time.time()
     cached = _doc_cache.get(digest)
@@ -373,14 +395,8 @@ def _stub_aggregate_summary(per_doc_summaries: list[str]) -> str:
 
 
 def _real_aggregate_summary(per_doc_summaries: list[str]) -> str:
-    settings = get_settings()
-    from anthropic import Anthropic  # type: ignore
-
-    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
     joined = "\n\n---\n\n".join(per_doc_summaries[:25])  # cap on inputs
-    msg = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=1100,
+    raw = llm.chat_text(
         system=(
             "You roll up several procurement-discovery document summaries into one "
             "Sales Discovery Summary for a CSM. Output PLAIN TEXT only (no markdown).\n\n"
@@ -394,9 +410,10 @@ def _real_aggregate_summary(per_doc_summaries: list[str]) -> str:
             "specific categories/initiatives, decisions taken, outstanding actions, "
             "and any risks, blockers, or open questions. Skip filler."
         ),
-        messages=[{"role": "user", "content": f"PER-DOC SUMMARIES:\n\n{_truncate_for_prompt(joined)}"}],
+        user_content=f"PER-DOC SUMMARIES:\n\n{_truncate_for_prompt(joined)}",
+        max_tokens=1100,
     )
-    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
+    return raw.strip()
 
 
 # ============================================================
@@ -419,14 +436,8 @@ def _stub_vpd_extract(text: str) -> dict:
 
 
 def _real_vpd_extract(text: str) -> dict:
-    """One Claude call → structured Solutioning candidate values."""
-    settings = get_settings()
-    from anthropic import Anthropic  # type: ignore
-
-    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
-    msg = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=900,
+    """One LLM call → structured Solutioning candidate values."""
+    raw = llm.chat_text(
         system=(
             "You extract structured Solutioning fields from a Beroe Value-Proposition "
             "Deck (VPD).\n\n"
@@ -444,9 +455,9 @@ def _real_vpd_extract(text: str) -> dict:
             "  - estimated_value_musd is a single number in millions of USD (e.g. 2.5).\n"
             "  - Skip filler. No prose outside the JSON."
         ),
-        messages=[{"role": "user", "content": f"VPD TEXT:\n{_truncate_for_prompt(text)}"}],
+        user_content=f"VPD TEXT:\n{_truncate_for_prompt(text)}",
+        max_tokens=900,
     )
-    raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     cleaned = _JSON_FENCE_RE.sub("", raw).strip()
     m = _JSON_OBJECT_RE.search(cleaned)
     candidate = m.group(0) if m else cleaned
@@ -476,14 +487,12 @@ def _real_vpd_extract(text: str) -> dict:
 
 
 def extract_vpd_fields(text: str) -> dict:
-    """Public entry point. Stub-or-real based on key, cached 24h."""
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value()
-    if not _key_looks_real(key):
+    """Public entry point. Stub-or-LLM, cached 24h."""
+    if not _llm_ready():
         return _stub_vpd_extract(text)
 
     digest = hashlib.sha256(
-        f"vpd|{settings.anthropic_model}|{text}".encode("utf-8")
+        f"vpd|{llm.backend_label()}|{text}".encode("utf-8")
     ).hexdigest()
     now = time.time()
     cached = _doc_cache.get(digest)
@@ -596,13 +605,8 @@ def _stub_cs_goals_extract(text: str) -> dict:
 
 
 def _real_cs_goals_extract(text: str) -> dict:
-    """One Claude call → structured candidate goals."""
-    settings = get_settings()
-    from anthropic import Anthropic  # type: ignore
-
-    client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
-    msg = client.messages.create(
-        model=settings.anthropic_model,
+    """One LLM call → structured candidate goals."""
+    raw = llm.chat_text(
         max_tokens=2000,
         system=(
             "You extract candidate customer-success Goals from a Beroe "
@@ -632,9 +636,8 @@ def _real_cs_goals_extract(text: str) -> dict:
             "    single-source / compliance → risk_mitigation; usage / rollout / training → adoption.\n"
             "  - Skip filler. Cap at 8 goals. Skip goals you can't tie to a sentence."
         ),
-        messages=[{"role": "user", "content": f"VPD TEXT:\n{_truncate_for_prompt(text)}"}],
+        user_content=f"VPD TEXT:\n{_truncate_for_prompt(text)}",
     )
-    raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     cleaned = _JSON_FENCE_RE.sub("", raw).strip()
     m = _JSON_OBJECT_RE.search(cleaned)
     candidate = m.group(0) if m else cleaned
@@ -684,14 +687,12 @@ def _real_cs_goals_extract(text: str) -> dict:
 
 
 def extract_cs_goals_from_vpd(text: str) -> dict:
-    """Public entry point. Stub-or-real based on key, cached 24h."""
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value()
-    if not _key_looks_real(key):
+    """Public entry point. Stub-or-LLM, cached 24h."""
+    if not _llm_ready():
         return _stub_cs_goals_extract(text)
 
     digest = hashlib.sha256(
-        f"vpd-goals|{settings.anthropic_model}|{text}".encode("utf-8")
+        f"vpd-goals|{llm.backend_label()}|{text}".encode("utf-8")
     ).hexdigest()
     now = time.time()
     cached = _doc_cache.get(digest)
@@ -718,13 +719,11 @@ def extract_cs_goals_from_vpd(text: str) -> dict:
 
 
 def aggregate_account_summary(per_doc_summaries: list[str]) -> str:
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value()
-    if not _key_looks_real(key):
+    if not _llm_ready():
         return _stub_aggregate_summary(per_doc_summaries)
 
     digest = hashlib.sha256(
-        ("aggr|" + settings.anthropic_model + "|" + "\n".join(per_doc_summaries)).encode("utf-8")
+        ("aggr|" + llm.backend_label() + "|" + "\n".join(per_doc_summaries)).encode("utf-8")
     ).hexdigest()
     now = time.time()
     cached = _aggr_cache.get(digest)

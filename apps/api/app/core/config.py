@@ -32,9 +32,20 @@ class Settings(BaseSettings):
     supabase_jwt_secret: SecretStr = Field(..., description="Verifies incoming user JWTs")
     database_url: str = Field(..., description="Direct Postgres URL for Alembic")
 
-    # ---- Anthropic ----
-    anthropic_api_key: SecretStr = Field(..., description="Claude API key")
+    # ---- Anthropic (direct) ----
+    # Optional — set EITHER this OR ai_gateway_url. If both set, the gateway
+    # wins (preferred path inside the Beroe VPC). If neither set, stubs run.
+    anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-sonnet-4-5"
+
+    # ---- Beroe Bifrost AI Gateway (Abi / Abi Plus) ----
+    # OpenAI-compatible /v1/chat/completions endpoint deployed inside the VPC.
+    # In local dev: aws ssm start-session port-fwd to localhost:8087, then
+    # set AI_GATEWAY_URL=http://localhost:8087/v1. In prod: Karthick sets up
+    # private DNS + IAM role and points AI_GATEWAY_URL at that.
+    ai_gateway_url: str | None = None  # e.g. http://localhost:8087/v1
+    ai_gateway_api_key: SecretStr | None = None  # optional x-bf-ak pin
+    ai_gateway_model: str = "bedrock/eu.anthropic.claude-sonnet-4-7-20251101-v1:0"
 
     # ---- Redis / Celery ----
     redis_url: str = "redis://localhost:6379/0"

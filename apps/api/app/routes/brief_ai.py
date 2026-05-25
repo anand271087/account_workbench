@@ -240,31 +240,20 @@ _JSON_ARRAY_RE = re.compile(r"\[[\s\S]*\]")
 
 
 def _real_suggest(section: Section, ctx: dict) -> list[dict]:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
+    from app.services import llm
+
+    if not llm.is_configured():
         stub = _STUBS[section]
         return stub(ctx.get("name", ""), ctx.get("industry"))
     try:
-        from anthropic import Anthropic  # type: ignore
-
-        client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
         prompt = _PROMPTS[section]
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=1200,
+        raw = llm.chat_text(
             system=(
                 prompt
                 + "\n\nOutput ONLY a JSON array — no prose, no markdown fences."
             ),
-            messages=[
-                {
-                    "role": "user",
-                    "content": json.dumps(ctx, default=str)[:6000],
-                }
-            ],
-        )
-        raw = "".join(
-            b.text for b in msg.content if getattr(b, "type", "") == "text"
+            user_content=json.dumps(ctx, default=str)[:6000],
+            max_tokens=1200,
         )
         cleaned = _JSON_FENCE_RE.sub("", raw).strip()
         m = _JSON_ARRAY_RE.search(cleaned)
@@ -360,10 +349,11 @@ async def ai_suggest_brief_section(
         "target_categories": eng.target_categories if eng else None,
         "procurement_maturity": eng.procurement_maturity if eng else None,
     }
-    settings = get_settings()
+    from app.services import llm
+
     suggestions = _real_suggest(body.section, ctx)
     return BriefAISuggestOut(
         section=body.section,
         suggestions=suggestions,
-        is_stub=not bool(settings.anthropic_api_key),
+        is_stub=not llm.is_configured(),
     )

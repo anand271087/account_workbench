@@ -66,8 +66,9 @@ def _stub_brief(*, name: str, industry: str | None, signals: int, metrics: int) 
 def _real_brief(payload: dict) -> str:
     """One Claude call. Strict text-only output; we trim around the model
     occasionally returning markdown fences."""
-    settings = get_settings()
-    if not settings.anthropic_api_key:
+    from app.services import llm
+
+    if not llm.is_configured():
         return _stub_brief(
             name=payload["account"]["name"],
             industry=payload["account"].get("industry"),
@@ -75,12 +76,7 @@ def _real_brief(payload: dict) -> str:
             metrics=len(payload.get("metrics", [])),
         )
     try:
-        from anthropic import Anthropic  # type: ignore
-
-        client = Anthropic(api_key=settings.anthropic_api_key.get_secret_value())
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=600,
+        raw = llm.chat_text(
             system=(
                 "You're a customer-success director. Produce a 4–6 sentence "
                 "brief for the named account, then 3 bullet points titled "
@@ -88,15 +84,8 @@ def _real_brief(payload: dict) -> str:
                 "invent facts. Output PLAIN TEXT only (no markdown headings, "
                 "no code fences). Keep it tight."
             ),
-            messages=[
-                {
-                    "role": "user",
-                    "content": json.dumps(payload, default=str)[:8000],
-                }
-            ],
-        )
-        raw = "".join(
-            b.text for b in msg.content if getattr(b, "type", "") == "text"
+            user_content=json.dumps(payload, default=str)[:8000],
+            max_tokens=600,
         )
         # Strip any stray markdown fences the model might emit.
         return re.sub(r"```[a-z]*\n?|\n?```", "", raw).strip()
@@ -199,8 +188,9 @@ async def get_ai_brief(
         ],
     }
     text = _real_brief(payload)
-    settings = get_settings()
-    is_stub = not bool(settings.anthropic_api_key)
+    from app.services import llm
+
+    is_stub = not llm.is_configured()
 
     out = AccountBriefOut(
         brief=text or _stub_brief(

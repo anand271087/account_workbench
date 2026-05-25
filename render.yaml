@@ -47,6 +47,15 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      # Path A — Bifrost AI gateway (preferred when reachable inside VPC).
+      - key: AI_GATEWAY_URL
+        sync: false  # e.g. http://bifrost.beroe.internal:8087/v1 (Karthick)
+      - key: AI_GATEWAY_API_KEY
+        sync: false  # x-bf-ak — set to beroe-bedrock-dev-for-csm or prod equivalent
+      - key: AI_GATEWAY_MODEL
+        value: bedrock/eu.anthropic.claude-sonnet-4-7-20251101-v1:0
+      # Path B — direct Anthropic SDK. Now optional; leave blank to force
+      # the gateway path. If gateway is unreachable from Render, set this.
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ANTHROPIC_MODEL
@@ -91,6 +100,15 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      # Path A — Bifrost AI gateway (preferred when reachable inside VPC).
+      - key: AI_GATEWAY_URL
+        sync: false  # e.g. http://bifrost.beroe.internal:8087/v1 (Karthick)
+      - key: AI_GATEWAY_API_KEY
+        sync: false  # x-bf-ak — set to beroe-bedrock-dev-for-csm or prod equivalent
+      - key: AI_GATEWAY_MODEL
+        value: bedrock/eu.anthropic.claude-sonnet-4-7-20251101-v1:0
+      # Path B — direct Anthropic SDK. Now optional; leave blank to force
+      # the gateway path. If gateway is unreachable from Render, set this.
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ANTHROPIC_MODEL
