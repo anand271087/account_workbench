@@ -145,11 +145,16 @@ async def list_documents(
         stmt = stmt.where(Document.kind == kind)
 
     rows = (await db.execute(stmt)).scalars().all()
-    # Editability is per-kind (VPD vs MOM differ); the frontend asks the API
-    # again on a per-row click, but for the list-level "Add" button we report
-    # MOM-level editability since MOM is the most permissive flavour.
+    # Editability is per-kind (VPD vs MOM vs contract differ). When the
+    # caller filters by ?kind=X, report editability for that kind so the
+    # frontend Upload button reflects the right capability. Without a
+    # filter, fall back to MOM-level (the most permissive flavour) so
+    # the generic Documents tab still surfaces an Add button to CSMs.
     is_editable = can_write_documents(
-        user.role, is_assigned=is_assigned, is_team=is_team, kind="mom"
+        user.role,
+        is_assigned=is_assigned,
+        is_team=is_team,
+        kind=kind or "mom",
     )
     return DocumentListResponse(
         items=[DocumentOut.model_validate(d) for d in rows],

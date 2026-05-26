@@ -254,19 +254,26 @@ def can_write_documents(role: str, *, is_assigned: bool, is_team: bool, kind: st
     MOM matrix: F (own/team/all) for CS roles + Solutioning Manager F (all).
     VPD matrix: only CS Director / VP — CSM / Solutioning Manager / Admin write.
                 CSM = V; CS Team Manager = V (team); Inside Sales = V.
-    Contract uploads: same write set as can_sign_account — admin / VP Sales /
-    VP Inside Sales + CO/ISM on own. Surfaced as Client Signed → upload.
+    Contract uploads (26-May Row 59 / 25-May Row 50): Sales signs, then CSM
+    uploads the signed-contract artifact during handoff. Write set is the
+    union of can_sign_account + the CS roles that own the receiving side:
+    admin / VP Sales / VP Inside Sales + CO/ISM on own + CSM on own +
+    CS Team Manager on team. CS Director already covered by is_global_admin.
+    Solutioning Manager stays out — Solutioning has no contract-artifact role.
     """
     if is_global_admin(role):
         return True
     if kind == "contract":
-        # Mirrors can_sign_account exactly (M13).
         if role in {"vp_sales", "vp_inside_sales"}:
             return True
         if role == "commercial_owner":
             return is_assigned
         if role == "inside_sales_manager":
             return is_assigned
+        if role == "csm":
+            return is_assigned
+        if role == "cs_team_manager":
+            return is_team
         return False
     if role == "solutioning_manager":
         return True

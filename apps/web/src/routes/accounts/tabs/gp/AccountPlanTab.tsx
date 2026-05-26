@@ -90,6 +90,11 @@ export default function AccountPlanTab() {
       {/* How is this calculated? */}
       <ScoreBreakdownDetails appetite={appetite} />
 
+      {/* 26-May Row 60 — "Plan inputs" sidebar (mirrors prototype bPlan
+          right-rail card). Shows the 6 core inputs feeding the appetite
+          mode at a glance, beside the current mode + its description. */}
+      <PlanInputs accountId={account.id} accountHealth={account.health_score} appetite={appetite} mode={mode} />
+
       {/* Header + Add play */}
       <div className="flex items-center justify-between">
         <div className="text-[16px] font-bold text-text-primary">
@@ -1132,6 +1137,150 @@ function RecommendedPlays({ plays, mode }: { plays: Play[]; mode: PlayMode }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// Plan Inputs — 26-May Row 60
+// ============================================================
+//
+// Faithful port of the prototype's right-rail "Plan inputs" card. Shows
+// the 6 core inputs feeding the appetite-score machine in one glance
+// (Health, Product, Signals, Active Signals, Activity, Hot Cats) +
+// renders the current mode pill + its description below.
+//
+// Data sources (TanStack Query — caches are shared with neighbour cards
+// so these fetches are usually free piggybacks):
+//   - account.health_score                       (already in layout context)
+//   - /signing-gate.gate_contract_modules.length (for the Product row)
+//   - /appetite-score.breakdown.sig_pts          (already in scope)
+//   - /signals?status=active                     (count for Active Signals)
+//   - /activities (visible)                      (count for Activity)
+//   - /platform-intel.cat_intel.top_cats         (count where heat='hot')
+
+function PlanInputs({
+  accountId,
+  accountHealth,
+  appetite,
+  mode,
+}: {
+  accountId: string;
+  accountHealth: number | null;
+  appetite: Appetite;
+  mode: PlayMode;
+}) {
+  // Soft-signals count (active only).
+  const signalsQ = useQuery<{ items: { status: string }[] }>({
+    queryKey: ["signals", accountId],
+    queryFn: () =>
+      api.get<{ items: { status: string }[] }>(
+        `/api/v1/accounts/${accountId}/signals`,
+      ),
+    staleTime: 30_000,
+  });
+  // Activity count (visible only).
+  const activitiesQ = useQuery<{ items: { hidden: boolean }[] }>({
+    queryKey: ["activities", accountId],
+    queryFn: () =>
+      api.get<{ items: { hidden: boolean }[] }>(
+        `/api/v1/accounts/${accountId}/activities`,
+      ),
+    staleTime: 30_000,
+  });
+  // Cat-intel (hot categories) — pulls from platform_intel jsonb.
+  const intelQ = useQuery<{
+    cat_intel?: { top_cats?: { heat?: string }[] };
+  }>({
+    queryKey: ["platform-intel", accountId],
+    queryFn: () =>
+      api.get<{ cat_intel?: { top_cats?: { heat?: string }[] } }>(
+        `/api/v1/accounts/${accountId}/platform-intel`,
+      ),
+    staleTime: 60_000,
+  });
+  // Purchased-modules count (for Product saturation) — same endpoint
+  // ProductSaturation uses; TanStack Query dedupes the request.
+  const gateQ = useQuery<{ gate_contract_modules?: string[] | null }>({
+    queryKey: ["signing-gate", accountId],
+    queryFn: () =>
+      api.get<{ gate_contract_modules?: string[] | null }>(
+        `/api/v1/accounts/${accountId}/signing-gate`,
+      ),
+    staleTime: 60_000,
+  });
+
+  const activeSignals = (signalsQ.data?.items ?? []).filter(
+    (s) => s.status !== "resolved",
+  ).length;
+  const activityCount = (activitiesQ.data?.items ?? []).filter(
+    (a) => !a.hidden,
+  ).length;
+  const hotCats = (intelQ.data?.cat_intel?.top_cats ?? []).filter(
+    (c) => c.heat === "hot",
+  ).length;
+  const productOwned = (gateQ.data?.gate_contract_modules ?? []).length;
+  // 8 is the BEROE_MODULES catalog size — mirrors ProductSaturation.
+  const productScore = Math.round((productOwned / 8) * 100);
+  // sig_pts is 0..25 in the appetite breakdown; normalise to /100 for the
+  // sidebar so all 6 rows are on the same scale.
+  const signalsScore = Math.round((appetite.breakdown.sig_pts / 25) * 100);
+  const conf = MODE_CONF[mode];
+
+  const rows: { label: string; value: string; col: string }[] = [
+    { label: "Health", value: `${accountHealth ?? 0}/100`, col: "#4A00F8" },
+    { label: "Product", value: `${productScore}/100`, col: "#40CC8F" },
+    { label: "Signals", value: `${signalsScore}/100`, col: "#C344C7" },
+    {
+      label: "Active Signals",
+      value: `${activeSignals} logged`,
+      col: "#e63950",
+    },
+    { label: "Activity", value: `${activityCount} entries`, col: "#EF9637" },
+    { label: "Hot Cats", value: `${hotCats}`, col: "#FD576B" },
+  ];
+
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-3.5">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="text-[13px] font-bold">Plan inputs</div>
+        <span
+          className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+          style={{
+            background: conf.bg,
+            color: conf.col,
+            border: `1px solid ${conf.col}40`,
+          }}
+        >
+          {conf.icon} {conf.label} mode
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4">
+        {rows.map((r) => (
+          <div
+            key={r.label}
+            className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0"
+          >
+            <span className="text-[11px] text-text-muted">{r.label}</span>
+            <span
+              className="text-[12px] font-bold"
+              style={{ color: r.col }}
+            >
+              {r.value}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div
+        className="mt-3 rounded-md px-3 py-2 text-[11px] leading-snug"
+        style={{
+          background: conf.bg,
+          color: conf.col + "dd",
+          border: `1px solid ${conf.col}30`,
+        }}
+      >
+        {conf.desc}
+      </div>
     </div>
   );
 }

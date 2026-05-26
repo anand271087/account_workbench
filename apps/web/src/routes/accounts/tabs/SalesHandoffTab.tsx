@@ -701,14 +701,17 @@ function SigningGateCard({
         </>
       )}
 
-      {/* Contract document — 25-May Row 50: real file upload + last-3
-          download dropdown. Files flow through the Documents API
-          (kind='contract'). The gate_contract_doc scalar stays in sync as
-          the latest-uploaded-filename pointer. */}
+      {/* Contract document — 25-May Row 50 + 26-May Row 59: real file
+          upload + last-3 download dropdown. Files flow through the
+          Documents API (kind='contract'). The gate_contract_doc scalar
+          stays in sync as the latest-uploaded-filename pointer.
+          canUpload now derives from the documents endpoint's is_editable
+          (server-side `can_write_documents(role, kind='contract')`)
+          rather than the signing capability — CSMs receiving the
+          handoff need to upload too, not just signers. */}
       {isSigned && (
         <ContractDocSection
           accountId={gate.account_id}
-          canUpload={gate.can_sign}
           onLatest={(filename) => onContractDoc(filename)}
         />
       )}
@@ -1038,22 +1041,25 @@ function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
 
 function ContractDocSection({
   accountId,
-  canUpload,
   onLatest,
 }: {
   accountId: string;
-  canUpload: boolean;
   onLatest: (filename: string | null) => void;
 }) {
   const qc = useQueryClient();
   const queryKey = ["documents", accountId, "contract"];
-  const { data, isLoading } = useQuery<{ items: ContractDoc[]; total: number }>({
+  const { data, isLoading } = useQuery<{
+    items: ContractDoc[];
+    total: number;
+    is_editable: boolean;
+  }>({
     queryKey,
     queryFn: () =>
-      api.get<{ items: ContractDoc[]; total: number }>(
+      api.get<{ items: ContractDoc[]; total: number; is_editable: boolean }>(
         `/api/v1/accounts/${accountId}/documents?kind=contract`,
       ),
   });
+  const canUpload = !!data?.is_editable;
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
