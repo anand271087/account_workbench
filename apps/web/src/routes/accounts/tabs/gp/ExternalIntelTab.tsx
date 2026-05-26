@@ -222,6 +222,7 @@ function IntelCard({
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [emailToast, setEmailToast] = useState<string | null>(null);
   const col = CATEGORY_COLOR[item.category];
 
   const hide = useMutation({
@@ -278,7 +279,7 @@ function IntelCard({
     URL.revokeObjectURL(url);
   };
 
-  const handleEmail = () => {
+  const handleEmail = async () => {
     const subject = `[Intel] ${item.headline}`;
     const body = [
       `Category: ${CATEGORY_LABELS[item.category]}`,
@@ -295,9 +296,38 @@ function IntelCard({
     ]
       .filter(Boolean)
       .join("\n");
-    window.location.href = `mailto:?subject=${encodeURIComponent(
-      subject,
-    )}&body=${encodeURIComponent(body)}`;
+
+    // Copy a paste-ready version to the clipboard so it works regardless of
+    // whether the OS has a default mailto: handler. Then try to launch the
+    // user's mail client as a bonus — but never depend on it.
+    const clipText = `Subject: ${subject}\n\n${body}`;
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(clipText);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+    // Best-effort mailto launch (silent no-op if no handler is configured).
+    try {
+      const a = document.createElement("a");
+      a.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      a.rel = "noopener";
+      a.target = "_self";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {
+      // ignore — clipboard is the reliable path
+    }
+    setEmailToast(
+      copied
+        ? "Copied to clipboard — paste into Gmail / Outlook / Slack."
+        : "If your mail client didn't open, copy the page text manually.",
+    );
+    setTimeout(() => setEmailToast(null), 4000);
   };
 
   return (
@@ -328,7 +358,24 @@ function IntelCard({
               {item.news_date
                 ? new Date(item.news_date).toLocaleDateString()
                 : "—"}
-              {item.source && <> · {item.source}</>}
+              {item.source && (
+                <>
+                  {" · "}
+                  {item.source_url ? (
+                    <a
+                      href={item.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-700 hover:underline font-semibold"
+                      title={`Open original article on ${item.source}`}
+                    >
+                      📰 {item.source}
+                    </a>
+                  ) : (
+                    <span className="font-semibold">{item.source}</span>
+                  )}
+                </>
+              )}
             </span>
             {item.is_new && (
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-600 text-white">
@@ -341,12 +388,24 @@ function IntelCard({
               </span>
             )}
           </div>
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="text-[13px] font-bold text-text-primary text-left hover:text-emerald-700"
-          >
-            {item.headline}
-          </button>
+          {item.source_url ? (
+            <a
+              href={item.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[13px] font-bold text-text-primary text-left hover:text-emerald-700 hover:underline block"
+              title="Open the original article in a new tab"
+            >
+              {item.headline} ↗
+            </a>
+          ) : (
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="text-[13px] font-bold text-text-primary text-left hover:text-emerald-700"
+            >
+              {item.headline}
+            </button>
+          )}
           {item.summary && (
             <div className="text-[12px] text-text-secondary mt-1 leading-snug">
               {item.summary}
@@ -400,10 +459,15 @@ function IntelCard({
             <button
               onClick={handleEmail}
               className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
-              title="Open your email client pre-filled with this intel item"
+              title="Copy as email to clipboard and try to launch your mail client"
             >
               ✉ Email to team
             </button>
+            {emailToast && (
+              <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                ✓ {emailToast}
+              </span>
+            )}
             {editable && (
               <button
                 onClick={() => {

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 DocKind = ENUM(
-    "mom", "vpd", "recording", "transcript", "email", "other",
+    "mom", "vpd", "recording", "transcript", "email", "other", "contract",
     name="doc_kind", create_type=False,
 )
 AiStatus = ENUM("pending", "processing", "complete", "failed", name="ai_status", create_type=False)

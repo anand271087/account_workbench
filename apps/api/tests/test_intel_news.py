@@ -52,8 +52,46 @@ def test_stub_generate_is_deterministic_and_diverse() -> None:
 
 
 def test_refresh_creates_then_dedups_on_second_call(
-    client: TestClient, seeded_users: dict
+    client: TestClient, seeded_users: dict, monkeypatch
 ) -> None:
+    # The stub-fallback path was removed when GDELT shipped (real-only).
+    # Patch the GDELT fetcher + classifier with deterministic fakes so the
+    # route still produces predictable items for this RBAC + dedup test.
+    from app.services import intel_news
+    from app.services import llm as _llm_mod
+    from app.services.claude import _doc_cache
+
+    _doc_cache.clear()
+    monkeypatch.setattr(_llm_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(_llm_mod, "backend_label", lambda: "test")
+    monkeypatch.setattr(intel_news, "_GDELT_MIN_INTERVAL_S", 0.0)
+    fake_articles = [
+        {
+            "title": "Siemens wins major grid contract in EU",
+            "url": "https://example.test/siemens-grid",
+            "domain": "example.test",
+            "seendate": "2026-05-20",
+            "country": "Germany",
+        },
+    ]
+    monkeypatch.setattr(intel_news, "_fetch_gdelt_articles", lambda **kw: fake_articles)
+    monkeypatch.setattr(
+        intel_news,
+        "_classify_gdelt_with_llm",
+        lambda **kw: [
+            {
+                "category": "expansion_capex",
+                "headline": fake_articles[0]["title"],
+                "summary": "Grid contract win — sourcing should anticipate steel/copper draw.",
+                "source": "example.test",
+                "source_url": fake_articles[0]["url"],
+                "news_date": "2026-05-20",
+                "signal_relevance": "high",
+                "ai_generated": True,
+            }
+        ],
+    )
+
     siemens = _find_id(client, seeded_users["admin"], "siemens")
     admin = seeded_users["admin"]
     _wipe(client, admin, siemens)
@@ -75,7 +113,7 @@ def test_refresh_creates_then_dedups_on_second_call(
     second = r.json()
     assert second["created"] == 0
 
-    # List confirms they're there and sorted by news_date desc.
+    # List confirms they're there.
     r = client.get(
         f"/api/v1/accounts/{siemens}/intel-news",
         headers=_auth(mint_jwt(admin)),
@@ -215,8 +253,48 @@ def test_solutioning_manager_cannot_refresh(
 
 
 def test_csm_on_own_account_can_refresh_and_push(
-    client: TestClient, seeded_users: dict
+    client: TestClient, seeded_users: dict, monkeypatch
 ) -> None:
+    # Same fake-GDELT patch as the dedup test — exercises the RBAC + push
+    # flow without needing real GDELT (which is rate-limited + non-deterministic).
+    from app.services import intel_news
+    from app.services import llm as _llm_mod
+    from app.services.claude import _doc_cache
+
+    _doc_cache.clear()
+    monkeypatch.setattr(_llm_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(_llm_mod, "backend_label", lambda: "test")
+    monkeypatch.setattr(intel_news, "_GDELT_MIN_INTERVAL_S", 0.0)
+    monkeypatch.setattr(
+        intel_news,
+        "_fetch_gdelt_articles",
+        lambda **kw: [
+            {
+                "title": "Mondelez signs cocoa-sustainability deal",
+                "url": "https://example.test/mdlz-cocoa",
+                "domain": "example.test",
+                "seendate": "2026-05-20",
+                "country": "United States",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        intel_news,
+        "_classify_gdelt_with_llm",
+        lambda **kw: [
+            {
+                "category": "sustainability_esg",
+                "headline": "Mondelez signs cocoa-sustainability deal",
+                "summary": "ESG-aligned cocoa sourcing — locks supplier criteria for next-cycle RFPs.",
+                "source": "example.test",
+                "source_url": "https://example.test/mdlz-cocoa",
+                "news_date": "2026-05-20",
+                "signal_relevance": "medium",
+                "ai_generated": True,
+            }
+        ],
+    )
+
     mondelez = _find_id(client, seeded_users["admin"], "mondelez")
     csm = seeded_users["csm"]
     admin = seeded_users["admin"]
@@ -238,3 +316,145 @@ def test_csm_on_own_account_can_refresh_and_push(
         json={},
     )
     assert r.status_code == 200
+
+
+# ============================================================
+# GDELT path — real headlines fed to Claude for classification
+# ============================================================
+
+
+def test_gdelt_path_succeeds_and_passes_to_classifier(monkeypatch) -> None:
+    """GDELT returns articles → classifier enriches → generate_intel_news
+    returns real headlines with AI-spun procurement summaries."""
+    from datetime import date
+
+    from app.services import intel_news
+
+    monkeypatch.setattr(intel_news, "_gdelt_last_hit_at", 0.0)
+    monkeypatch.setattr(intel_news, "_GDELT_MIN_INTERVAL_S", 0.0)
+
+    fake_articles = [
+        {
+            "title": "Mondelez beats Q4 estimates with 12% organic growth",
+            "url": "https://reuters.example/mdlz-q4",
+            "domain": "reuters.example",
+            "seendate": "2026-05-20",
+            "country": "United States",
+        },
+        {
+            "title": "Cocoa prices surge on West Africa supply concerns",
+            "url": "https://ft.example/cocoa-spike",
+            "domain": "ft.example",
+            "seendate": "2026-05-18",
+            "country": "United Kingdom",
+        },
+    ]
+    monkeypatch.setattr(
+        intel_news, "_fetch_gdelt_articles", lambda **kw: fake_articles
+    )
+
+    fake_classified = [
+        {
+            "category": "financial_performance",
+            "headline": fake_articles[0]["title"],
+            "summary": "Strong Q4 with organic growth — Mondelez has pricing power; sourcing strategy should optimise for input-cost stability over discount-chasing.",
+            "source": "reuters.example",
+            "source_url": fake_articles[0]["url"],
+            "news_date": "2026-05-20",
+            "signal_relevance": "high",
+            "ai_generated": True,
+        },
+        {
+            "category": "supply_chain",
+            "headline": fake_articles[1]["title"],
+            "summary": "Cocoa supply pressure in West Africa — Mondelez procurement should lock multi-source contracts and accelerate alt-supplier scouting.",
+            "source": "ft.example",
+            "source_url": fake_articles[1]["url"],
+            "news_date": "2026-05-18",
+            "signal_relevance": "high",
+            "ai_generated": True,
+        },
+    ]
+    monkeypatch.setattr(
+        intel_news, "_classify_gdelt_with_llm", lambda **kw: fake_classified
+    )
+
+    from app.services import llm as _llm_mod
+
+    monkeypatch.setattr(_llm_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(_llm_mod, "backend_label", lambda: "test")
+    from app.services.claude import _doc_cache
+
+    _doc_cache.clear()
+
+    items, is_stub = intel_news.generate_intel_news(
+        account_name="Mondelez International",
+        industry="Consumer Goods",
+        today=date(2026, 5, 26),
+    )
+    assert is_stub is False
+    assert len(items) == 2
+    assert items[0]["headline"] == fake_articles[0]["title"]
+    assert items[0]["source_url"] == fake_articles[0]["url"]
+    assert items[1]["category"] == "supply_chain"
+
+
+def test_gdelt_empty_returns_empty_no_stub(monkeypatch) -> None:
+    """GDELT returns 0 articles → generate_intel_news returns an empty list.
+    No stub fallback — the UI shows an empty state instead of inventing news."""
+    from datetime import date
+
+    from app.services import intel_news
+
+    monkeypatch.setattr(intel_news, "_gdelt_last_hit_at", 0.0)
+    monkeypatch.setattr(intel_news, "_GDELT_MIN_INTERVAL_S", 0.0)
+    monkeypatch.setattr(intel_news, "_fetch_gdelt_articles", lambda **kw: [])
+
+    from app.services import llm as _llm_mod
+
+    monkeypatch.setattr(_llm_mod, "is_configured", lambda: True)
+    monkeypatch.setattr(_llm_mod, "backend_label", lambda: "test")
+    from app.services.claude import _doc_cache
+
+    _doc_cache.clear()
+
+    items, is_stub = intel_news.generate_intel_news(
+        account_name="Mondelez International",
+        industry="Consumer Goods",
+        today=date(2026, 5, 26),
+    )
+    assert items == []
+    assert is_stub is False
+
+
+def test_gdelt_parses_seendate_format() -> None:
+    """GDELT seendate timestamps look like '20260520T142503Z' → 'YYYY-MM-DD'."""
+    from app.services.intel_news import _parse_gdelt_seendate
+
+    assert _parse_gdelt_seendate("20260520T142503Z") == "2026-05-20"
+    assert _parse_gdelt_seendate("20260101T000000Z") == "2026-01-01"
+    assert _parse_gdelt_seendate("") is None
+    assert _parse_gdelt_seendate("not-a-date") is None
+    assert _parse_gdelt_seendate("2025") is None  # too short
+
+
+def test_gdelt_fetcher_blocks_non_json_response(monkeypatch) -> None:
+    """If GDELT returns an HTML throttle page, fetcher returns [] rather
+    than crashing on JSON parse."""
+    from app.services import intel_news
+
+    monkeypatch.setattr(intel_news, "_gdelt_last_hit_at", 0.0)
+    monkeypatch.setattr(intel_news, "_GDELT_MIN_INTERVAL_S", 0.0)
+
+    class FakeResp:
+        status_code = 200
+        headers = {"content-type": "text/html"}
+        text = "Please limit requests to one every 5 seconds"
+
+        def json(self) -> dict:
+            raise ValueError("invalid json")
+
+    monkeypatch.setattr(intel_news.httpx, "get", lambda *a, **kw: FakeResp())
+
+    out = intel_news._fetch_gdelt_articles(account_name="Mondelez")
+    assert out == []

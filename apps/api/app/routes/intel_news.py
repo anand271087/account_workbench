@@ -115,8 +115,13 @@ async def list_intel_news(
             select(IntelNewsItem)
             .where(IntelNewsItem.account_id == account_id)
             .where(IntelNewsItem.hidden.is_(False))
-            .order_by(IntelNewsItem.news_date.desc().nulls_last(),
-                      IntelNewsItem.created_at.desc())
+            # Most-recently-inserted first so a freshly-refreshed batch lands
+            # at the top regardless of the article's publication date (real
+            # GDELT articles often date back a few days; that shouldn't
+            # bury them under older stub-seeded items with news_date=today).
+            # news_date breaks ties within the same insertion batch.
+            .order_by(IntelNewsItem.created_at.desc(),
+                      IntelNewsItem.news_date.desc().nulls_last())
         )
     ).scalars().all()
     items = [IntelNewsOut.model_validate(r) for r in rows]
@@ -186,8 +191,11 @@ async def refresh_intel_news(
             status.HTTP_403_FORBIDDEN, "Cannot refresh intel news on this account"
         )
 
+    # The Refresh button is an explicit user action — always force a fresh
+    # GDELT pull. The 24h cache still serves the auto/seed callers via the
+    # default force_refresh=False path.
     items, is_stub = generate_intel_news(
-        account_name=acc.name, industry=acc.industry
+        account_name=acc.name, industry=acc.industry, force_refresh=True
     )
 
     # Dedup on (account_id, headline): skip headlines we already have.
