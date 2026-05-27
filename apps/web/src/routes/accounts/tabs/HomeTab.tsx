@@ -177,19 +177,42 @@ export default function HomeTab() {
 
   return (
     <div className="space-y-3">
-      {/* Header strip */}
+      {/* Header strip — 27-May Row 64 (CSM/Sales name fallback) + Row 65
+          (Growth & Tier next to name). csm_full_name + co_full_name are
+          already returned by the AccountDetail endpoint (joined on user). */}
       <Card>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
               Home — single pane of glass
             </div>
-            <h1 className="text-[18px] font-bold text-text-primary">
-              {account.name}
-            </h1>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <h1 className="text-[18px] font-bold text-text-primary">
+                {account.name}
+              </h1>
+              {/* Growth + Tier pills next to the account name */}
+              {account.account_type && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {account.account_type}
+                </span>
+              )}
+              {account.tier && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                  Tier {account.tier}
+                </span>
+              )}
+            </div>
             <div className="text-[12px] text-text-muted">
-              {account.industry ?? "—"} · {account.country ?? "—"} ·{" "}
-              {account.tier ?? "—"} · {account.account_type ?? "—"}
+              {account.industry ?? "—"} · {account.country ?? "—"}
+              {/* CSM name when present, otherwise Sales (Commercial Owner)
+                  name fallback. Row 64. */}
+              {account.csm_full_name ? (
+                <> · CSM: <b className="text-text-secondary">{account.csm_full_name}</b></>
+              ) : account.co_full_name ? (
+                <> · Sales: <b className="text-text-secondary">{account.co_full_name}</b></>
+              ) : (
+                <> · <span className="italic">Unassigned</span></>
+              )}
             </div>
           </div>
           {appetite && (
@@ -282,24 +305,59 @@ export default function HomeTab() {
         );
         const hs = account.health_score ?? 0;
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-2">
-            {/* ACV — Current with Target / Gap / Pipeline subline (H35). */}
-            <RichTile
-              label="Current ACV"
-              value={formatACV(account.current_acv)}
-              color="#0d1b2e"
-              sublines={[
-                {
-                  k: "Target",
-                  v: account.target_acv ? formatACV(account.target_acv) : "—",
-                },
-                { k: "Gap", v: gap > 0 ? formatACV(String(gap)) : "—" },
-                {
-                  k: "Pipeline",
-                  v: pipelineTotal > 0 ? fmtK(pipelineTotal) : "—",
-                },
-              ]}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
+            {/* 27-May Row 68 — Combined ACV + Health tile (blue).
+                Replaces two separate tiles; ACV value as main number,
+                Health score + product score on the sublines. */}
+            <div className="bg-blue-50 border-2 border-blue-300 rounded-card p-3 col-span-1 lg:col-span-1">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-blue-900/70 mb-1">
+                ACV & Health
+              </div>
+              <div className="flex items-baseline gap-3 mb-2">
+                <div>
+                  <div className="text-[20px] font-extrabold text-blue-900 leading-none">
+                    {formatACV(account.current_acv)}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-wider text-blue-900/70 mt-0.5">
+                    Current ACV
+                  </div>
+                </div>
+                <div className="ml-auto text-right">
+                  <div
+                    className="text-[20px] font-extrabold leading-none"
+                    style={{
+                      color:
+                        hs >= 70 ? "#40CC8F" : hs >= 40 ? "#EF9637" : "#e63950",
+                    }}
+                  >
+                    {account.health_score ?? "—"}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-wider text-blue-900/70 mt-0.5">
+                    Health
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-[10px]">
+                <div className="bg-white/60 rounded px-1.5 py-1">
+                  <div className="text-blue-900/60 text-[8.5px]">Target</div>
+                  <div className="font-bold text-blue-900">
+                    {account.target_acv ? formatACV(account.target_acv) : "—"}
+                  </div>
+                </div>
+                <div className="bg-white/60 rounded px-1.5 py-1">
+                  <div className="text-blue-900/60 text-[8.5px]">Gap</div>
+                  <div className="font-bold text-blue-900">
+                    {gap > 0 ? formatACV(String(gap)) : "—"}
+                  </div>
+                </div>
+                <div className="bg-white/60 rounded px-1.5 py-1">
+                  <div className="text-blue-900/60 text-[8.5px]">Product</div>
+                  <div className="font-bold text-blue-900">
+                    {modules.length === 0 ? "—" : `${productScore}%`}
+                  </div>
+                </div>
+              </div>
+            </div>
             {/* Renewal — countdown (unchanged behaviour, RichTile shape). */}
             <RichTile
               label="Renewal"
@@ -322,50 +380,45 @@ export default function HomeTab() {
                 },
               ]}
             />
-            {/* Health — score + Product score subline (H36). */}
-            <RichTile
-              label="Health"
-              value={String(account.health_score ?? "—")}
-              color={
-                hs >= 70 ? "#40CC8F" : hs >= 40 ? "#EF9637" : "#e63950"
-              }
-              sublines={[
-                {
-                  k: "Product",
-                  v: modules.length === 0 ? "—" : `${productScore}%`,
-                },
-                {
-                  k: "Signals",
-                  v: active.length === 0 ? "—" : `${active.length} open`,
-                },
-              ]}
-            />
-            {/* Risk % — share of active risk/critical signals (H34). */}
-            <RichTile
-              label="Risk %"
-              value={`${riskPct}%`}
-              color={
-                riskPct >= 50 ? "#e63950" : riskPct >= 25 ? "#EF9637" : "#40CC8F"
-              }
-              sublines={[
-                {
-                  k: "Critical",
-                  v: String(
-                    active.filter((s) => s.type === "critical").length,
-                  ),
-                },
-                {
-                  k: "Overdue CP",
-                  v: overdueCp === 0 ? "0" : `${overdueCp} ⚠`,
-                },
-                {
-                  k: "Declining",
-                  v: String(
-                    mets.filter((m) => m.status === "red").length,
-                  ),
-                },
-              ]}
-            />
+            {/* 27-May Row 66 — Risk % tile only renders when there are
+                active signals to compute a meaningful percentage AND
+                at least one risk/critical signal exists. Colour still
+                varies by riskPct (>=50 red, >=25 amber, else green). */}
+            {active.length > 0 && riskCount > 0 ? (
+              <RichTile
+                label="Risk %"
+                value={`${riskPct}%`}
+                color={
+                  riskPct >= 50 ? "#e63950" : riskPct >= 25 ? "#EF9637" : "#40CC8F"
+                }
+                sublines={[
+                  {
+                    k: "Critical",
+                    v: String(
+                      active.filter((s) => s.type === "critical").length,
+                    ),
+                  },
+                  {
+                    k: "Overdue CP",
+                    v: overdueCp === 0 ? "0" : `${overdueCp} ⚠`,
+                  },
+                  {
+                    k: "Declining",
+                    v: String(mets.filter((m) => m.status === "red").length),
+                  },
+                ]}
+              />
+            ) : (
+              <RichTile
+                label="Signals"
+                value={active.length === 0 ? "—" : `${active.length} open`}
+                color="#40CC8F"
+                sublines={[
+                  { k: "Critical", v: "0" },
+                  { k: "Risk", v: "0" },
+                ]}
+              />
+            )}
           </div>
         );
       })()}
@@ -942,7 +995,7 @@ function RichTile({
 function AccountPulseCard({
   aid,
   modules,
-  tier,
+  tier: _tier,
   subscribers,
   metrics,
 }: {
@@ -971,7 +1024,10 @@ function AccountPulseCard({
           → Value Tracking
         </Link>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+      {/* 27-May Row 69 — Tier moved to the header (Row 65); Pulse keeps
+          Adoption / Modules / Depth-per-User. Metric snapshot now shows
+          all Value Tracking metrics inline (was a count-only stat). */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <PulseStat
           label="Adoption"
           value={modules.length === 0 ? "—" : `${adoption}%`}
@@ -985,11 +1041,6 @@ function AccountPulseCard({
               : `${modules.length}/${TOTAL_BEROE_MODULES}`
           }
           tone="slate"
-        />
-        <PulseStat
-          label="Tier"
-          value={tier ?? "—"}
-          tone={tier ? "blue" : "slate"}
         />
         <PulseStat
           label="Depth / User"
@@ -1008,6 +1059,41 @@ function AccountPulseCard({
           }
         />
       </div>
+      {/* All metrics inline — surfaces what's tracked at a glance. */}
+      {metrics.length > 0 && (
+        <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+          {metrics.slice(0, 8).map((m) => {
+            const dot =
+              m.status === "green"
+                ? "bg-emerald-500"
+                : m.status === "amber"
+                  ? "bg-amber-500"
+                  : m.status === "red"
+                    ? "bg-red-500"
+                    : "bg-slate-300";
+            return (
+              <li
+                key={m.id}
+                className="flex items-center gap-1.5 py-0.5 border-b border-beroe-card-border/40 last:border-b-0"
+              >
+                <span className={cn("inline-block w-1.5 h-1.5 rounded-full flex-shrink-0", dot)} />
+                <span className="flex-1 truncate text-text-secondary">
+                  {m.name}
+                </span>
+                <span className="text-text-muted">
+                  {m.current_value ?? "—"}
+                  {m.target_value ? ` / ${m.target_value}` : ""}
+                </span>
+              </li>
+            );
+          })}
+          {metrics.length > 8 && (
+            <li className="text-[10px] italic text-text-muted col-span-full">
+              + {metrics.length - 8} more in Value Tracking
+            </li>
+          )}
+        </ul>
+      )}
     </Card>
   );
 }
