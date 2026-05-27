@@ -23,10 +23,9 @@ import DocumentsReportsTab from "@/routes/accounts/tabs/ir/DocumentsReportsTab";
 import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
 import HomeTab from "@/routes/accounts/tabs/HomeTab";
-import PreSalesTab from "@/routes/accounts/tabs/PreSalesTab";
+import PreSalesSolutioningTab from "@/routes/accounts/tabs/PreSalesSolutioningTab";
 import ContactsTab from "@/routes/accounts/tabs/ContactsTab";
 import SalesHandoffTab from "@/routes/accounts/tabs/SalesHandoffTab";
-import SolutioningTab from "@/routes/accounts/tabs/SolutioningTab";
 import UsersPage from "@/routes/admin/UsersPage";
 import CategoriesPage from "@/routes/admin/CategoriesPage";
 import LeadershipPage from "@/routes/LeadershipPage";
@@ -152,23 +151,28 @@ export default function App() {
         <Route path="overview" element={<HomeTab />} />
         <Route path="home" element={<Navigate to="../overview" replace />} />
 
-        {/* M17 — Account Kit group: Pre-Sales / Brief / Solutioning / Sales Handoff / CS Onboarding */}
+        {/* M17 — Account Kit group. 27-May Row 73 — Pre-Sales and
+            Solutioning merged into one tab; new order: Pre-Sales &
+            Solutioning → Sales Hand-off → CS Onboarding → Brief.
+            Standalone /pre-sales and /solutioning routes kept as
+            redirects for deep-link back-compat. */}
         <Route path="account-kit" element={<AccountKitLayout />}>
-          <Route index element={<Navigate to="pre-sales" replace />} />
-          <Route path="pre-sales"     element={<PreSalesTab />} />
-          <Route path="brief"         element={<BriefTab />} />
-          <Route path="solutioning"   element={<SolutioningTab />} />
+          <Route index element={<Navigate to="pre-sales-solutioning" replace />} />
+          <Route path="pre-sales-solutioning" element={<PreSalesSolutioningTab />} />
+          <Route path="pre-sales"     element={<Navigate to="../pre-sales-solutioning" replace />} />
+          <Route path="solutioning"   element={<Navigate to="../pre-sales-solutioning" replace />} />
           <Route path="sales-handoff" element={<SalesHandoffTab />} />
           <Route path="cs-onboarding" element={<CSOnboardingTab />} />
+          <Route path="brief"         element={<BriefTab />} />
         </Route>
 
         {/* Back-compat: old deep links → new Account Kit URLs */}
-        <Route path="pre-sales"     element={<Navigate to="../account-kit/pre-sales"     replace />} />
+        <Route path="pre-sales"     element={<Navigate to="../account-kit/pre-sales-solutioning" replace />} />
         <Route path="brief"         element={<Navigate to="../account-kit/brief"         replace />} />
-        <Route path="solutioning"   element={<Navigate to="../account-kit/solutioning"   replace />} />
+        <Route path="solutioning"   element={<Navigate to="../account-kit/pre-sales-solutioning"   replace />} />
         <Route path="sales-handoff" element={<Navigate to="../account-kit/sales-handoff" replace />} />
         <Route path="cs-onboarding" element={<Navigate to="../account-kit/cs-onboarding" replace />} />
-        <Route path="documents"     element={<Navigate to="../account-kit/pre-sales"     replace />} />
+        <Route path="documents"     element={<Navigate to="../account-kit/pre-sales-solutioning" replace />} />
 
         {/* M18 — Success Management group: VDD / Contract+Goals / Value Tracking / Checkpoints / Delivery+Renewal */}
         <Route path="success-management" element={<SuccessManagementLayout />}>
