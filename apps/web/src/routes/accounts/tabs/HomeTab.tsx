@@ -17,7 +17,7 @@
 // Routes the user into the right tab via React Router NavLinks so the
 // priority CTAs land in context.
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
@@ -215,6 +215,48 @@ export default function HomeTab() {
         </div>
       </Card>
 
+      {/* 27-May Row 66 — Red Flag notification.
+          Renders ONLY when there are unresolved red flags on the
+          M23 Delivery & Renewal record. Red highlighted, top-of-page
+          so it's impossible to miss. */}
+      {(() => {
+        const openRedFlags = (dr?.red_flags ?? []).filter(
+          (f) => !f.resolved_at,
+        );
+        if (openRedFlags.length === 0) return null;
+        return (
+          <div className="bg-red-50 border-2 border-red-300 rounded-card p-3.5 flex items-start gap-3">
+            <span className="text-[22px] flex-shrink-0">🚩</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-bold text-red-700 mb-0.5">
+                {openRedFlags.length === 1
+                  ? "1 unresolved red flag"
+                  : `${openRedFlags.length} unresolved red flags`}
+              </div>
+              <ul className="text-[12px] text-red-700/90 space-y-0.5 list-disc pl-5">
+                {openRedFlags.slice(0, 3).map((f) => (
+                  <li key={f.id}>
+                    <b>{f.type.replace(/_/g, " ")}</b>
+                    {f.note ? ` — ${f.note}` : ""}
+                  </li>
+                ))}
+                {openRedFlags.length > 3 && (
+                  <li className="italic">
+                    + {openRedFlags.length - 3} more
+                  </li>
+                )}
+              </ul>
+              <Link
+                to={`/accounts/${aid}/success-management/delivery-renewal`}
+                className="inline-block mt-2 text-[11px] text-red-700 font-bold hover:underline"
+              >
+                Resolve in Delivery & Renewal →
+              </Link>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Priority Action Card */}
       {activePriority && <PriorityCard priority={activePriority} aid={aid} />}
 
@@ -398,9 +440,12 @@ export default function HomeTab() {
         />
       </div>
 
-      {/* H38 — Account Pulse card. Replaces the previous tile-only Pulse.
-          Surfaces: Value Tracking link, Adoption %, Modules, Depth/User
-          and Metric snapshot. */}
+      {/* 27-May Row 67 — AI Account Brief promoted above Account Pulse
+          (first content card after KPIs / priority surfaces). */}
+      <AIAccountBriefCard aid={aid} accountName={account.name} />
+
+      {/* H38 — Account Pulse card. Surfaces: Value Tracking link,
+          Adoption %, Modules, Depth/User and Metric snapshot. */}
       <AccountPulseCard
         aid={aid}
         modules={gateQ.data?.gate_contract_modules ?? []}
@@ -409,36 +454,15 @@ export default function HomeTab() {
         metrics={mets}
       />
 
-      {/* H37 — AI Account Brief (server-side Claude call). */}
-      <AIAccountBriefCard aid={aid} accountName={account.name} />
-
-      {/* Two columns: This Week (left) + Top Signals (right) */}
+      {/* Two columns: This Week (left) + Top Signals (right).
+          27-May Row 70 — items now have tick-off checkboxes. State is
+          per-account in localStorage so progress survives tab swaps;
+          dynamic keys (auto-computed from signals/plays/metrics) just
+          stay completed until they fall off the list naturally. */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <CardTitle>🗓 This Week</CardTitle>
-          <ul className="space-y-1.5 text-[12px]">
-            {thisWeek.map((a) => (
-              <li
-                key={a.key}
-                className="flex items-start gap-2 py-1 border-b border-beroe-card-border/60 last:border-b-0"
-              >
-                <span className="flex-shrink-0">{a.icon}</span>
-                <span className="flex-1">{a.text}</span>
-                <span
-                  className={cn(
-                    "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider",
-                    a.priority === "high"
-                      ? "bg-red-50 text-red-700"
-                      : a.priority === "medium"
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-emerald-50 text-emerald-700",
-                  )}
-                >
-                  {a.priority}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ThisWeekList aid={aid} items={thisWeek} />
         </Card>
 
         <Card>
@@ -463,11 +487,13 @@ export default function HomeTab() {
         </Card>
       </div>
 
-      {/* Two columns: Expansion Pipeline (left) + Recent Activity (right) */}
+      {/* Two columns: Pipeline (left) + Recent Activity (right).
+          27-May Row 71 — section renamed from "🚀 Expansion Pipeline"
+          to "🎯 Pipeline" to match stakeholder vocabulary. */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <div className="flex items-center justify-between mb-2.5">
-            <div className="text-[13px] font-bold">🚀 Expansion Pipeline</div>
+            <div className="text-[13px] font-bold">🎯 Pipeline</div>
             <span className="text-[11px] text-text-muted">
               Weighted: <b className="text-text-primary">{fmtK(pipelineTotal)}</b>
             </span>
@@ -493,7 +519,20 @@ export default function HomeTab() {
         </Card>
 
         <Card>
-          <CardTitle>💬 Recent Activity</CardTitle>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="text-[13px] font-bold text-text-primary">
+              💬 Recent Activity
+            </div>
+            {/* 27-May Row 72 — "View All" link → Growth & Pipeline →
+                Account Plan (per stakeholder; activities live under
+                the Signals & Activity sub-tab there). */}
+            <Link
+              to={`/accounts/${aid}/growth-pipeline/signals`}
+              className="text-[11px] text-beroe-blue font-semibold hover:underline"
+            >
+              View All →
+            </Link>
+          </div>
           {recentActs.length === 0 ? (
             <div className="text-[12px] text-text-muted text-center py-4">
               No activity logged yet.
@@ -1060,5 +1099,97 @@ function AIAccountBriefCard({
         </>
       )}
     </Card>
+  );
+}
+
+// ============================================================
+// This Week — 27-May Row 70
+// ============================================================
+//
+// Items come from computeThisWeek (signal / play / metric derived).
+// Checkbox state is stored per-account in localStorage under
+// `awb:home:this-week:<accountId>`. Stable keys come from item.key
+// (e.g. "sig:<id>" / "renewal" / "metric:<id>"); same key flipping
+// to done across reloads survives the localStorage TTL until the
+// item naturally falls off the computed list.
+
+type ThisWeekItem = {
+  key: string;
+  icon: string;
+  text: string;
+  priority: "high" | "medium" | "low";
+};
+
+function ThisWeekList({ aid, items }: { aid: string; items: ThisWeekItem[] }) {
+  const storageKey = `awb:home:this-week:${aid}`;
+  const [done, setDone] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const toggle = (key: string) => {
+    setDone((prev: Set<string>) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore quota errors
+      }
+      return next;
+    });
+  };
+  if (items.length === 0) {
+    return (
+      <div className="text-[12px] text-text-muted text-center py-4">
+        Nothing on the calendar this week.
+      </div>
+    );
+  }
+  return (
+    <ul className="space-y-1.5 text-[12px]">
+      {items.map((a) => {
+        const checked = done.has(a.key);
+        return (
+          <li
+            key={a.key}
+            className="flex items-start gap-2 py-1 border-b border-beroe-card-border/60 last:border-b-0"
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => toggle(a.key)}
+              className="mt-1 flex-shrink-0 cursor-pointer"
+              aria-label={`Mark "${a.text}" complete`}
+            />
+            <span className="flex-shrink-0">{a.icon}</span>
+            <span
+              className={cn(
+                "flex-1",
+                checked && "line-through text-text-muted",
+              )}
+            >
+              {a.text}
+            </span>
+            <span
+              className={cn(
+                "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider",
+                a.priority === "high"
+                  ? "bg-red-50 text-red-700"
+                  : a.priority === "medium"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-emerald-50 text-emerald-700",
+              )}
+            >
+              {a.priority}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
