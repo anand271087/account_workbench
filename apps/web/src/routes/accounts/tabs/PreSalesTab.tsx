@@ -152,15 +152,17 @@ export default function PreSalesTab() {
                 be revisited after re-confirmation.
               </>
             ) : (
+              // 27-May Row 78 — verbiage change to make the locked
+              // state explicit ("section is locked", not just "signed").
               <>
-                <b className="text-emerald-800">Signed</b>
+                <b className="text-emerald-800">This section is locked</b>
+                {" "}— the account has been signed
                 {account.gate_signed_date && (
                   <span className="text-text-secondary">
-                    {" "}
-                    on {new Date(account.gate_signed_date).toLocaleDateString()}
+                    {" "}on {new Date(account.gate_signed_date).toLocaleDateString()}
                   </span>
                 )}
-                . Pre-Sales is now historical context for CS.
+                . Showing historical context only.
               </>
             )}
           </div>
@@ -205,17 +207,13 @@ export default function PreSalesTab() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
-        {/* R14 — Engagement Info now leads the page (was in the right column). */}
+        {/* R14 — Engagement Info. 27-May Row 76 — field order is now
+            Discovery Date → Discovery Lead → Sales Lead, with SDR
+            (existing field, kept for data continuity) moved to the
+            end of the section. Categories + Engagement Objective +
+            Procurement Maturity follow per the stakeholder sequence. */}
         <Section title="Engagement Info">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="SDR / lead source">
-              <BeroeUserPicker
-                value={form.sdr_lead ?? null}
-                onChange={(v) => setForm({ ...form, sdr_lead: v })}
-                disabled={!form.is_editable}
-                placeholder="Pick the SDR who sourced this account"
-              />
-            </Field>
             <Field label="Discovery Date">
               <input
                 type="date"
@@ -247,7 +245,25 @@ export default function PreSalesTab() {
                 placeholder="Pick the sales owner for this account"
               />
             </Field>
+            <Field label="SDR / lead source">
+              <BeroeUserPicker
+                value={form.sdr_lead ?? null}
+                onChange={(v) => setForm({ ...form, sdr_lead: v })}
+                disabled={!form.is_editable}
+                placeholder="Pick the SDR who sourced this account"
+              />
+            </Field>
           </div>
+        </Section>
+
+        {/* 27-May Row 76 — Target categories now sits before the
+            Engagement Objective per the stakeholder's sequence. */}
+        <Section title="Target categories" subtitle="What's in scope for this engagement.">
+          <CategoryPicker
+            selected={form.target_categories}
+            onChange={(cats) => setForm({ ...form, target_categories: cats })}
+            disabled={!form.is_editable}
+          />
         </Section>
 
         {/* Engagement objective + AI quality check */}
@@ -329,15 +345,6 @@ export default function PreSalesTab() {
               )}
             </div>
           )}
-        </Section>
-
-        {/* Categories — multi-select with propose-new */}
-        <Section title="Target categories" subtitle="What's in scope for this engagement.">
-          <CategoryPicker
-            selected={form.target_categories}
-            onChange={(cats) => setForm({ ...form, target_categories: cats })}
-            disabled={!form.is_editable}
-          />
         </Section>
 
         {/* Geographies */}
@@ -470,6 +477,24 @@ export default function PreSalesTab() {
                 ? "Handing off…"
                 : "Hand over to Solutioning →"}
           </button>
+        </div>
+      )}
+
+      {/* 27-May Row 79 — Handed-to-Solutioning date at end of Pre-Sales.
+          Always visible (not gated on form.is_editable) so locked
+          accounts still surface the milestone. Renders only when the
+          handover has actually happened. */}
+      {account.handed_off_to_solutioning && account.handed_off_at && (
+        <div className="lg:col-span-3 bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 flex items-center gap-2.5">
+          <span className="text-[16px]">📤</span>
+          <div className="text-[12px] text-amber-900">
+            <b>Handed off to Solutioning · </b>
+            {new Date(account.handed_off_at).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </div>
         </div>
       )}
 
