@@ -10,6 +10,10 @@ class CategoryOut(BaseModel):
     name: str
     parent_id: UUID | None
     approved: bool
+    # Added in 0050 — Beroe canonical category list. Both nullable so
+    # legacy stub/test seeds without these fields still validate.
+    domain: str | None = None
+    availability: str | None = None
 
     model_config = {"from_attributes": True}
 

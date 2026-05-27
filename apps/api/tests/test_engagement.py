@@ -237,9 +237,17 @@ def test_list_categories_includes_seed(client: TestClient, seeded_users: dict) -
         "/api/v1/lookups/categories", headers=_auth(mint_jwt(seeded_users["admin"]))
     )
     assert r.status_code == 200
-    names = {c["name"] for c in r.json()}
-    # 0003 seed inserted these
-    assert "Direct Materials" in names
+    payload = r.json()
+    names = {c["name"] for c in payload}
+    # 0050 — Beroe canonical category list (2,879 rows across 22 domains).
+    # Pick a few stable canonical names that exist in the source xlsx.
+    assert "Active Pharmaceutical Ingredients" in names
+    assert "3D Printing Services" in names
+    # New domain + availability columns are surfaced on the list response.
+    api = next((c for c in payload if c["name"] == "Active Pharmaceutical Ingredients"), None)
+    assert api is not None
+    assert api["domain"] == "Pharma Directs"
+    assert api["availability"] in ("existing", "pipeline")
 
 
 def test_propose_category_creates_pending(client: TestClient, seeded_users: dict) -> None:

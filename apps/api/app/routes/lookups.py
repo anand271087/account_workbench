@@ -35,6 +35,11 @@ lookup_categories = Table(
     Column("name", String, unique=True, nullable=False),
     Column("parent_id", PG_UUID(as_uuid=True), ForeignKey("lookup_categories.id"), nullable=True),
     Column("approved", Boolean, nullable=False, server_default=sa_text("false")),
+    # Added in 0050 — Beroe canonical category list metadata.
+    # Domain = procurement domain ("Chemicals", "Capex & MRO", …).
+    # Availability = 'existing' (live on live.ai today) or 'pipeline' (planned).
+    Column("domain", String, nullable=True),
+    Column("availability", String, nullable=True),
 )
 
 lookup_geographies = Table(

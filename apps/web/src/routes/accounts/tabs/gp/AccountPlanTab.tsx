@@ -72,7 +72,6 @@ export default function AccountPlanTab() {
 
   const editable = playsData.is_editable;
   const mode = appetite.current_mode;
-  const bd = appetite.breakdown;
   const allPlays = playsData.items;
   const visiblePlays = showAllPlays
     ? allPlays
@@ -113,15 +112,26 @@ export default function AccountPlanTab() {
       {/* ACV growth tile (mode-adaptive) */}
       <AcvTile appetite={appetite} account={account} mode={mode} />
 
-      {/* ARR burn-down (skip when n/a — new accounts / zero target) */}
-      {bd.arr_status !== "n/a" && (
-        <ArrBurnDown appetite={appetite} account={account} />
-      )}
+      {/* ARR Growth Tracker — 27-May Row 61: always render. When the
+          status is 'n/a' (fresh account / zero target) the tile shows
+          an empty state instead of hiding so stakeholders see the
+          section name they expect. */}
+      <ArrBurnDown appetite={appetite} account={account} />
 
-      {/* Plays section */}
+      {/* Plays section — 27-May Row 61: render "Expansion Plays" as a
+          stable literal heading so stakeholders can locate it
+          regardless of current mode. The mode-aware title (rescue /
+          retain / expand naming) becomes a subtitle. */}
       <div className="bg-white border border-beroe-card-border rounded-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[13px] font-bold">{MODE_TITLES[mode]}</div>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <div className="text-[13px] font-bold">Expansion Plays</div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              {mode === "expand"
+                ? "Showing expand-mode plays"
+                : `Mode-aware view: ${MODE_TITLES[mode]} (toggle "Show all plays" to see expansion plays here)`}
+            </div>
+          </div>
           <label className="text-[11px] text-text-muted flex items-center gap-1 cursor-pointer">
             <input
               type="checkbox"
@@ -479,14 +489,17 @@ function ArrBurnDown({
   const projected = parseFloat(bd.projected_acv_usd);
   const target = parseFloat(bd.target_acv_usd);
   const pct = target > 0 ? Math.min(100, Math.round((projected / target) * 100)) : 0;
-  const statusCol =
-    bd.arr_status === "on_track"
+  const isNA = bd.arr_status === "n/a";
+  const statusCol = isNA
+    ? "#94a3b8"
+    : bd.arr_status === "on_track"
       ? "#40CC8F"
       : bd.arr_status === "behind"
         ? "#EF9637"
         : "#FD576B";
-  const statusLabel =
-    bd.arr_status === "on_track"
+  const statusLabel = isNA
+    ? "Set a target to track"
+    : bd.arr_status === "on_track"
       ? "On Track"
       : bd.arr_status === "behind"
         ? "Behind Target"
