@@ -147,6 +147,24 @@ export default function SalesHandoffTab() {
 
   return (
     <div className="space-y-4">
+      {/* 27-May Row 83 — "Received from Solutioning · DATE" card at top.
+          Amber, same pattern as the Pre-Sales→Solutioning card. Renders
+          only when sh_value_received_at is set (i.e. Solutioning has
+          locked + passed the value definition). */}
+      {form.sh_value_received_at && (
+        <div className="bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 flex items-center gap-2.5">
+          <span className="text-[18px]">📥</span>
+          <div className="text-[12px] text-amber-900">
+            <b>Received from Solutioning · </b>
+            {new Date(form.sh_value_received_at).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ---------- Card 1: Sales Hand-off context ---------- */}
       <Section title="Sales Hand-off & Signing">
         <p className="text-xs text-text-muted mb-3">
@@ -155,32 +173,42 @@ export default function SalesHandoffTab() {
           watch-outs before the signing event.
         </p>
 
-        {/* Value definition snapshot (read-only) */}
-        <Field label="Value definition (received from Solutioning)">
+        {/* 27-May Row 85 — Value Definition (received) + Value Themes
+            merged into ONE violet box so Sales sees the full Solutioning
+            output at a glance instead of two separate fields. */}
+        <div className="rounded-xl border-2 border-violet-200 bg-violet-50/60 p-3 mb-3">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-violet-700 mb-1.5">
+            From Solutioning
+          </div>
+          <div className="text-[11px] font-bold text-violet-900 mb-0.5">
+            Value definition
+          </div>
           {form.sh_value_from_solutioning ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-text-primary whitespace-pre-wrap">
+            <div className="text-sm text-text-primary whitespace-pre-wrap mb-2">
               {form.sh_value_from_solutioning}
             </div>
           ) : (
-            <div className="text-xs text-text-muted italic">
+            <div className="text-xs text-text-muted italic mb-2">
               Lock the Solutioning value definition first — the snapshot will
               appear here for Sales to validate.
             </div>
           )}
+          {form.sh_value_themes_from_solutioning && (
+            <>
+              <div className="text-[11px] font-bold text-violet-900 mt-2 mb-0.5">
+                Value themes
+              </div>
+              <div className="text-sm text-text-primary">
+                {form.sh_value_themes_from_solutioning}
+              </div>
+            </>
+          )}
           {form.sh_value_received_at && (
-            <div className="text-[10px] text-text-muted mt-1">
+            <div className="text-[10px] text-violet-700/70 mt-2 italic">
               Received {new Date(form.sh_value_received_at).toLocaleString()}
             </div>
           )}
-        </Field>
-
-        {form.sh_value_themes_from_solutioning && (
-          <Field label="Value themes">
-            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-text-primary">
-              {form.sh_value_themes_from_solutioning}
-            </div>
-          </Field>
-        )}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Sales validation">
@@ -716,10 +744,16 @@ function SigningGateCard({
         />
       )}
 
-      {/* Unlock action */}
-      {isSigned && gate.can_unlock && !gate.gate_unlocked && (
+      {/* 27-May Row 84 — Unlock button visibility.
+          Always render the button when the account is signed and not
+          yet unlocked, but disable + explain for non-admin roles so
+          stakeholders see the workflow exists rather than wondering
+          where the unlock action lives. Server-side RBAC still
+          enforces the actual permission. */}
+      {isSigned && !gate.gate_unlocked && (
         <button
           onClick={() => {
+            if (!gate.can_unlock) return;
             const reason = prompt(
               "Reason for unlocking the signing gate (min 10 chars):",
             );
@@ -729,10 +763,16 @@ function SigningGateCard({
               alert("Reason must be at least 10 characters.");
             }
           }}
-          disabled={unlocking}
-          className="mt-3 text-xs px-3 py-1 rounded-md border border-amber-300 bg-amber-50 text-amber-900 font-semibold hover:bg-amber-100 disabled:opacity-50"
+          disabled={unlocking || !gate.can_unlock}
+          title={
+            !gate.can_unlock
+              ? "Unlock is restricted to Admin / CS Director — ask an admin to re-open the signing gate"
+              : "Reopen the signing gate to amend signed contract details"
+          }
+          className="mt-3 text-xs px-3 py-1 rounded-md border border-amber-300 bg-amber-50 text-amber-900 font-semibold hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {unlocking ? "Unlocking…" : "🔓 Unlock for correction"}
+          {!gate.can_unlock && " (admin only)"}
         </button>
       )}
       {gate.gate_unlocked && gate.gate_unlock_reason && (

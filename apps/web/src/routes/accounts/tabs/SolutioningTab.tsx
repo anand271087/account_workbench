@@ -125,6 +125,24 @@ export default function SolutioningTab() {
 
   return (
     <div className="space-y-4">
+      {/* 27-May Row 80 — "Received from Pre-Sales · DATE" card at top.
+          Amber to signal a workflow milestone (mirrors the Row 79 card
+          surfaced on Pre-Sales when handover happens). Renders only
+          when the upstream handover has actually occurred. */}
+      {account.handed_off_to_solutioning && account.handed_off_at && (
+        <div className="bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 flex items-center gap-2.5">
+          <span className="text-[18px]">📥</span>
+          <div className="text-[12px] text-amber-900">
+            <b>Received from Pre-Sales · </b>
+            {new Date(account.handed_off_at).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </div>
+        </div>
+      )}
+
       {/* VPD uploads — first thing on Solutioning so the doc that drives
           the structured fields below is the most visible action. */}
       <KindUploadCard
@@ -165,19 +183,14 @@ export default function SolutioningTab() {
           </div>
         )}
 
-        <Section
-          title="Proposed solution"
-          subtitle="What Beroe will deliver — bespoke summary auto-extracted from the latest VPD upload."
-        >
-          <textarea
-            rows={4}
-            value={form.proposed_solution ?? ""}
-            onChange={(e) => setForm({ ...form, proposed_solution: e.target.value })}
-            disabled={!form.is_editable}
-            className={inputCls(form.is_editable)}
-          />
-        </Section>
-
+        {/* 27-May Row 82 — section sequence rewritten to match the
+            stakeholder's exact order:
+              1. Engagement Shape (Type + Duration)
+              2. Proposed Solution
+              3. ⭐ Value Definition (starred — primary deliverable)
+              4. Value Themes
+            Handed-off-to-Sales date already lives at the bottom of
+            the right-column Sales Hand-off card with the lock action. */}
         <Section title="Engagement shape">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Engagement type">
@@ -207,6 +220,29 @@ export default function SolutioningTab() {
               />
             </Field>
           </div>
+        </Section>
+
+        <Section
+          title="Proposed solution"
+          subtitle="What Beroe will deliver — bespoke summary auto-extracted from the latest VPD upload."
+        >
+          <textarea
+            rows={4}
+            value={form.proposed_solution ?? ""}
+            onChange={(e) => setForm({ ...form, proposed_solution: e.target.value })}
+            disabled={!form.is_editable}
+            className={inputCls(form.is_editable)}
+          />
+        </Section>
+
+        <Section title="⭐ Value definition" subtitle="How the value will be measured. Primary deliverable of Solutioning.">
+          <textarea
+            rows={3}
+            value={form.value_definition ?? ""}
+            onChange={(e) => setForm({ ...form, value_definition: e.target.value })}
+            disabled={!form.is_editable}
+            className={inputCls(form.is_editable)}
+          />
         </Section>
 
         <Section title="Value themes" subtitle="Short tags — what kinds of value the engagement will deliver.">
@@ -253,15 +289,6 @@ export default function SolutioningTab() {
           )}
         </Section>
 
-        <Section title="Value definition" subtitle="How the value will be measured.">
-          <textarea
-            rows={3}
-            value={form.value_definition ?? ""}
-            onChange={(e) => setForm({ ...form, value_definition: e.target.value })}
-            disabled={!form.is_editable}
-            className={inputCls(form.is_editable)}
-          />
-        </Section>
       </div>
 
       <div className="space-y-4">
