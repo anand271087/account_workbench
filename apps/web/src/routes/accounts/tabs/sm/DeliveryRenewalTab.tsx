@@ -211,9 +211,6 @@ export default function DeliveryRenewalTab() {
         </div>
       )}
 
-      {/* VDD summary card — Aqua left border per prototype line 3567. */}
-      <VddSummaryCard accountId={account.id} />
-
       {/* Dual-track top row — prototype line 3527-3538. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Track1Card
@@ -492,6 +489,12 @@ export default function DeliveryRenewalTab() {
           </button>
         </div>
       )}
+
+      {/* VDD compact card — verbatim port of prototype line 3567-3580.
+          Bottom of the page, Aqua left border, "Draft with AI" +
+          "Download PPT" buttons, value-narrative quote in amber italic
+          box, then the 4 named sections. */}
+      <VddSummaryCard accountId={account.id} />
     </div>
   );
 }
@@ -1049,6 +1052,11 @@ function ReadinessGrid({
 // Row 55 (25-May-2026) — VDD summary card embedded on D&R
 // ============================================================
 
+/** Compact VDD card — verbatim port of prototype line 3567-3580.
+ *  Renders below all the D&R workflow cards. Aqua left border, title +
+ *  Draft-with-AI / Download-PPT buttons, then the value narrative quote
+ *  (from the Success Contract) and the four named sections from the
+ *  VDD jsonb. */
 function VddSummaryCard({ accountId }: { accountId: string }) {
   type ValueRow = {
     initiative_name?: string;
@@ -1056,27 +1064,52 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
     committed_musd?: number | null;
     implemented_musd?: number | null;
   };
+  type MetricRow = {
+    name?: string;
+    target?: string | null;
+    current?: string | null;
+  };
+  type ApproachRow = {
+    initiative?: string;
+    approach?: string | null;
+    levers?: string[] | null;
+  };
   type Vdd = {
     value_delivered?: ValueRow[];
-    client_strategic_priorities?: unknown[];
+    agreed_success_metrics?: MetricRow[];
+    beroes_approach?: ApproachRow[];
+    client_strategic_priorities?: string[];
     locked_at: string | null;
     exec_summary?: string | null;
   };
-  const { data, isLoading } = useQuery<Vdd>({
+  type SuccessContract = {
+    value_narrative?: string | null;
+  };
+
+  const { data: vdd, isLoading } = useQuery<Vdd>({
     queryKey: ["vdd", accountId],
     queryFn: () =>
       api.get<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`),
   });
-  const rows: ValueRow[] = data?.value_delivered ?? [];
-  const sum = (k: keyof ValueRow) =>
-    rows.reduce((acc, r) => {
-      const v = Number(r[k]);
-      return acc + (Number.isFinite(v) ? v : 0);
-    }, 0);
-  const ident = sum("identified_musd");
-  const comm = sum("committed_musd");
-  const impl = sum("implemented_musd");
-  const fmt = (n: number) => `$${n.toFixed(2)}M`;
+  const { data: sc } = useQuery<SuccessContract>({
+    queryKey: ["success-contract", accountId],
+    queryFn: () =>
+      api.get<SuccessContract>(
+        `/api/v1/accounts/${accountId}/success-contract`,
+      ),
+  });
+
+  const priorities = vdd?.client_strategic_priorities ?? [];
+  const metrics = vdd?.agreed_success_metrics ?? [];
+  const approach = vdd?.beroes_approach ?? [];
+  const valueDelivered = vdd?.value_delivered ?? [];
+  const valueNarrative = sc?.value_narrative ?? "";
+
+  const fmt = (n: number | null | undefined) =>
+    typeof n === "number" && Number.isFinite(n) ? `$${n.toFixed(2)}M` : "—";
+
+  const vddHref = `/accounts/${accountId}/success-management/vdd`;
+
   return (
     <div
       className="rounded-card p-4"
@@ -1086,93 +1119,184 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
         borderLeft: `3px solid ${AQUA}`,
       }}
     >
+      {/* Header — prototype line 3568-3574 */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div>
-          <div
-            className="text-[13px] font-bold"
-            style={{ color: MIDNIGHT }}
-          >
-            📄 Value Delivery Document
-          </div>
-          <div className="text-[11px] text-text-muted mt-0.5">
-            Evidence of delivered value for the renewal conversation.
-          </div>
-        </div>
-        <a
-          href={`/accounts/${accountId}/success-management/vdd`}
-          className="text-[11px] font-semibold hover:underline"
-          style={{ color: INDIGO }}
+        <div
+          className="text-[13px] font-bold"
+          style={{ color: MIDNIGHT }}
         >
-          → Open / edit VDD
-        </a>
-      </div>
-      {isLoading ? (
-        <div className="text-[12px] text-text-muted italic">Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="text-[12px] text-text-muted italic">
-          No value-delivered entries on the VDD yet. Open VDD to populate.
+          📄 Value Delivery Document
         </div>
-      ) : (
+        <div className="flex gap-2 items-center">
+          <a
+            href={vddHref}
+            className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
+            style={{
+              background: "#fff",
+              border: `1px solid ${INDIGO}40`,
+              color: INDIGO,
+            }}
+            title="Open VDD to AI-draft the 4 sections"
+          >
+            ✨ Draft with AI
+          </a>
+          <a
+            href={vddHref}
+            className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
+            style={{
+              background: "#fff",
+              border: "1px solid #e4eaf6",
+              color: MIDNIGHT,
+            }}
+            title="Open VDD to export"
+          >
+            ⬇ Download PPT
+          </a>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="text-[12px] text-text-muted italic">Loading…</div>
+      )}
+
+      {/* Value narrative quote — prototype line 3575. */}
+      {!isLoading && valueNarrative && (
+        <div
+          className="text-[11px] italic rounded-md mb-2.5"
+          style={{
+            color: "#7a3800",
+            background: `${RISK_AMBER}15`,
+            padding: "8px 10px",
+            lineHeight: 1.5,
+          }}
+        >
+          &ldquo;{valueNarrative}&rdquo;
+        </div>
+      )}
+
+      {/* Four named sections — prototype line 3577-3579, all titles in
+          Aqua uppercase. */}
+      {!isLoading && (
         <>
-          <div className="grid grid-cols-3 gap-2">
-            <VddBucket label="Identified" value={fmt(ident)} color={RISK_AMBER} />
-            <VddBucket label="Committed" value={fmt(comm)} color={INDIGO} />
-            <VddBucket label="Implemented" value={fmt(impl)} color={RISK_GREEN} />
-          </div>
-          <div className="mt-2 text-[11px] text-text-muted">
-            {rows.length} initiative{rows.length === 1 ? "" : "s"} ·{" "}
-            {(data?.client_strategic_priorities ?? []).length} priorit
-            {(data?.client_strategic_priorities ?? []).length === 1
-              ? "y"
-              : "ies"}
-            {data?.locked_at && (
-              <>
-                {" "}
-                ·{" "}
-                <span
-                  className="font-semibold"
-                  style={{ color: RISK_GREEN }}
-                >
-                  🔒 Locked {new Date(data.locked_at).toLocaleDateString()}
-                </span>
-              </>
-            )}
-          </div>
+          <VddSection title="Client Strategic Priorities" empty={priorities.length === 0}>
+            <ul className="space-y-1">
+              {priorities.map((p, i) => (
+                <li key={i} className="text-[11px] text-text-secondary leading-snug">
+                  • {p}
+                </li>
+              ))}
+            </ul>
+          </VddSection>
+
+          <VddSection title="Agreed Success Metrics" empty={metrics.length === 0}>
+            <ul className="space-y-1">
+              {metrics.map((m, i) => (
+                <li key={i} className="text-[11px] text-text-secondary leading-snug">
+                  •{" "}
+                  <span className="font-semibold" style={{ color: MIDNIGHT }}>
+                    {m.name ?? "—"}
+                  </span>
+                  {(m.current || m.target) && (
+                    <span className="text-text-muted">
+                      {" "}— {m.current ?? "—"} / {m.target ?? "—"}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </VddSection>
+
+          <VddSection title="Beroe's Approach Per Initiative" empty={approach.length === 0}>
+            <ul className="space-y-1">
+              {approach.map((a, i) => (
+                <li key={i} className="text-[11px] text-text-secondary leading-snug">
+                  •{" "}
+                  <span className="font-semibold" style={{ color: MIDNIGHT }}>
+                    {a.initiative ?? "—"}
+                  </span>
+                  {a.approach && (
+                    <span className="text-text-muted"> — {a.approach}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </VddSection>
+
+          <VddSection
+            title="Value Delivered — CSM Attributed"
+            empty={valueDelivered.length === 0}
+          >
+            <ul className="space-y-1">
+              {valueDelivered.map((r, i) => (
+                <li key={i} className="text-[11px] text-text-secondary leading-snug">
+                  •{" "}
+                  <span className="font-semibold" style={{ color: MIDNIGHT }}>
+                    {r.initiative_name ?? "—"}
+                  </span>
+                  <span className="text-text-muted">
+                    {" "}— {" "}
+                    <span style={{ color: RISK_AMBER }}>
+                      {fmt(r.identified_musd)} ID
+                    </span>
+                    {" / "}
+                    <span style={{ color: INDIGO }}>
+                      {fmt(r.committed_musd)} CO
+                    </span>
+                    {" / "}
+                    <span style={{ color: RISK_GREEN }}>
+                      {fmt(r.implemented_musd)} IM
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </VddSection>
+
+          {vdd?.locked_at && (
+            <div
+              className="text-[11px] mt-2 font-semibold"
+              style={{ color: RISK_GREEN }}
+            >
+              🔒 Locked {new Date(vdd.locked_at).toLocaleDateString()}
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
-function VddBucket({
-  label,
-  value,
-  color,
+/** Aqua-uppercase section title + content (prototype line 3577-3579). */
+function VddSection({
+  title,
+  empty,
+  children,
 }: {
-  label: string;
-  value: string;
-  color: string;
+  title: string;
+  empty: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <div
-      className="rounded-md px-3 py-2"
-      style={{
-        background: `${color}10`,
-        border: `1px solid ${color}30`,
-      }}
-    >
+    <div className="mb-2.5 last:mb-0">
       <div
-        className="text-[10px] font-bold uppercase"
-        style={{ color, letterSpacing: "0.05em" }}
+        className="text-[10px] font-bold uppercase mb-1"
+        style={{ color: AQUA, letterSpacing: "0.04em" }}
       >
-        {label}
+        {title}
       </div>
-      <div
-        className="text-[16px] font-extrabold mt-0.5"
-        style={{ color }}
-      >
-        {value}
-      </div>
+      {empty ? (
+        <div
+          className="text-[11px] italic rounded-md px-2 py-1.5"
+          style={{
+            color: "#94a3b8",
+            background: "#EAF1F580",
+          }}
+        >
+          —
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }
