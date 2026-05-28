@@ -1052,12 +1052,21 @@ function ReadinessGrid({
 // Row 55 (25-May-2026) — VDD summary card embedded on D&R
 // ============================================================
 
-/** Compact VDD card — verbatim port of prototype line 3567-3580.
- *  Renders below all the D&R workflow cards. Aqua left border, title +
- *  Draft-with-AI / Download-PPT buttons, then the value narrative quote
- *  (from the Success Contract) and the four named sections from the
- *  VDD jsonb. */
+/** Compact VDD card — port of prototype line 3567-3580 with working
+ *  edit + AI-draft + PPT-download wired through the M22 VDD endpoints.
+ *
+ *  Editable behaviour:
+ *  - Client Strategic Priorities is a free-text-array — rendered as a
+ *    multi-line textarea (one priority per line) that PATCHes on blur.
+ *  - The other three sections are structured data with their own
+ *    nested shapes (metrics, approach items, value-delivered rows)
+ *    that have richer editors on the VDD tab itself. We show them
+ *    read-only here and link out to the VDD tab for full editing.
+ *  - The two action buttons fire the same endpoints the VDD tab uses:
+ *    POST /value-delivery-document/redraft (AI draft) +
+ *    GET /reports/vdd (HTML download). */
 function VddSummaryCard({ accountId }: { accountId: string }) {
+  const qc = useQueryClient();
   type ValueRow = {
     initiative_name?: string;
     identified_musd?: number | null;
@@ -1081,13 +1090,15 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
     client_strategic_priorities?: string[];
     locked_at: string | null;
     exec_summary?: string | null;
+    is_editable?: boolean;
   };
   type SuccessContract = {
     value_narrative?: string | null;
   };
 
+  const queryKey = ["vdd", accountId];
   const { data: vdd, isLoading } = useQuery<Vdd>({
-    queryKey: ["vdd", accountId],
+    queryKey,
     queryFn: () =>
       api.get<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`),
   });
@@ -1099,11 +1110,72 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
       ),
   });
 
+  const editable = !!vdd?.is_editable && !vdd?.locked_at;
   const priorities = vdd?.client_strategic_priorities ?? [];
   const metrics = vdd?.agreed_success_metrics ?? [];
   const approach = vdd?.beroes_approach ?? [];
   const valueDelivered = vdd?.value_delivered ?? [];
   const valueNarrative = sc?.value_narrative ?? "";
+
+  // Local textarea state for priorities — saved to the server when the
+  // user blurs / Cmd+Enter. Resets whenever the server value changes.
+  const [priorityDraft, setPriorityDraft] = useState<string>("");
+  const [draftDirty, setDraftDirty] = useState(false);
+  useEffect(() => {
+    setPriorityDraft(priorities.join("\n"));
+    setDraftDirty(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priorities.join("\n")]);
+
+  const patchPriorities = useMutation({
+    mutationFn: (next: string[]) =>
+      api.patch<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`, {
+        client_strategic_priorities: next,
+      }),
+    onSuccess: (saved) => {
+      qc.setQueryData(queryKey, saved);
+      setDraftDirty(false);
+    },
+  });
+
+  const commitPriorities = () => {
+    const next = priorityDraft
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (JSON.stringify(next) === JSON.stringify(priorities)) {
+      setDraftDirty(false);
+      return;
+    }
+    patchPriorities.mutate(next);
+  };
+
+  const redraft = useMutation({
+    mutationFn: () =>
+      api.post<Vdd>(
+        `/api/v1/accounts/${accountId}/value-delivery-document/redraft`,
+      ),
+    onSuccess: (drafted) => qc.setQueryData(queryKey, drafted),
+  });
+
+  const downloadVdd = async () => {
+    try {
+      const r = await api.get<{ html: string; filename: string }>(
+        `/api/v1/accounts/${accountId}/reports/vdd`,
+      );
+      const blob = new Blob([r.html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = r.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "VDD download failed");
+    }
+  };
 
   const fmt = (n: number | null | undefined) =>
     typeof n === "number" && Number.isFinite(n) ? `$${n.toFixed(2)}M` : "—";
@@ -1128,30 +1200,43 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
           📄 Value Delivery Document
         </div>
         <div className="flex gap-2 items-center">
-          <a
-            href={vddHref}
-            className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
-            style={{
-              background: "#fff",
-              border: `1px solid ${INDIGO}40`,
-              color: INDIGO,
-            }}
-            title="Open VDD to AI-draft the 4 sections"
-          >
-            ✨ Draft with AI
-          </a>
-          <a
-            href={vddHref}
+          {editable && (
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  confirm(
+                    "Re-draft this VDD from Success Contract + Metrics + Goals?\n\nUnsaved changes will be lost.",
+                  )
+                ) {
+                  redraft.mutate();
+                }
+              }}
+              disabled={redraft.isPending}
+              className="text-[11px] px-2.5 py-1 rounded-md font-semibold disabled:opacity-50"
+              style={{
+                background: "#fff",
+                border: `1px solid ${INDIGO}40`,
+                color: INDIGO,
+              }}
+              title="Re-draft from Success Contract + Metrics + Goals"
+            >
+              {redraft.isPending ? "Drafting…" : "✨ Draft with AI"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={downloadVdd}
             className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
             style={{
               background: "#fff",
               border: "1px solid #e4eaf6",
               color: MIDNIGHT,
             }}
-            title="Open VDD to export"
+            title="Download VDD as standalone HTML (PPT export lands in v1.1)"
           >
-            ⬇ Download PPT
-          </a>
+            ⬇ Download VDD
+          </button>
         </div>
       </div>
 
@@ -1174,24 +1259,76 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
         </div>
       )}
 
-      {/* Four named sections — prototype line 3577-3579, all titles in
-          Aqua uppercase. */}
+      {/* Four named sections — prototype line 3577-3579. */}
       {!isLoading && (
         <>
-          <VddSection title="Client Strategic Priorities" empty={priorities.length === 0}>
-            <ul className="space-y-1">
-              {priorities.map((p, i) => (
-                <li key={i} className="text-[11px] text-text-secondary leading-snug">
-                  • {p}
-                </li>
-              ))}
-            </ul>
+          {/* Section 1 — Priorities. Editable inline (string[]). */}
+          <VddSection
+            title="Client Strategic Priorities"
+            empty={priorities.length === 0 && !editable}
+          >
+            {editable ? (
+              <>
+                <textarea
+                  rows={3}
+                  value={priorityDraft}
+                  onChange={(e) => {
+                    setPriorityDraft(e.target.value);
+                    setDraftDirty(true);
+                  }}
+                  onBlur={() => {
+                    if (draftDirty) commitPriorities();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      commitPriorities();
+                    }
+                  }}
+                  placeholder="One strategic priority per line…"
+                  className="w-full text-[11px] rounded-md px-2 py-1.5 focus:outline-none focus:ring-1"
+                  style={{
+                    border: "1px solid #e4eaf6",
+                  }}
+                />
+                {draftDirty && (
+                  <div className="text-[10px] mt-1" style={{ color: "#854F0B" }}>
+                    Unsaved — blurs to save (Cmd/Ctrl+Enter)
+                  </div>
+                )}
+                {patchPriorities.isPending && (
+                  <div className="text-[10px] text-text-muted mt-1">
+                    Saving…
+                  </div>
+                )}
+              </>
+            ) : (
+              <ul className="space-y-1">
+                {priorities.map((p, i) => (
+                  <li
+                    key={i}
+                    className="text-[11px] text-text-secondary leading-snug"
+                  >
+                    • {p}
+                  </li>
+                ))}
+              </ul>
+            )}
           </VddSection>
 
-          <VddSection title="Agreed Success Metrics" empty={metrics.length === 0}>
+          {/* Sections 2–4 are structured data — show read-only here +
+              "Edit in VDD →" link to the full editor. */}
+          <VddSection
+            title="Agreed Success Metrics"
+            empty={metrics.length === 0}
+            editHref={editable ? vddHref : undefined}
+          >
             <ul className="space-y-1">
               {metrics.map((m, i) => (
-                <li key={i} className="text-[11px] text-text-secondary leading-snug">
+                <li
+                  key={i}
+                  className="text-[11px] text-text-secondary leading-snug"
+                >
                   •{" "}
                   <span className="font-semibold" style={{ color: MIDNIGHT }}>
                     {m.name ?? "—"}
@@ -1206,10 +1343,17 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
             </ul>
           </VddSection>
 
-          <VddSection title="Beroe's Approach Per Initiative" empty={approach.length === 0}>
+          <VddSection
+            title="Beroe's Approach Per Initiative"
+            empty={approach.length === 0}
+            editHref={editable ? vddHref : undefined}
+          >
             <ul className="space-y-1">
               {approach.map((a, i) => (
-                <li key={i} className="text-[11px] text-text-secondary leading-snug">
+                <li
+                  key={i}
+                  className="text-[11px] text-text-secondary leading-snug"
+                >
                   •{" "}
                   <span className="font-semibold" style={{ color: MIDNIGHT }}>
                     {a.initiative ?? "—"}
@@ -1225,16 +1369,20 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
           <VddSection
             title="Value Delivered — CSM Attributed"
             empty={valueDelivered.length === 0}
+            editHref={editable ? vddHref : undefined}
           >
             <ul className="space-y-1">
               {valueDelivered.map((r, i) => (
-                <li key={i} className="text-[11px] text-text-secondary leading-snug">
+                <li
+                  key={i}
+                  className="text-[11px] text-text-secondary leading-snug"
+                >
                   •{" "}
                   <span className="font-semibold" style={{ color: MIDNIGHT }}>
                     {r.initiative_name ?? "—"}
                   </span>
                   <span className="text-text-muted">
-                    {" "}— {" "}
+                    {" "}—{" "}
                     <span style={{ color: RISK_AMBER }}>
                       {fmt(r.identified_musd)} ID
                     </span>
@@ -1257,7 +1405,8 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
               className="text-[11px] mt-2 font-semibold"
               style={{ color: RISK_GREEN }}
             >
-              🔒 Locked {new Date(vdd.locked_at).toLocaleDateString()}
+              🔒 Locked {new Date(vdd.locked_at).toLocaleDateString()} — unlock
+              on the VDD tab to edit.
             </div>
           )}
         </>
@@ -1266,23 +1415,38 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
   );
 }
 
-/** Aqua-uppercase section title + content (prototype line 3577-3579). */
+/** Aqua-uppercase section title + content. Optional editHref shows a
+ *  small "Edit in VDD →" link in the section header for sections whose
+ *  rich editor lives on the dedicated VDD tab. */
 function VddSection({
   title,
   empty,
+  editHref,
   children,
 }: {
   title: string;
   empty: boolean;
+  editHref?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="mb-2.5 last:mb-0">
-      <div
-        className="text-[10px] font-bold uppercase mb-1"
-        style={{ color: AQUA, letterSpacing: "0.04em" }}
-      >
-        {title}
+      <div className="flex items-baseline justify-between gap-2 mb-1">
+        <div
+          className="text-[10px] font-bold uppercase"
+          style={{ color: AQUA, letterSpacing: "0.04em" }}
+        >
+          {title}
+        </div>
+        {editHref && (
+          <a
+            href={editHref}
+            className="text-[10px] font-semibold hover:underline"
+            style={{ color: INDIGO }}
+          >
+            Edit in VDD →
+          </a>
+        )}
       </div>
       {empty ? (
         <div
