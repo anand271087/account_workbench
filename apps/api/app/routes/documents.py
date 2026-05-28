@@ -19,7 +19,7 @@ after every document mutation so the account-level rollup stays consistent.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -45,17 +45,17 @@ from app.db.session import get_db
 from app.models.account import Account
 from app.models.document import AccountDiscoverySummary, Document, Job
 from app.routes.accounts import _team_member_ids
+from app.schemas.cs_goals_extraction import CsGoalsExtractionResult
 from app.schemas.document import (
     DiscoverySummaryOut,
     DocKind,
     DocumentListResponse,
-    DocumentOut,
     DocumentNotesUpdate,
+    DocumentOut,
     DocumentSummaryUpdate,
     DocumentUploadResponse,
     JobOut,
 )
-from app.schemas.cs_goals_extraction import CsGoalsExtractionResult
 from app.schemas.mom_extraction import MomExtractionResult
 from app.services import ai_quota
 from app.services import files as storage_svc
@@ -362,7 +362,7 @@ async def edit_summary(
     doc.ai_summary_text = body.ai_summary_text
     doc.ai_edited = True
     doc.ai_edited_by = user.id
-    doc.ai_edited_at = datetime.now(timezone.utc)
+    doc.ai_edited_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(doc)
     return DocumentOut.model_validate(doc)
@@ -543,6 +543,57 @@ async def extract_goals(
 
 
 # ============================================================
+# 27-May Row 81 — POST /documents/:id/extract-metrics
+# (VPD → candidate Success Metrics)
+# ============================================================
+
+
+@document_router.post(
+    "/{document_id}/extract-metrics",
+)
+async def extract_metrics(
+    document_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Run Claude over a VPD doc and return candidate Success Metrics.
+    View-gated; the apply step is the existing POST /accounts/:id/metrics
+    × N from the frontend (per-row write RBAC enforced there).
+    Read-only here — never writes."""
+    from app.schemas.vpd_metrics_extraction import VpdMetricsExtractionResult
+    from app.services.claude import extract_metrics_from_vpd
+    from app.services.extract import ExtractError, extract_text
+
+    doc, _, is_assigned, is_team = await _scope_for_document(db, user, document_id)
+    if not can_view_account(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot view this document")
+    if doc.kind != "vpd":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "extract-metrics only runs on documents with kind='vpd'",
+        )
+
+    ai_quota.consume(user.id, label="vpd_metrics_extract")
+
+    bucket, _, key = doc.storage_path.partition("/")
+    try:
+        raw = storage_svc.download_bytes(bucket, key)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"Could not download document from storage: {e}",
+        ) from e
+
+    try:
+        text = extract_text(doc.filename, doc.mime_type, raw)
+    except ExtractError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+
+    extracted = extract_metrics_from_vpd(text)
+    return VpdMetricsExtractionResult(document_id=doc.id, **extracted)
+
+
+# ============================================================
 # DELETE /documents/:id  (soft)
 # ============================================================
 
@@ -559,7 +610,7 @@ async def soft_delete_document(
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot delete this document")
 
-    doc.deleted_at = datetime.now(timezone.utc)
+    doc.deleted_at = datetime.now(UTC)
     await db.commit()
 
 

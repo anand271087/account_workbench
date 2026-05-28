@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { KindUploadCard } from "@/components/KindUploadCard";
+import { MeetingBriefEditor } from "@/components/MeetingBriefEditor";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeEngagementSlice,
@@ -186,24 +187,28 @@ export default function PreSalesTab() {
         emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt, .vtt or .eml onto the card above."
       />
 
-      {/* Pre-Meeting Brief shortcut — the editor itself lives on its own
-          top-level tab (Brief) now. Keep a slim pointer here so people
-          coming from MoM uploads still find their way. */}
-      <button
-        type="button"
-        onClick={() => navigate(`/accounts/${account.id}/brief`)}
-        className="w-full bg-white rounded-card border border-beroe-card-border px-5 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-2"
-      >
-        <span className="text-sm font-bold text-text-primary">
-          Pre-Meeting Brief
-        </span>
-        <span className="text-[11px] text-text-muted">
-          · Call info, attendees, objectives, minefields, cheat sheet
-        </span>
-        <span className="ml-auto text-xs text-beroe-blue font-semibold">
-          Open Brief →
-        </span>
-      </button>
+      {/* 27-May Row 75 — Pre-Meeting Brief now opens INLINE on Pre-Sales
+          via a collapsible <details> disclosure. Stakeholder didn't
+          want users redirected away to a separate tab; the standalone
+          /brief route is kept for deep-links but the primary entry
+          point is here next to the MoM upload area. */}
+      <details className="group bg-white rounded-card border border-beroe-card-border overflow-hidden">
+        <summary className="px-5 py-3 cursor-pointer list-none flex items-center gap-2 hover:bg-slate-50 transition-colors">
+          <span className="text-sm font-bold text-text-primary">
+            🗓 Pre-Meeting Brief
+          </span>
+          <span className="text-[11px] text-text-muted">
+            · Call info, attendees, objectives, minefields, cheat sheet
+          </span>
+          <span className="ml-auto text-xs text-beroe-blue font-semibold flex items-center gap-1">
+            <span className="group-open:hidden">▾ Open inline</span>
+            <span className="hidden group-open:inline">▴ Collapse</span>
+          </span>
+        </summary>
+        <div className="border-t border-beroe-card-border p-4 bg-slate-50/50">
+          <PreMeetingBriefInline accountId={account.id} />
+        </div>
+      </details>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
@@ -395,58 +400,16 @@ export default function PreSalesTab() {
         </Section>
       </div>
 
-      {/* Right column — stakeholders. Engagement Info moved to the top of the
-          left column as part of R14 (Engagement Info → Objective → Maturity → Contacts). */}
-      <div className="space-y-4">
-        <Section title="Stakeholders">
-          <Field label="SPOC">
-            <input
-              type="text"
-              value={form.spoc_text ?? ""}
-              onChange={(e) => setForm({ ...form, spoc_text: e.target.value })}
-              disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
-            />
-          </Field>
-          <Field label="Sponsor">
-            <input
-              type="text"
-              value={form.sponsor_text ?? ""}
-              onChange={(e) => setForm({ ...form, sponsor_text: e.target.value })}
-              disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
-            />
-          </Field>
-          <Field label="Power users">
-            <input
-              type="text"
-              value={form.power_users_text ?? ""}
-              onChange={(e) => setForm({ ...form, power_users_text: e.target.value })}
-              disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
-              placeholder="Comma-separated"
-            />
-          </Field>
-        </Section>
+      {/* 27-May Row 77 — Merged "Client Contacts" section replacing the
+          old Stakeholders free-text column + the separate Manage Contacts
+          shortcut. Surfaces SPOC / Executive Sponsor / Power Users
+          INLINE from the real client_contacts table (not the engagement
+          jsonb free-text), with full Name / Title / Function / Influence
+          per row. Standalone /accounts/:id/contacts route still works
+          for full management (deep-links, bulk operations). */}
+      <div className="lg:col-span-3">
+        <ClientContactsInline accountId={account.id} />
       </div>
-
-      {/* R14 — Client Contacts shortcut moved to the end of Pre-Sales so the
-          ordered flow is Engagement Info → Objective → Maturity → Contacts. */}
-      <button
-        type="button"
-        onClick={() => navigate(`/accounts/${account.id}/contacts`)}
-        className="lg:col-span-3 w-full bg-white rounded-card border border-beroe-card-border px-5 py-3 text-left hover:bg-slate-50 transition-colors flex items-center gap-2"
-      >
-        <span className="text-sm font-bold text-text-primary">
-          Client Contacts
-        </span>
-        <span className="text-[11px] text-text-muted">
-          · SPOC, sponsor, decision-power map for {account.name}
-        </span>
-        <span className="ml-auto text-xs text-beroe-blue font-semibold">
-          Manage Contacts →
-        </span>
-      </button>
 
       {/* Handover gate */}
       {form.is_editable && (
@@ -905,6 +868,204 @@ function BeroeUserPicker({
           Could not load Beroe users — paste an @beroe-inc.com email manually if needed.
         </div>
       )}
+    </div>
+  );
+}
+
+// 27-May Row 75 — Pre-Meeting Brief inline wrapper. Just renders the
+// shared MeetingBriefEditor inside the collapsible disclosure. Kept as
+// a thin wrapper (rather than calling MeetingBriefEditor directly in
+// the <details>) so future styling tweaks specific to the inline
+// presentation have a clean attach point.
+function PreMeetingBriefInline({ accountId }: { accountId: string }) {
+  return <MeetingBriefEditor accountId={accountId} />;
+}
+
+// 27-May Row 77 — Client Contacts inline section.
+//
+// Replaces the old stakeholders-jsonb + "Manage Contacts" link with a
+// real listing pulled from /api/v1/accounts/:id/contacts, grouped by:
+//   1. SPOC                (is_spoc=true)
+//   2. Executive Sponsor   (is_sponsor=true, OR decision_power='executive_sponsor')
+//   3. Power Users         (everything else with a defined role)
+// Each row shows Name · Title · Function · Influence/Decision Power.
+// Edit / add still happens on the dedicated /contacts page; that link
+// is preserved at the bottom.
+
+type ContactRow = {
+  id: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  function: string | null;
+  seniority: string | null;
+  decision_power: string | null;
+  is_spoc: boolean;
+  is_sponsor: boolean;
+};
+
+const DECISION_LABELS: Record<string, string> = {
+  executive_sponsor: "Executive Sponsor",
+  influencer: "Influencer",
+  champion: "Champion",
+  detractor: "Detractor",
+  unknown: "Unknown",
+};
+const FUNCTION_LABELS: Record<string, string> = {
+  procurement: "Procurement",
+  supply_chain: "Supply Chain",
+  finance: "Finance",
+  operations: "Operations",
+  it: "IT",
+  other: "Other",
+};
+
+function ClientContactsInline({ accountId }: { accountId: string }) {
+  const { data, isLoading, isError } = useQuery<{
+    items: ContactRow[];
+    total: number;
+    is_editable: boolean;
+  }>({
+    queryKey: ["contacts", accountId],
+    queryFn: () =>
+      api.get(`/api/v1/accounts/${accountId}/contacts`),
+    staleTime: 30_000,
+  });
+  const navigate = useNavigate();
+
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-card border border-beroe-card-border px-5 py-4 text-[12px] text-text-muted">
+        Loading client contacts…
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="bg-red-50 rounded-card border border-red-200 px-5 py-3 text-[12px] text-red-700">
+        Failed to load contacts. Try refreshing the page.
+      </div>
+    );
+  }
+
+  const items = data?.items ?? [];
+  const spoc = items.filter((c) => c.is_spoc);
+  const sponsor = items.filter(
+    (c) => !c.is_spoc && (c.is_sponsor || c.decision_power === "executive_sponsor"),
+  );
+  const power = items.filter(
+    (c) => !c.is_spoc && !c.is_sponsor && c.decision_power !== "executive_sponsor",
+  );
+
+  const renderContact = (c: ContactRow) => (
+    <div
+      key={c.id}
+      className="flex items-start gap-2 py-1.5 border-b border-beroe-card-border/40 last:border-b-0 text-[12px]"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-text-primary truncate">
+          {c.name}
+          {c.title && (
+            <span className="font-normal text-text-secondary">
+              {" · "}{c.title}
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-text-muted flex items-center gap-1.5 flex-wrap">
+          {c.function && (
+            <span>{FUNCTION_LABELS[c.function] ?? c.function}</span>
+          )}
+          {c.decision_power && (
+            <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 font-semibold">
+              {DECISION_LABELS[c.decision_power] ?? c.decision_power}
+            </span>
+          )}
+          {c.email && (
+            <a
+              href={`mailto:${c.email}`}
+              className="text-beroe-blue hover:underline"
+            >
+              {c.email}
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const sectionStyle = (count: number) =>
+    cn(
+      "rounded-md border px-3 py-2",
+      count > 0
+        ? "bg-white border-beroe-card-border"
+        : "bg-slate-50 border-beroe-card-border/60",
+    );
+
+  return (
+    <div className="bg-white rounded-card border border-beroe-card-border p-4">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div>
+          <div className="text-[14px] font-bold text-text-primary">
+            Client Contacts
+          </div>
+          <div className="text-[11px] text-text-muted">
+            SPOC · Executive Sponsor · Power Users · contact details
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(`/accounts/${accountId}/contacts`)}
+          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+        >
+          + Add / Edit Contacts →
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className={sectionStyle(spoc.length)}>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-700 mb-1.5">
+            ⭐ SPOC ({spoc.length})
+          </div>
+          {spoc.length === 0 ? (
+            <div className="text-[11px] text-text-muted italic">
+              No SPOC marked — mark a contact as SPOC from the Contacts page.
+            </div>
+          ) : (
+            spoc.map(renderContact)
+          )}
+        </div>
+
+        <div className={sectionStyle(sponsor.length)}>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-violet-700 mb-1.5">
+            👤 Executive Sponsor ({sponsor.length})
+          </div>
+          {sponsor.length === 0 ? (
+            <div className="text-[11px] text-text-muted italic">
+              No exec sponsor marked yet.
+            </div>
+          ) : (
+            sponsor.map(renderContact)
+          )}
+        </div>
+
+        <div className={sectionStyle(power.length)}>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-amber-700 mb-1.5">
+            ⚡ Power Users ({power.length})
+          </div>
+          {power.length === 0 ? (
+            <div className="text-[11px] text-text-muted italic">
+              No other contacts captured.
+            </div>
+          ) : (
+            <div>{power.slice(0, 6).map(renderContact)}</div>
+          )}
+          {power.length > 6 && (
+            <div className="text-[10px] italic text-text-muted mt-1">
+              + {power.length - 6} more on the Contacts page
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

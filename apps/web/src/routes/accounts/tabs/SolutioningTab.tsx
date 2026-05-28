@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { KindUploadCard } from "@/components/KindUploadCard";
+import { VpdMetricsExtractionReview } from "@/components/VpdMetricsExtractionReview";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeSolutioningSlice,
 } from "@/lib/extractionDraft";
+import type { VpdMetricsExtractionResult } from "@/types/vpd_metrics_extraction";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ENGAGEMENT_TYPE_LABELS,
@@ -152,6 +154,12 @@ export default function SolutioningTab() {
         description="Upload the latest VPD. Claude reads it and proposes values for the structured Solutioning fields below — review and save to keep them."
         emptyHint="No VPDs yet. Drag a .docx, .pdf or .txt onto the card above."
       />
+
+      {/* 27-May Row 81 — Autofill Success Metrics from VPD.
+          Calls POST /documents/:id/extract-metrics on demand against the
+          MOST RECENT VPD upload, then opens the review modal to let the
+          user pick which metrics to create on Value Tracking. */}
+      <VpdMetricsAutofillButton accountId={account.id} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
@@ -538,4 +546,87 @@ function mergeSolutioningDraft(base: Solutioning, draft: ExtractedVpd): Solution
     estimated_value_musd:
       draft.estimated_value_musd !== null ? draft.estimated_value_musd : base.estimated_value_musd,
   };
+}
+
+// ============================================================
+// 27-May Row 81 — Autofill Success Metrics from VPD
+// ============================================================
+//
+// One-button flow:
+//   1. Fetch the account's most recent VPD doc.
+//   2. POST /api/v1/documents/:id/extract-metrics → candidate metrics.
+//   3. Open the review modal — user picks rows + edits inline.
+//   4. Modal fans out POST /api/v1/accounts/:id/metrics × selected and
+//      invalidates the Value Tracking cache.
+
+function VpdMetricsAutofillButton({ accountId }: { accountId: string }) {
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<VpdMetricsExtractionResult | null>(null);
+  const [vpdName, setVpdName] = useState<string | undefined>();
+
+  const onClick = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      // Find the latest VPD doc for this account.
+      const docs = await api.get<{
+        items: { id: string; kind: string; filename: string; uploaded_at: string }[];
+      }>(`/api/v1/accounts/${accountId}/documents?kind=vpd`);
+      const latest = docs.items?.[0];
+      if (!latest) {
+        setErr(
+          "Upload a VPD first — autofill needs at least one VPD on this account.",
+        );
+        return;
+      }
+      const extracted = await api.post<VpdMetricsExtractionResult>(
+        `/api/v1/documents/${latest.id}/extract-metrics`,
+        {},
+      );
+      setVpdName(latest.filename);
+      setResult(extracted);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Extraction failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-card border border-beroe-card-border px-4 py-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[13px] font-bold text-text-primary">
+            ✨ Autofill Success Metrics from VPD
+          </div>
+          <div className="text-[11px] text-text-muted mt-0.5">
+            Claude reads the latest VPD and proposes Success Metrics — review,
+            edit, and one-click create them on Value Tracking.
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={loading}
+          className="text-[12px] px-3 py-1.5 rounded-md border border-violet-300 bg-violet-50 text-violet-800 font-semibold hover:bg-violet-100 disabled:opacity-50"
+        >
+          {loading ? "Extracting…" : "Autofill Success Metrics →"}
+        </button>
+      </div>
+      {err && (
+        <div className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+          {err}
+        </div>
+      )}
+      {result && (
+        <VpdMetricsExtractionReview
+          accountId={accountId}
+          documentName={vpdName}
+          result={result}
+          onClose={() => setResult(null)}
+        />
+      )}
+    </div>
+  );
 }

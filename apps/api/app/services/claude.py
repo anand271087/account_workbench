@@ -346,7 +346,7 @@ def summarise_document(text: str, kind: str) -> dict:
         return _stub_doc_summary(text, kind)
 
     digest = hashlib.sha256(
-        f"doc|{llm.backend_label()}|{kind}|{text}".encode("utf-8")
+        f"doc|{llm.backend_label()}|{kind}|{text}".encode()
     ).hexdigest()
     now = time.time()
     cached = _doc_cache.get(digest)
@@ -492,7 +492,7 @@ def extract_vpd_fields(text: str) -> dict:
         return _stub_vpd_extract(text)
 
     digest = hashlib.sha256(
-        f"vpd|{llm.backend_label()}|{text}".encode("utf-8")
+        f"vpd|{llm.backend_label()}|{text}".encode()
     ).hexdigest()
     now = time.time()
     cached = _doc_cache.get(digest)
@@ -692,7 +692,7 @@ def extract_cs_goals_from_vpd(text: str) -> dict:
         return _stub_cs_goals_extract(text)
 
     digest = hashlib.sha256(
-        f"vpd-goals|{llm.backend_label()}|{text}".encode("utf-8")
+        f"vpd-goals|{llm.backend_label()}|{text}".encode()
     ).hexdigest()
     now = time.time()
     cached = _doc_cache.get(digest)
@@ -716,6 +716,151 @@ def extract_cs_goals_from_vpd(text: str) -> dict:
     err_name = type(last_err).__name__ if last_err else "unknown"
     logger.warning("Claude goals extract unavailable (%s); using stub", err_name)
     return _stub_cs_goals_extract(text)
+
+
+# ============================================================
+# 27-May Row 81 — VPD → candidate Success Metrics
+# ============================================================
+
+
+def _stub_vpd_metrics_extract(text: str) -> dict:
+    """Heuristic candidate-metrics extraction for the no-key path.
+
+    Picks lines that look like measurable targets (contain %, $, time units,
+    or KPI verbs). Deterministic; useful enough for stakeholder demos."""
+    import re as _re
+
+    body = text or ""
+    candidates: list[dict] = []
+    seen: set[str] = set()
+    # Lines that include a target like "$2M", "80%", "12 months", "by Q4"
+    target_re = _re.compile(
+        r"(\$\s?\d+(?:\.\d+)?\s?[MmKk]?|\d+\s?%|\d+\s?(?:months?|days?|weeks?|quarters?)|q[1-4]\b)",
+        _re.IGNORECASE,
+    )
+    for raw in body.splitlines():
+        line = raw.strip().lstrip("-•·*").strip()
+        if not line or len(line) < 10 or len(line) > 240:
+            continue
+        m = target_re.search(line)
+        if not m:
+            continue
+        key = line.lower()[:80]
+        if key in seen:
+            continue
+        seen.add(key)
+        target = m.group(0).strip()
+        # Heuristic: % / $ / numbers → quantitative; else qualitative
+        metric_type = "quantitative" if _re.search(r"[\d%$]", target) else "qualitative"
+        candidates.append(
+            {
+                "name": line[:200],
+                "metric_type": metric_type,
+                "target_value": target[:200],
+                "owner": None,
+                "confidence": "low",
+                "rationale": "Heuristic extract — line carried a target token.",
+            }
+        )
+        if len(candidates) >= 8:
+            break
+    return {"metrics": candidates, "is_stub": True}
+
+
+def _real_vpd_metrics_extract(text: str) -> dict:
+    """One LLM call → structured candidate success metrics."""
+    raw = llm.chat_text(
+        max_tokens=1800,
+        system=(
+            "You extract candidate Success Metrics from a Beroe "
+            "Value-Proposition Deck (VPD).\n\n"
+            "Output ONLY a JSON object — no markdown, no fences. Schema:\n"
+            "{\n"
+            "  \"metrics\": [\n"
+            "    {\n"
+            "      \"name\": <short metric label, ≤180 chars>,\n"
+            "      \"metric_type\": <quantitative | qualitative>,\n"
+            "      \"target_value\": <e.g. '$2M' | '80%' | '12 months' | 'High' | null>,\n"
+            "      \"owner\": <named person if explicitly assigned, else null>,\n"
+            "      \"confidence\": <high | medium | low>,\n"
+            "      \"rationale\": <≤2 sentences explaining why this is a metric>\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "Rules:\n"
+            "  - A success metric is something measurable that signals delivery\n"
+            "    (savings $, adoption %, supplier-count cuts, NPS, time-to-value).\n"
+            "  - quantitative = numeric / %/$/units; qualitative = ordinal (High/Med/Low).\n"
+            "  - Skip activity-level items ('we will hold weekly calls'). Cap at 8.\n"
+            "  - When the deck says 'baseline X → target Y', use Y as target_value."
+        ),
+        user_content=f"VPD TEXT:\n{_truncate_for_prompt(text)}",
+    )
+    cleaned = _JSON_FENCE_RE.sub("", raw).strip()
+    m = _JSON_OBJECT_RE.search(cleaned)
+    candidate = m.group(0) if m else cleaned
+    try:
+        parsed = json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        return _stub_vpd_metrics_extract(text) | {"is_stub": False}
+
+    out_metrics: list[dict] = []
+    for it in (parsed.get("metrics") or [])[:8]:
+        if not isinstance(it, dict):
+            continue
+        name = (it.get("name") or "").strip()[:200]
+        if not name:
+            continue
+        mt = (it.get("metric_type") or "").strip()
+        if mt not in ("quantitative", "qualitative"):
+            mt = "quantitative"
+        out_metrics.append(
+            {
+                "name": name,
+                "metric_type": mt,
+                "target_value": (str(it.get("target_value"))[:200]) if it.get("target_value") else None,
+                "owner": (str(it.get("owner"))[:200]) if it.get("owner") else None,
+                "confidence": it.get("confidence") if it.get("confidence") in ("high", "medium", "low") else None,
+                "rationale": (str(it.get("rationale"))[:600]) if it.get("rationale") else None,
+            }
+        )
+    return {"metrics": out_metrics, "is_stub": False}
+
+
+def extract_metrics_from_vpd(text: str) -> dict:
+    """Public entry point. Stub-or-LLM, cached 24h. Same shape as
+    extract_cs_goals_from_vpd so the route + frontend mirror cleanly."""
+    if not _llm_ready():
+        return _stub_vpd_metrics_extract(text)
+
+    digest = hashlib.sha256(
+        f"vpd-metrics|{llm.backend_label()}|{text}".encode()
+    ).hexdigest()
+    now = time.time()
+    cached = _doc_cache.get(digest)
+    if cached and (now - cached[0]) < _REAL_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    last_err: BaseException | None = None
+    for attempt in (1, 2):
+        try:
+            r = _real_vpd_metrics_extract(text)
+            _doc_cache[digest] = (now, r)
+            return r
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if attempt == 1 and _is_transient_anthropic_error(e):
+                logger.warning(
+                    "Claude metrics extract transient error %s — retrying",
+                    type(e).__name__,
+                )
+                time.sleep(0.8)
+                continue
+            break
+
+    err_name = type(last_err).__name__ if last_err else "unknown"
+    logger.warning("Claude metrics extract unavailable (%s); using stub", err_name)
+    return _stub_vpd_metrics_extract(text)
 
 
 def aggregate_account_summary(per_doc_summaries: list[str]) -> str:
