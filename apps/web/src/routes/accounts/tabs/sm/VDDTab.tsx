@@ -219,17 +219,10 @@ export default function VDDTab() {
         </div>
       </Card>
 
-      {/* Attribution rollup */}
-      <Card>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-2">
-          CSM-attributed value rollup
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <RollupTile label="Identified" value={totals.identified} tone="slate" />
-          <RollupTile label="Committed" value={totals.committed} tone="amber" />
-          <RollupTile label="Implemented" value={totals.implemented} tone="green" />
-        </div>
-      </Card>
+      {/* 28-May — standalone rollup card removed. Per prototype line
+          3382-3392 the CSM-attribution rollup is injected INSIDE
+          Section 4 ("Value delivered") above the per-initiative list,
+          and only when at least one of the 3 totals is > 0. */}
 
       {/* Section 1 — Client strategic priorities */}
       <Card>
@@ -266,21 +259,21 @@ export default function VDDTab() {
           <LeverFramework
             num={1}
             name="Cost"
-            tone="bg-green-50 border-green-200 text-green-900"
+            color="#6EC457"
             range="Typical 3–12% of category spend"
             description="Negotiation leverage, demand consolidation, e-auctions, supplier rationalisation, contract terms."
           />
           <LeverFramework
             num={2}
             name="Risk"
-            tone="bg-amber-50 border-amber-200 text-amber-900"
+            color="#F0BC41"
             range="Avoided-cost basis · 1–5% of spend at risk"
             description="Supplier health monitoring, alternate-source qualification, geo-risk hedging, compliance exposure."
           />
           <LeverFramework
             num={3}
             name="Adoption"
-            tone="bg-blue-50 border-blue-200 text-blue-900"
+            color="#4A00F8"
             range="Indirect · 5–15% productivity uplift on covered spend"
             description="Platform adoption, super-user enablement, intake compliance, self-serve insights."
           />
@@ -300,12 +293,16 @@ export default function VDDTab() {
         />
       </Card>
 
-      {/* Section 4 — Value delivered */}
+      {/* Section 4 — Value delivered — CSM Attributed.
+          Verbatim port of prototype line 3366-3400: the CSM Attribution
+          rollup is injected ABOVE the per-initiative list, only when at
+          least one of the 3 totals is > 0. */}
       <Card>
         <SectionHeader
-          title="Value delivered"
+          title="Value delivered — CSM attributed"
           hint="$Identified / $Committed / $Implemented per initiative"
         />
+        <CsmAttributionRollup totals={totals} />
         <ValueDeliveredList
           items={form.value_delivered}
           editable={editable}
@@ -457,27 +454,52 @@ function labelForVddField(field: string | null): string {
   return field ?? "change";
 }
 
+/** Lever-framework tile — Lever 1 (Cost) / 2 (Risk) / 3 (Adoption).
+ *  Brand palette only:
+ *    Lever 1 → Risk Green #6EC457
+ *    Lever 2 → Risk Amber #F0BC41
+ *    Lever 3 → Indigo     #4A00F8
+ *  Inline styles so we never drift back to Tailwind off-palette
+ *  utilities (green-50 / blue-50 etc.) — see feedback memory. */
 function LeverFramework({
   num,
   name,
-  tone,
+  color,
   range,
   description,
 }: {
   num: number;
   name: string;
-  tone: string;
+  color: string;
   range: string;
   description: string;
 }) {
   return (
-    <div className={cn("rounded-lg border px-3 py-2.5", tone)}>
-      <div className="text-[10px] uppercase tracking-wider font-bold opacity-80">
+    <div
+      className="rounded-lg px-3 py-2.5"
+      style={{
+        background: `${color}10`,
+        border: `1px solid ${color}40`,
+      }}
+    >
+      <div
+        className="text-[10px] uppercase font-bold"
+        style={{ color, letterSpacing: "0.05em" }}
+      >
         Lever {num}
       </div>
-      <div className="text-[14px] font-bold mt-0.5">{name}</div>
-      <div className="text-[11px] font-semibold mt-1 opacity-90">{range}</div>
-      <div className="text-[11px] mt-1 leading-snug opacity-80">{description}</div>
+      <div className="text-[14px] font-bold mt-0.5" style={{ color }}>
+        {name}
+      </div>
+      <div className="text-[11px] font-semibold mt-1" style={{ color }}>
+        {range}
+      </div>
+      <div
+        className="text-[11px] mt-1 leading-snug"
+        style={{ color: "#001137" }}
+      >
+        {description}
+      </div>
     </div>
   );
 }
@@ -504,35 +526,80 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Section heading — Aqua `#35E1D4`, UPPERCASE, 0.05em letter-spacing.
+ *  Verbatim port of prototype line 3397. Aqua is already on the Beroe
+ *  brand palette (page 35) so no substitution needed. */
 function SectionHeader({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="mb-3">
-      <div className="text-[13px] font-semibold text-text-primary">{title}</div>
-      {hint && <div className="text-[11px] text-text-muted mt-0.5">{hint}</div>}
+      <div
+        className="text-[11px] font-bold uppercase"
+        style={{ color: "#35E1D4", letterSpacing: "0.05em" }}
+      >
+        {title}
+      </div>
+      {hint && (
+        <div className="text-[11px] text-text-muted mt-0.5">{hint}</div>
+      )}
     </div>
   );
 }
 
-function RollupTile({
+/** CSM Attribution Summary rollup — verbatim port of prototype line
+ *  3382-3392. Green-tinted box with "CSM Attribution Summary" title in
+ *  Risk Green, 3-column grid with per-value colours from the brand
+ *  palette:
+ *    Identified  → Risk Amber #F0BC41  (was prototype #EF9637)
+ *    Committed   → Indigo     #4A00F8  (on brand)
+ *    Implemented → Risk Green #6EC457  (was prototype #40CC8F)
+ *  Only renders when at least one total is > 0 (prototype's
+ *  `if(idSum>0)` gate). */
+function CsmAttributionRollup({
+  totals,
+}: {
+  totals: { identified: number; committed: number; implemented: number };
+}) {
+  const hasAny =
+    totals.identified > 0 || totals.committed > 0 || totals.implemented > 0;
+  if (!hasAny) return null;
+  return (
+    <div
+      className="rounded-lg px-3.5 py-3 mb-3"
+      style={{
+        background: "#f0fdf4",
+        border: "1.5px solid #6EC45740",
+      }}
+    >
+      <div
+        className="text-[10px] font-bold uppercase mb-2"
+        style={{ color: "#6EC457", letterSpacing: "0.05em" }}
+      >
+        CSM Attribution Summary — from initiative stage tracking
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <RollupValue label="Identified" value={totals.identified} color="#F0BC41" />
+        <RollupValue label="Committed" value={totals.committed} color="#4A00F8" />
+        <RollupValue label="Implemented" value={totals.implemented} color="#6EC457" />
+      </div>
+    </div>
+  );
+}
+
+function RollupValue({
   label,
   value,
-  tone,
+  color,
 }: {
   label: string;
   value: number;
-  tone: "slate" | "amber" | "green";
+  color: string;
 }) {
-  const toneClass = {
-    slate: "bg-slate-50 border-slate-200 text-slate-800",
-    amber: "bg-amber-50 border-amber-200 text-amber-800",
-    green: "bg-green-50 border-green-200 text-green-800",
-  }[tone];
   return (
-    <div className={cn("rounded-md border p-3", toneClass)}>
-      <div className="text-[10px] uppercase tracking-wider font-semibold opacity-80">
-        {label}
+    <div className="text-center">
+      <div className="text-[18px] font-extrabold" style={{ color }}>
+        {fmtMusd(value)}
       </div>
-      <div className="text-xl font-bold mt-1">{fmtMusd(value)}</div>
+      <div className="text-[10px] text-text-muted mt-0.5">{label}</div>
     </div>
   );
 }
