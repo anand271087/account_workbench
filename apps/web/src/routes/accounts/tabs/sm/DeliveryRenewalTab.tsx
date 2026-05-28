@@ -186,16 +186,20 @@ export default function DeliveryRenewalTab() {
         )}
       </div>
 
-      {/* Red-flag banner — verbatim port of prototype line 3518-3525. */}
+      {/* Red-flag banner — verbatim port of prototype line 3518-3525.
+          First card after the heading, 2px Risk Red border, dynamic
+          reason list pulled from the open red_flags + "Fix Track 1
+          first." tagline. */}
       {hasRedFlag && (
         <div
-          className="rounded-card p-3 flex items-start gap-2.5"
+          className="rounded-card flex items-start gap-2.5"
           style={{
             background: `${RISK_RED}10`,
             border: `2px solid ${RISK_RED}`,
+            padding: "12px 16px",
           }}
         >
-          <span className="text-[16px]">🚨</span>
+          <span className="text-[16px] leading-none mt-0.5">🚨</span>
           <div className="flex-1">
             <div
               className="text-[13px] font-bold"
@@ -203,8 +207,14 @@ export default function DeliveryRenewalTab() {
             >
               Red Flag — Track 2 Paused
             </div>
-            <div className="text-[11px]" style={{ color: "#7F1D1D" }}>
-              Resolve open red flag(s) before resuming the expand pipeline.
+            <div
+              className="text-[11px] leading-snug mt-0.5"
+              style={{ color: "#7F1D1D" }}
+            >
+              {form.red_flags
+                .filter((f) => f.resolved_at === null)
+                .map((f) => `${FLAG_LABELS[f.type]}.`)
+                .join(" ")}{" "}
               Fix Track 1 first.
             </div>
           </div>
