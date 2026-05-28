@@ -35,6 +35,13 @@ export function useUnsavedChangesGuard(opts: {
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  // 28-May — `isSaving` also drives the click-nav guard now. If the user
+  // hit Save and then clicked a tab before the mutation resolved, the
+  // guard would intercept because dirty is still true mid-save. Let the
+  // click go through when a save is in flight; the mutation completes
+  // in the background regardless of where the user navigates.
+  const isSavingRef = useRef(!!isSaving);
+  isSavingRef.current = !!isSaving;
 
   // 1) Browser-level — refresh, close, hard nav.
   useEffect(() => {
@@ -52,6 +59,8 @@ export function useUnsavedChangesGuard(opts: {
   useEffect(() => {
     const onClickCapture = (e: MouseEvent) => {
       if (!dirtyRef.current) return;
+      // Save is in flight → user already committed; let nav through.
+      if (isSavingRef.current) return;
       // Modifier keys → let the browser handle (open in new tab etc.).
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       if (e.button !== 0) return;
