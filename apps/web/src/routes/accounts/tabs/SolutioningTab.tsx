@@ -76,6 +76,27 @@ export default function SolutioningTab() {
     onError: (e: ApiError) => setSavingError(e.message),
   });
 
+  // 28-May — In the merged Pre-Sales & Solutioning tab, Pre-Sales is
+  // often left with a dirty auto-applied MoM-extraction draft the user
+  // never sees. When they click Save on Solutioning + then navigate
+  // away, Pre-Sales' guard fires unexpectedly. Listen for a companion
+  // save signal from the Pre-Sales side and a matching dispatch from
+  // our own save so the two forms stay in lockstep.
+  useEffect(() => {
+    const onCompanion = (e: Event) => {
+      const detail = (e as CustomEvent<{ accountId: string }>).detail;
+      if (!detail || detail.accountId !== account.id) return;
+      if (!form || !data || saveMutation.isPending) return;
+      const changes = diff(form, data);
+      if (Object.keys(changes).length > 0) {
+        saveMutation.mutate(changes);
+      }
+    };
+    window.addEventListener("kit:save-companion", onCompanion);
+    return () => window.removeEventListener("kit:save-companion", onCompanion);
+    // form + data are read inside the handler at call-time; deps cover them.
+  }, [form, data, account.id, saveMutation]);
+
   // Sales Hand-off lock — separate POST so the UI can render a clear
   // "before/after locked" state independent of the regular save flow.
   const [lockError, setLockError] = useState<string | null>(null);
@@ -104,6 +125,13 @@ export default function SolutioningTab() {
 
   const saveDirty = () => {
     if (form && data) saveMutation.mutate(diff(form, data));
+    // 28-May — also poke Pre-Sales (sibling in the merged tab) to save
+    // its dirty draft. Cross-save event keeps both forms in lockstep
+    // so the user never sees a stuck dirty-PreSales after clicking
+    // Solutioning's Save button.
+    window.dispatchEvent(
+      new CustomEvent("kit:save-companion", { detail: { accountId: account.id } }),
+    );
   };
   const guard = useUnsavedChangesGuard({
     dirty,

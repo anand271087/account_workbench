@@ -113,7 +113,29 @@ export default function PreSalesTab() {
   // Unsaved-changes guard — beforeunload + in-app nav intercept + Cmd/S.
   const saveDirty = () => {
     if (form && data) saveMutation.mutate(diff(form, data));
+    // 28-May — cross-save event to keep Solutioning (sibling in the
+    // merged tab) in lockstep. See matching listener in SolutioningTab.
+    window.dispatchEvent(
+      new CustomEvent("kit:save-companion", { detail: { accountId: account.id } }),
+    );
   };
+
+  // 28-May — Listen for companion save signal (Solutioning saved →
+  // we save ourselves if dirty). Both directions wired so either
+  // tab's Save button saves the other.
+  useEffect(() => {
+    const onCompanion = (e: Event) => {
+      const detail = (e as CustomEvent<{ accountId: string }>).detail;
+      if (!detail || detail.accountId !== account.id) return;
+      if (!form || !data || saveMutation.isPending) return;
+      const changes = diff(form, data);
+      if (Object.keys(changes).length > 0) {
+        saveMutation.mutate(changes);
+      }
+    };
+    window.addEventListener("kit:save-companion", onCompanion);
+    return () => window.removeEventListener("kit:save-companion", onCompanion);
+  }, [form, data, account.id, saveMutation]);
   const guard = useUnsavedChangesGuard({
     dirty,
     isSaving: saveMutation.isPending,
