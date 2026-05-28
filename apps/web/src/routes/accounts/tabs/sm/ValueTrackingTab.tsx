@@ -87,6 +87,12 @@ export default function ValueTrackingTab() {
       {/* Status summary strip */}
       {metrics.length > 0 && <StatusSummary metrics={metrics} />}
 
+      {/* 28-May — "Value Delivered" surfaces moved to the top so the
+          tab opens with the headline value first (matches prototype
+          bMetricsPane line 2964-2979 order: Value Delivered card →
+          metric cards). */}
+      <OverallValueDelivered accountId={account.id} />
+
       {/* Prototype line 2964-2979 — overall progress bar of the primary
           quantitative metric. */}
       {metrics.length > 0 && (
@@ -135,11 +141,6 @@ export default function ValueTrackingTab() {
           />
         ))}
       </div>
-
-      {/* M22 Row 52 — VDD 3-bucket value rollup. Kept as a supplementary
-          footer card; primary value tracking is the prototype-style cards
-          above. */}
-      <OverallValueDelivered accountId={account.id} />
 
       {showCreate && (
         <CreateMetricModal
