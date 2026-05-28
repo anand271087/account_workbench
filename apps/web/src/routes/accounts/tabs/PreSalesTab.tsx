@@ -128,6 +128,10 @@ export default function PreSalesTab() {
       const detail = (e as CustomEvent<{ accountId: string }>).detail;
       if (!detail || detail.accountId !== account.id) return;
       if (!form || !data || saveMutation.isPending) return;
+      // 28-May — respect lock state. If Pre-Sales engagement is
+      // read-only for this user (e.g. account signed + locked), skip
+      // the companion save; the server would just 403.
+      if (!form.is_editable) return;
       const changes = diff(form, data);
       if (Object.keys(changes).length > 0) {
         saveMutation.mutate(changes);

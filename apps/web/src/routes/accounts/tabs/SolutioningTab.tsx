@@ -87,6 +87,11 @@ export default function SolutioningTab() {
       const detail = (e as CustomEvent<{ accountId: string }>).detail;
       if (!detail || detail.accountId !== account.id) return;
       if (!form || !data || saveMutation.isPending) return;
+      // 28-May — must respect lock: if Solutioning is locked (or the
+      // role can't write), don't auto-fire the companion save — the
+      // server would just 409 with the "locked" error. The dirty
+      // draft stays in-memory until the user explicitly unlocks.
+      if (!form.is_editable) return;
       const changes = diff(form, data);
       if (Object.keys(changes).length > 0) {
         saveMutation.mutate(changes);
