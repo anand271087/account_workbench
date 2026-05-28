@@ -47,6 +47,27 @@ const CATEGORY_OPTIONS: CSGoalCategory[] = [
   "other",
 ];
 
+/** Per-category icon + colour. Verbatim port of prototype line
+ *  3084-3090 (`GOAL_CATS`), with the two off-brand hex values mapped
+ *  to the Beroe brand palette:
+ *    cost_savings        prototype #40CC8F → Risk Green  #6EC457
+ *    base_rationalization prototype #4A00F8 → Indigo      #4A00F8 (on brand)
+ *    risk_mitigation     prototype #EF9637 → Risk Amber  #F0BC41
+ *    adoption            prototype #C344C7 → Fuscia      #C344C7 (on brand)
+ *    other               prototype #64748b → Midnight 60% #00113799
+ *  Saves repeating the icon emoji + colour map in three render sites
+ *  (row chip, card border, alignment dot palette anchor). */
+export const CATEGORY_META: Record<
+  CSGoalCategory,
+  { icon: string; color: string }
+> = {
+  cost_savings: { icon: "💰", color: "#6EC457" },
+  base_rationalization: { icon: "🔗", color: "#4A00F8" },
+  risk_mitigation: { icon: "🛡", color: "#F0BC41" },
+  adoption: { icon: "📊", color: "#C344C7" },
+  other: { icon: "🎯", color: "#001137" },
+};
+
 export default function GoalsTab() {
   const account = useAccountFromLayout();
   const qc = useQueryClient();
@@ -161,35 +182,47 @@ function GoalCard({
 }) {
   void accountId;
   const isDeleted = !!goal.deleted_at;
+  const meta = CATEGORY_META[goal.category] ?? CATEGORY_META.other;
   return (
     <div
       className={cn(
-        "bg-white rounded-card border overflow-hidden",
-        isDeleted ? "border-slate-300 opacity-60" : "border-beroe-card-border",
+        "bg-white rounded-card overflow-hidden border",
+        isDeleted ? "opacity-60" : "",
       )}
+      style={{
+        borderColor: "#e4eaf6",
+        borderLeft: `3px solid ${isDeleted ? "#cbd5e1" : meta.color}`,
+      }}
     >
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors"
       >
+        <span className="text-[14px] flex-shrink-0">{meta.icon}</span>
         <AlignmentDot status={goal.alignment_status} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold text-text-primary truncate">
             {goal.title}
             {isDeleted && (
-              <span className="ml-2 text-[11px] font-normal text-red-700">
+              <span className="ml-2 text-[11px] font-normal" style={{ color: "#CF4548" }}>
                 (deleted)
               </span>
             )}
           </div>
-          <div className="text-[11px] text-text-muted truncate">
-            <span className="inline-block px-1.5 py-0.5 mr-2 rounded-full bg-slate-100 text-text-secondary font-semibold">
+          <div className="text-[11px] text-text-muted truncate flex items-center gap-1.5 flex-wrap">
+            <span
+              className="inline-block px-1.5 py-0.5 rounded-full font-bold"
+              style={{
+                background: `${meta.color}15`,
+                color: meta.color,
+              }}
+            >
               {CATEGORY_LABELS[goal.category]}
             </span>
-            {ALIGNMENT_LABELS[goal.alignment_status]}
-            {goal.target_value && <> · target: {goal.target_value}</>}
-            {goal.target_date && <> · by {goal.target_date}</>}
-            {goal.owner && <> · {goal.owner}</>}
+            <span>{ALIGNMENT_LABELS[goal.alignment_status]}</span>
+            {goal.target_value && <span>· target: {goal.target_value}</span>}
+            {goal.target_date && <span>· by {goal.target_date}</span>}
+            {goal.owner && <span>· {goal.owner}</span>}
           </div>
         </div>
         <span className="text-text-muted text-xs">{expanded ? "▼" : "▸"}</span>
@@ -199,17 +232,20 @@ function GoalCard({
   );
 }
 
+/** Alignment dot — brand RAG (Risk Green #6EC457 · Risk Amber #F0BC41 ·
+ *  Midnight 60% #00113799). No Tailwind utility colours. */
 function AlignmentDot({ status }: { status: CSGoalAlignment }) {
   const color =
     status === "aligned"
-      ? "bg-green-500"
+      ? "#6EC457"
       : status === "partial"
-        ? "bg-amber-400"
-        : "bg-slate-300";
+        ? "#F0BC41"
+        : "#cbd5e1";
   return (
     <span
       title={ALIGNMENT_LABELS[status]}
-      className={cn("inline-block w-3 h-3 rounded-full flex-shrink-0", color)}
+      className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+      style={{ background: color }}
     />
   );
 }
@@ -430,23 +466,37 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
       {/* History */}
       <HistoryFeed entries={form.history} />
 
-      {/* Sticky save bar */}
+      {/* Sticky save bar — Risk Amber tint when dirty (brand palette). */}
       {editable && (
         <div
-          className={cn(
-            "sticky bottom-0 -mx-4 px-4 py-3 flex items-center gap-3 border-t z-30 transition-colors",
+          className="sticky bottom-0 -mx-4 px-4 py-3 flex items-center gap-3 border-t z-30 transition-colors"
+          style={
             dirty
-              ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
-              : "bg-white border-beroe-card-border",
-          )}
+              ? {
+                  background: "#F0BC4115",
+                  borderColor: "#F0BC4140",
+                  boxShadow: "0 -4px 12px rgba(0,0,0,0.05)",
+                }
+              : { background: "#fff", borderColor: "#e4eaf6" }
+          }
         >
           {savingError && (
-            <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+            <span
+              className="text-xs rounded-lg px-3 py-1"
+              style={{
+                color: "#CF4548",
+                background: "#CF454810",
+                border: "1px solid #CF454830",
+              }}
+            >
               {savingError}
             </span>
           )}
           {!savingError && dirty && (
-            <span className="text-xs text-amber-800 font-bold">
+            <span
+              className="text-xs font-bold"
+              style={{ color: "#854F0B" }}
+            >
               Unsaved changes
             </span>
           )}
@@ -462,7 +512,8 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
               del.mutate(reason.trim());
             }}
             disabled={del.isPending}
-            className="px-3 py-1.5 rounded-lg text-xs border border-red-200 text-red-700 bg-white disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg text-xs bg-white disabled:opacity-50"
+            style={{ color: "#CF4548", border: "1px solid #CF454840" }}
           >
             {del.isPending ? "Deleting…" : "Delete goal"}
           </button>
@@ -476,7 +527,8 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
           <button
             onClick={() => save.mutate(diff(form, goal))}
             disabled={!dirty || save.isPending}
-            className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
+            className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
+            style={{ background: "#4A00F8" }}
           >
             {save.isPending ? "Saving…" : "Save"}
           </button>
@@ -519,7 +571,10 @@ function PhaseEditor({
           {label}
         </span>
         {complete && (
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-bold">
+          <span
+            className="text-[11px] px-2 py-0.5 rounded-full font-bold"
+            style={{ background: "#6EC45720", color: "#1d6b35" }}
+          >
             ✓ Complete
           </span>
         )}
@@ -544,7 +599,14 @@ function PhaseEditor({
       </summary>
       <div className="px-4 pb-4 pt-2">
         {!!missing && (
-          <div className="mb-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+          <div
+            className="mb-2 text-[11px] rounded-md px-2.5 py-1.5"
+            style={{
+              color: "#854F0B",
+              background: "#F0BC4115",
+              border: "1px solid #F0BC4140",
+            }}
+          >
             ⚠ Cannot mark complete yet — {missing}
           </div>
         )}

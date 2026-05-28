@@ -1,11 +1,14 @@
 // M19 — Success Contract + Goals + Initiatives.
 //
-// Three-panel layout:
-//   1. Success Contract card (3-lock)         — new in M19
-//   2. (existing GoalsTab content)            — reused from M15 below the contract
+// 28-May — restyled to match prototype/beroe_awb_v20.html
+// bContractAndGoals (line 3041-3268) and Beroe brand palette.
 //
-// The /goals top-level tab redirects here so this is the single source of
-// truth going forward.
+// Layout:
+//   1. SuccessContractCard — locked or 3-lock draft editor (prototype
+//      line 3115-3170). Auto-draft banner included inside the card.
+//   2. Goals & Initiatives section — Aqua uppercase heading matching
+//      VDD's section style (prototype line 3173-3174). GoalsTab content
+//      below.
 
 import { useAuth } from "@/components/AuthProvider";
 import { SuccessContractCard } from "@/components/SuccessContractCard";
@@ -21,10 +24,16 @@ export default function ContractGoalsTab() {
     <div className="space-y-4">
       <SuccessContractCard accountId={account.id} isAdmin={isAdmin} />
 
-      {/* Goals & Initiatives — the M15 view, kept as-is for now. */}
+      {/* Goals & Initiatives — Aqua section heading matches the VDD
+          tab's heading vocabulary so all SM tabs share one visual
+          rhythm. Heading colour ported from prototype line 3397
+          (#35E1D4 Aqua, already on the Beroe brand palette). */}
       <div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-2">
-          Goals & Initiatives
+        <div
+          className="text-[11px] font-bold uppercase mb-2"
+          style={{ color: "#35E1D4", letterSpacing: "0.05em" }}
+        >
+          Goals &amp; Initiatives
         </div>
         <GoalsTab />
       </div>
