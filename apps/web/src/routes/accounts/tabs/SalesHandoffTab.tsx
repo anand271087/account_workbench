@@ -147,26 +147,90 @@ export default function SalesHandoffTab() {
 
   return (
     <div className="space-y-4">
-      {/* 27-May Row 83 — "Received from Solutioning · DATE" card at top.
-          Amber, same pattern as the Pre-Sales→Solutioning card. Renders
-          only when sh_value_received_at is set (i.e. Solutioning has
-          locked + passed the value definition). */}
+      {/* 28-May — "Received from Solutioning" magenta pill (prototype
+          line 5972-5975). Sales' team colour is #C344C7 (magenta).
+          Renders only when sh_value_received_at is set. */}
       {form.sh_value_received_at && (
-        <div className="bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 flex items-center gap-2.5">
-          <span className="text-[18px]">📥</span>
-          <div className="text-[12px] text-amber-900">
-            <b>Received from Solutioning · </b>
+        <div
+          className="rounded-card px-3 py-1.5 flex items-center gap-2"
+          style={{
+            background: "#C344C710",
+            border: "1px solid #C344C730",
+          }}
+        >
+          <span className="text-[13px]">📥</span>
+          <span
+            className="text-[11px] font-semibold"
+            style={{ color: "#C344C7" }}
+          >
+            Received from Solutioning ·{" "}
             {new Date(form.sh_value_received_at).toLocaleDateString("en-GB", {
               day: "numeric",
               month: "short",
               year: "numeric",
             })}
-          </div>
+          </span>
         </div>
       )}
 
-      {/* ---------- Card 1: Sales Hand-off context ---------- */}
-      <Section title="Sales Hand-off & Signing">
+      {/* 28-May — Outer C) Sales Hand-off card (prototype line 5977-6034).
+          Magenta "C" badge + "Sales" team pill. Opacity dims when
+          locked at signing (gate signed & not unlocked). */}
+      <div
+        className={cn(
+          "bg-white rounded-card border border-beroe-card-border p-5",
+          gate?.gate_signed && !gate?.gate_unlocked && "opacity-[0.85]",
+        )}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span
+            className="w-[22px] h-[22px] rounded-md text-white text-[10px] font-extrabold flex items-center justify-center flex-shrink-0"
+            style={{ background: "#C344C7" }}
+          >
+            C
+          </span>
+          <span className="text-[14px] font-bold text-text-primary">
+            Sales Hand-off
+          </span>
+          <span
+            className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+            style={{
+              background: "#C344C715",
+              color: "#C344C7",
+              border: "1px solid #C344C730",
+            }}
+          >
+            Sales
+          </span>
+        </div>
+
+        {/* "Before starting" blue checklist banner (prototype line 5981-5983)
+            when NOT yet locked at signing. When locked, surface the
+            "Locked at signing on DATE" muted hint instead. */}
+        {gate?.gate_signed && !gate?.gate_unlocked ? (
+          <div className="text-[10px] text-text-muted mb-2 flex items-center gap-1.5">
+            🔒 Locked at signing
+            {gate.gate_signed_date && (
+              <> · {new Date(gate.gate_signed_date).toLocaleDateString()}</>
+            )}
+          </div>
+        ) : (
+          <div
+            className="rounded-lg px-3.5 py-2.5 mb-3 text-[11px] leading-relaxed"
+            style={{
+              background: "#EBF3FB",
+              border: "1px solid #4A00F830",
+              color: "#185FA5",
+            }}
+          >
+            <b>Before starting</b> — make sure you have from Sales: (1)
+            contract value and ACV, (2) at least one named stakeholder,
+            (3) the agreed category list, (4) a stated savings target or
+            success metric. Missing any of these? Resolve with Sales
+            before proceeding.
+          </div>
+        )}
+
         <p className="text-xs text-text-muted mb-3">
           Continues from the Solutioning lock. Sales validates the value
           definition, fills in the engagement timeline, and notes any
@@ -210,54 +274,59 @@ export default function SalesHandoffTab() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Sales validation">
-            <select
-              value={form.sh_value_validation ?? ""}
+        {/* GROUP 1 — Value Definition Validation (prototype line 5985). */}
+        <Section variant="group" title="Value Definition Validation">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Sales validation">
+              <select
+                value={form.sh_value_validation ?? ""}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    sh_value_validation: (e.target.value || null) as ShValidation | null,
+                  })
+                }
+                disabled={!editable}
+                className={inputCls(editable)}
+              >
+                <option value="">— Select —</option>
+                {SH_VALIDATION_OPTIONS.map((v) => (
+                  <option key={v} value={v}>{SH_VALIDATION_LABELS[v]}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Stakeholder sign-off">
+              <input
+                type="text"
+                maxLength={600}
+                value={form.sh_stakeholder_signoff ?? ""}
+                placeholder="Who on the client side approved"
+                onChange={(e) =>
+                  setForm({ ...form, sh_stakeholder_signoff: e.target.value || null })
+                }
+                disabled={!editable}
+                className={inputCls(editable)}
+              />
+            </Field>
+          </div>
+
+          <Field label="Validation notes">
+            <textarea
+              rows={3}
+              maxLength={4000}
+              value={form.sh_validation_notes ?? ""}
+              placeholder="Anything Sales pushed back on or refined."
               onChange={(e) =>
-                setForm({
-                  ...form,
-                  sh_value_validation: (e.target.value || null) as ShValidation | null,
-                })
+                setForm({ ...form, sh_validation_notes: e.target.value || null })
               }
               disabled={!editable}
-              className={inputCls(editable)}
-            >
-              <option value="">— Select —</option>
-              {SH_VALIDATION_OPTIONS.map((v) => (
-                <option key={v} value={v}>{SH_VALIDATION_LABELS[v]}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Stakeholder sign-off">
-            <input
-              type="text"
-              maxLength={600}
-              value={form.sh_stakeholder_signoff ?? ""}
-              placeholder="Who on the client side approved"
-              onChange={(e) =>
-                setForm({ ...form, sh_stakeholder_signoff: e.target.value || null })
-              }
-              disabled={!editable}
-              className={inputCls(editable)}
+              className={textareaCls(editable)}
             />
           </Field>
-        </div>
+        </Section>
 
-        <Field label="Validation notes">
-          <textarea
-            rows={3}
-            maxLength={4000}
-            value={form.sh_validation_notes ?? ""}
-            placeholder="Anything Sales pushed back on or refined."
-            onChange={(e) =>
-              setForm({ ...form, sh_validation_notes: e.target.value || null })
-            }
-            disabled={!editable}
-            className={textareaCls(editable)}
-          />
-        </Field>
-
+        {/* GROUP 2 — Engagement Timeline (prototype line 6015). */}
+        <Section variant="group" title="Engagement Timeline">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Go-live date">
             <input
@@ -325,6 +394,8 @@ export default function SalesHandoffTab() {
           />
         </Field>
 
+        </Section>
+
         {/* Sticky save bar for sh_* fields */}
         {editable && (
           <div
@@ -365,7 +436,7 @@ export default function SalesHandoffTab() {
             </button>
           </div>
         )}
-      </Section>
+      </div>
 
       {/* ---------- Card 2: CLIENT SIGNED stage gate ---------- */}
       <SigningGateCard
@@ -839,10 +910,32 @@ function HandoverQualityCheck({
 function Section({
   title,
   children,
+  variant = "card",
 }: {
   title: string;
   children: React.ReactNode;
+  /**
+   * "card"  → white card with border (legacy default).
+   * "group" → 28-May port of prototype line 5985-format. UPPERCASE
+   *           grey-blue label, no card border. Used inside the outer
+   *           C) Sales Hand-off card to mirror the prototype's grouped
+   *           layout.
+   */
+  variant?: "card" | "group";
 }) {
+  if (variant === "group") {
+    return (
+      <div className="mb-3">
+        <div
+          className="text-[12px] font-bold uppercase tracking-[0.05em] mb-2"
+          style={{ color: "#6b7fa0" }}
+        >
+          {title}
+        </div>
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="bg-white rounded-card border border-beroe-card-border p-5">
       <h2 className="text-sm font-bold text-text-primary mb-2">{title}</h2>
