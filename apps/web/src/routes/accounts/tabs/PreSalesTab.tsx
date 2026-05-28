@@ -135,6 +135,26 @@ export default function PreSalesTab() {
 
   return (
     <div className="space-y-4">
+      {/* 28-May — Pre-Sales track divider (prototype line 5837-5841).
+          Dashed line on either side with the workflow caption in muted
+          grey: "Pre-Sales track · SDR → Solutioning → Sales". */}
+      <div className="flex items-center gap-2.5">
+        <div
+          className="flex-1 border-t-[1.5px] border-dashed"
+          style={{ borderColor: "var(--cb, #e4eaf6)" }}
+        />
+        <span
+          className="text-[10px] font-semibold whitespace-nowrap"
+          style={{ color: "var(--t3, #94a3b8)" }}
+        >
+          Pre-Sales track · SDR → Solutioning → Sales
+        </span>
+        <div
+          className="flex-1 border-t-[1.5px] border-dashed"
+          style={{ borderColor: "var(--cb, #e4eaf6)" }}
+        />
+      </div>
+
       {/* R13 — Signing-state banner. Surfaces here so Pre-Sales editors know
           when the gate has been re-opened (Sales is mid-correction) or
           locked-in, without having to bounce to the Sales Handoff tab. */}
@@ -215,17 +235,46 @@ export default function PreSalesTab() {
         </div>
       </details>
 
-      {/* Single-column layout — the old right column held a free-text
-          Stakeholders section that was removed in 27-May Row 77 (merged
-          into the Client Contacts card at the bottom). Keeping the
-          col-span-2 wrapper left a blank right third of the page. */}
-      <div className="space-y-4">
+      {/* 28-May — Wrap all Pre-Sales fields inside the prototype's outer
+          A) Pre-Sales & Discovery card (line 5848-5912). Single white
+          card with violet "A" badge header and "SDR / Presales" team
+          pill. Inner sections render as grey-blue UPPERCASE group
+          labels (Section variant="group") instead of separate cards.
+          Opacity dims to 0.85 when locked, matching the prototype. */}
+      <div
+        className={cn(
+          "bg-white rounded-card border border-beroe-card-border p-5",
+          account.gate_signed && !account.gate_unlocked && "opacity-[0.85]",
+        )}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span
+            className="w-[22px] h-[22px] rounded-md text-white text-[10px] font-extrabold flex items-center justify-center flex-shrink-0"
+            style={{ background: "#4A00F8" }}
+          >
+            A
+          </span>
+          <span className="text-[14px] font-bold text-text-primary">
+            Pre-Sales & Discovery
+          </span>
+          <span
+            className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+            style={{
+              background: "#4A00F815",
+              color: "#4A00F8",
+              border: "1px solid #4A00F830",
+            }}
+          >
+            SDR / Presales
+          </span>
+        </div>
+
         {/* R14 — Engagement Info. 27-May Row 76 — field order is now
             Discovery Date → Discovery Lead → Sales Lead, with SDR
             (existing field, kept for data continuity) moved to the
             end of the section. Categories + Engagement Objective +
             Procurement Maturity follow per the stakeholder sequence. */}
-        <Section title="Engagement Info">
+        <Section variant="group" title="Engagement Info">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Discovery Date">
               <input
@@ -271,7 +320,7 @@ export default function PreSalesTab() {
 
         {/* 27-May Row 76 — Target categories now sits before the
             Engagement Objective per the stakeholder's sequence. */}
-        <Section title="Target categories" subtitle="What's in scope for this engagement.">
+        <Section variant="group" title="Target categories" subtitle="What's in scope for this engagement.">
           <CategoryPicker
             selected={form.target_categories}
             onChange={(cats) => setForm({ ...form, target_categories: cats })}
@@ -281,6 +330,7 @@ export default function PreSalesTab() {
 
         {/* Engagement objective + AI quality check */}
         <Section
+          variant="group"
           title="Engagement objective"
           subtitle={`Recommended ≥ ${MIN_OBJECTIVE_WORDS} words. Be specific about the outcome and the metric.`}
         >
@@ -361,7 +411,7 @@ export default function PreSalesTab() {
         </Section>
 
         {/* Geographies */}
-        <Section title="Geographies">
+        <Section variant="group" title="Geographies">
           <GeographyPicker
             selected={form.geographies}
             onChange={(g) => setForm({ ...form, geographies: g })}
@@ -370,7 +420,7 @@ export default function PreSalesTab() {
         </Section>
 
         {/* Procurement maturity + AI penetration + spend */}
-        <Section title="Profile">
+        <Section variant="group" title="Profile">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <MaturitySelect
               label="Procurement maturity"
@@ -548,11 +598,36 @@ function Section({
   title,
   subtitle,
   children,
+  variant = "card",
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  /**
+   * "card"  → outer white card with border (legacy default)
+   * "group" → 28-May port of prototype line 5853-format. UPPERCASE
+   *           grey-blue label, no card border. Use inside a parent
+   *           wrapper card (e.g. PreSalesDiscoveryCard) to mirror the
+   *           prototype's grouped layout.
+   */
+  variant?: "card" | "group";
 }) {
+  if (variant === "group") {
+    return (
+      <div className="mb-3">
+        <div
+          className="text-[12px] font-bold uppercase tracking-[0.05em] mb-2"
+          style={{ color: "#6b7fa0" }}
+        >
+          {title}
+        </div>
+        {subtitle && (
+          <p className="text-xs text-text-muted mt-0.5 mb-2">{subtitle}</p>
+        )}
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="bg-white rounded-card border border-beroe-card-border p-5">
       <h2 className="text-sm font-bold text-text-primary">{title}</h2>
