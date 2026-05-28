@@ -62,9 +62,21 @@ export const STATUS_LABELS: Record<MetricStatus, string> = {
   grey: "No data",
 };
 
-export const STATUS_COLORS: Record<MetricStatus, { dot: string; bg: string; text: string; border: string }> = {
-  green: { dot: "bg-green-500", bg: "bg-green-50", text: "text-green-700", border: "border-green-300" },
-  amber: { dot: "bg-amber-500", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-300" },
-  red:   { dot: "bg-red-500",   bg: "bg-red-50",   text: "text-red-700",   border: "border-red-300"   },
-  grey:  { dot: "bg-slate-400", bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-300" },
+/** Brand-palette colours per metric status (Beroe brand book Sept 2025).
+ *  Values are raw hex so callers can use them in inline styles instead
+ *  of the previous Tailwind utility classes — those drifted off-palette
+ *  (e.g. green-500 ≠ Risk Green). Mapping:
+ *    green → Risk Green  #6EC457
+ *    amber → Risk Amber  #F0BC41
+ *    red   → Risk Red    #CF4548
+ *    grey  → brand mid-grey (Midnight-tinted)
+ */
+export const STATUS_COLORS: Record<
+  MetricStatus,
+  { dot: string; bg: string; border: string; text: string }
+> = {
+  green: { dot: "#6EC457", bg: "#6EC45715", border: "#6EC45740", text: "#1d6b35" },
+  amber: { dot: "#F0BC41", bg: "#F0BC4115", border: "#F0BC4140", text: "#854F0B" },
+  red:   { dot: "#CF4548", bg: "#CF454810", border: "#CF454830", text: "#7F1D1D" },
+  grey:  { dot: "#94a3b8", bg: "#94a3b815", border: "#94a3b830", text: "#475569" },
 };

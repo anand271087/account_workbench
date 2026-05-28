@@ -1,8 +1,22 @@
 // M20 — Value Tracking.
 //
-// Renders one card per tracked metric with current / target, auto-derived
-// status, and the value-log history. Inline "Log value" affordance on
-// each card writes a new log entry + bumps current_value.
+// 28-May — port of prototype/beroe_awb_v20.html `bMetricsPane`
+// (line 2941-3038), locked to the Beroe brand palette (Sept 2025).
+//
+// Layout (top → bottom):
+//   1. "Value Tracking" header + Add-metric CTA (Aqua heading like
+//      VDD / Contract & Goals for tab consistency).
+//   2. Status summary strip (On Track / At Risk / Off Track / No Data
+//      counts) — brand RAG.
+//   3. Overall Value Delivered card — prototype line 2964-2979. Big
+//      progress bar of the primary quantitative metric with brand
+//      status colour. Hidden when no quantitative metric has a value.
+//   4. Per-metric cards — prototype line 2995-3033. 3px left border
+//      in status colour, status dot + name + label + big current /
+//      target on the right, 6px progress bar, value-log entries with
+//      ↑/↓ arrows, inline Log-value form.
+//   5. Footer "+ Add a metric" button — prototype line 3036.
+//   6. VDD 3-bucket rollup at the bottom (our M22 addition — kept).
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +32,13 @@ import {
   type MetricType,
   type SuccessMetric,
 } from "@/types/metric";
+
+// Beroe brand palette anchors used across this file.
+const INDIGO = "#4A00F8";
+const MIDNIGHT = "#001137";
+const RISK_GREEN = "#6EC457";
+const RISK_AMBER = "#F0BC41";
+const RISK_RED = "#CF4548";
 
 export default function ValueTrackingTab() {
   const account = useAccountFromLayout();
@@ -36,20 +57,27 @@ export default function ValueTrackingTab() {
   const metrics = data?.items ?? [];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3.5">
+      {/* Header — Aqua section heading to match VDD + Contract & Goals. */}
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[14px] font-bold text-text-primary">Value Tracking</h2>
-          <p className="text-[11px] text-text-muted">
-            Live status of the metrics that flow from the Success Contract. Each
-            metric auto-derives green/amber/red from current vs target — override
-            in the metric card when judgement is needed.
+          <div
+            className="text-[11px] font-bold uppercase"
+            style={{ color: "#35E1D4", letterSpacing: "0.05em" }}
+          >
+            Value Tracking
+          </div>
+          <p className="text-[11px] text-text-muted mt-0.5 max-w-[640px]">
+            Live status of the metrics that flow from the Success Contract.
+            Each metric auto-derives green / amber / red from current vs
+            target — override in the metric card when judgement is needed.
           </p>
         </div>
         {editable && (
           <button
             onClick={() => setShowCreate(true)}
-            className="text-[12px] px-3 py-1.5 rounded-lg bg-beroe-blue text-white font-semibold"
+            className="text-[12px] px-3 py-1.5 rounded-md font-semibold text-white whitespace-nowrap"
+            style={{ background: INDIGO }}
           >
             + Add metric
           </button>
@@ -59,30 +87,58 @@ export default function ValueTrackingTab() {
       {/* Status summary strip */}
       {metrics.length > 0 && <StatusSummary metrics={metrics} />}
 
-      {isLoading && <div className="text-sm text-text-muted">Loading metrics…</div>}
+      {/* Prototype line 2964-2979 — overall progress bar of the primary
+          quantitative metric. */}
+      {metrics.length > 0 && (
+        <OverallProgressCard metrics={metrics} />
+      )}
+
+      {isLoading && (
+        <div className="text-sm text-text-muted">Loading metrics…</div>
+      )}
 
       {!isLoading && metrics.length === 0 && (
-        <div className="bg-white border border-beroe-card-border rounded-card p-8 text-center">
-          <div className="text-[13px] font-semibold text-text-primary mb-1">
-            No metrics tracked yet
+        <div
+          className="rounded-card p-8 text-center"
+          style={{ background: "#fff", border: "1px solid #e4eaf6" }}
+        >
+          <div className="text-[28px] mb-2">🎯</div>
+          <div
+            className="text-[14px] font-bold mb-1"
+            style={{ color: MIDNIGHT }}
+          >
+            No success metrics defined yet
           </div>
-          <p className="text-[12px] text-text-muted">
-            Lock the Success Contract first, then add the metrics that prove it
-            is being delivered.
+          <p className="text-[12px] text-text-muted max-w-[400px] mx-auto">
+            Define goals and lock the success contract first. Then metrics
+            will flow here automatically.
           </p>
+          {editable && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="mt-3 text-[12px] px-3 py-1.5 rounded-md font-semibold text-white"
+              style={{ background: INDIGO }}
+            >
+              + Add a metric
+            </button>
+          )}
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {metrics.map((m) => (
-          <MetricCard key={m.id} metric={m} accountId={account.id} editable={editable} />
+          <MetricCard
+            key={m.id}
+            metric={m}
+            accountId={account.id}
+            editable={editable}
+          />
         ))}
       </div>
 
-      {/* Row 52 (25-May) — Overall Value Delivered. Three-bucket rollup that
-          mirrors the VDD's CSM-attributed value totals so Value Tracking
-          tells a unified story. Reads from the saved VDD jsonb on the
-          account; the tab also links to the editable VDD surface. */}
+      {/* M22 Row 52 — VDD 3-bucket value rollup. Kept as a supplementary
+          footer card; primary value tracking is the prototype-style cards
+          above. */}
       <OverallValueDelivered accountId={account.id} />
 
       {showCreate && (
@@ -100,36 +156,113 @@ export default function ValueTrackingTab() {
 }
 
 // ============================================================
-// Status summary strip
+// Status summary strip — brand RAG pills
 // ============================================================
 
 function StatusSummary({ metrics }: { metrics: SuccessMetric[] }) {
-  const counts: Record<MetricStatus, number> = { green: 0, amber: 0, red: 0, grey: 0 };
+  const counts: Record<MetricStatus, number> = {
+    green: 0,
+    amber: 0,
+    red: 0,
+    grey: 0,
+  };
   metrics.forEach((m) => {
     counts[m.status] = (counts[m.status] ?? 0) + 1;
   });
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {(["green", "amber", "red", "grey"] as MetricStatus[]).map((s) => (
-        <div
-          key={s}
-          className={cn(
-            "px-3 py-1.5 rounded-lg border text-[11px] font-semibold flex items-center gap-2",
-            STATUS_COLORS[s].bg,
-            STATUS_COLORS[s].border,
-            STATUS_COLORS[s].text,
-          )}
-        >
-          <span className={cn("w-2 h-2 rounded-full", STATUS_COLORS[s].dot)} />
-          {STATUS_LABELS[s]}: {counts[s]}
-        </div>
-      ))}
+      {(["green", "amber", "red", "grey"] as MetricStatus[]).map((s) => {
+        const c = STATUS_COLORS[s];
+        return (
+          <div
+            key={s}
+            className="px-3 py-1.5 rounded-md text-[11px] font-semibold flex items-center gap-2"
+            style={{
+              background: c.bg,
+              border: `1px solid ${c.border}`,
+              color: c.text,
+            }}
+          >
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ background: c.dot }}
+            />
+            {STATUS_LABELS[s]}: {counts[s]}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // ============================================================
-// Metric card — inline edit + value log
+// Overall progress card — verbatim port of prototype line 2964-2979
+// ============================================================
+
+function OverallProgressCard({ metrics }: { metrics: SuccessMetric[] }) {
+  // Take the first quantitative metric that has a non-empty current value.
+  const top = metrics.find(
+    (m) =>
+      m.metric_type === "quantitative" &&
+      m.target_value &&
+      m.current_value &&
+      m.current_value.trim() !== "",
+  );
+  if (!top) return null;
+  const t = parseFloat((top.target_value ?? "0").replace(/[^0-9.]/g, ""));
+  const c = parseFloat((top.current_value ?? "0").replace(/[^0-9.]/g, ""));
+  if (!t || !Number.isFinite(c)) return null;
+  const pct = Math.min(100, Math.round((c / t) * 100));
+  // Brand RAG by completion band, matching prototype line 2971 logic.
+  const color = pct >= 75 ? RISK_GREEN : pct >= 50 ? INDIGO : RISK_AMBER;
+  const fmt = (v: number) => {
+    const unit = top.unit ?? "";
+    const isCurrency = unit === "$" || unit === "€";
+    const num = v.toLocaleString();
+    return isCurrency ? `${unit}${num}` : `${num}${unit ? unit : ""}`;
+  };
+  return (
+    <div
+      className="rounded-card px-4 py-3.5"
+      style={{ background: "#fff", border: "1px solid #e4eaf6" }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span
+          className="text-[14px] font-bold"
+          style={{ color: MIDNIGHT }}
+        >
+          Value Delivered
+        </span>
+        <span className="text-[11px] text-text-muted">
+          {metrics.length} metric{metrics.length === 1 ? "" : "s"} tracked
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <div
+            className="h-3.5 rounded-full overflow-hidden"
+            style={{ background: "#EAF1F5" }}
+          >
+            <div
+              className="h-full transition-all"
+              style={{ width: `${pct}%`, background: color }}
+            />
+          </div>
+        </div>
+        <span className="text-[18px] font-extrabold" style={{ color }}>
+          {pct}%
+        </span>
+      </div>
+      <div className="flex items-center justify-between text-[10px] text-text-muted mt-1.5">
+        <span>Current: {fmt(c)}</span>
+        <span>Target: {fmt(t)}</span>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Metric card — verbatim port of prototype line 2995-3033
 // ============================================================
 
 function MetricCard({
@@ -163,94 +296,94 @@ function MetricCard({
     onSuccess: () => qc.invalidateQueries({ queryKey }),
   });
 
+  const isQual = metric.metric_type === "qualitative";
+  const t = parseFloat((metric.target_value ?? "0").replace(/[^0-9.]/g, ""));
+  const c = parseFloat((metric.current_value ?? "0").replace(/[^0-9.]/g, ""));
+  const pct =
+    !isQual && t > 0 && Number.isFinite(c)
+      ? Math.min(100, Math.round((c / t) * 100))
+      : 0;
+  const fmtVal = (v: string | null) => {
+    if (!v) return "—";
+    const unit = metric.unit ?? "";
+    const isCurrency = unit === "$" || unit === "€";
+    const cleaned = v.replace(/[^0-9.]/g, "");
+    const num = cleaned ? parseFloat(cleaned).toLocaleString() : v;
+    return isCurrency ? `${unit}${num}` : `${num}${unit && !isCurrency ? unit : ""}`;
+  };
+
   return (
     <div
-      className={cn(
-        "bg-white border-l-4 border-r border-t border-b border-beroe-card-border rounded-card p-4",
-        "border-l-" + tone.dot.replace("bg-", ""), // ignored by Tailwind, just visual
-      )}
+      className="rounded-card p-3.5"
       style={{
-        borderLeftColor:
-          metric.status === "green"
-            ? "#22c55e"
-            : metric.status === "amber"
-              ? "#f59e0b"
-              : metric.status === "red"
-                ? "#ef4444"
-                : "#94a3b8",
+        background: "#fff",
+        border: "1px solid #e4eaf6",
+        borderLeft: `3px solid ${tone.dot}`,
       }}
     >
-      <div className="flex items-start justify-between gap-4 mb-3">
+      <div className="flex items-center gap-2.5 mb-2">
+        <div
+          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+          style={{ background: tone.dot }}
+        />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-[14px] font-bold text-text-primary">{metric.name}</h3>
-            <span
-              className={cn(
-                "text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1",
-                tone.bg,
-                tone.text,
-              )}
-            >
-              <span className={cn("w-1.5 h-1.5 rounded-full", tone.dot)} />
-              {STATUS_LABELS[metric.status]}
-              {metric.status_override && " (override)"}
-            </span>
-            <span className="text-[10px] text-text-muted">
-              {metric.metric_type === "quantitative" ? "quant" : "qual"}
-              {metric.unit ? ` · ${metric.unit}` : ""}
-            </span>
+          <div
+            className="text-[13px] font-bold truncate"
+            style={{ color: MIDNIGHT }}
+          >
+            {metric.name}
           </div>
-          {metric.description && (
-            <p className="text-[12px] text-text-muted mt-1">{metric.description}</p>
-          )}
+          <div className="text-[10px] text-text-muted">
+            {isQual ? "Qualitative" : `Quantitative · ${metric.unit ?? ""}`}
+            {" · "}
+            <span style={{ color: tone.dot, fontWeight: 600 }}>
+              {STATUS_LABELS[metric.status]}
+            </span>
+            {metric.status_override && (
+              <span className="text-text-muted"> (override)</span>
+            )}
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <div
+            className="text-[18px] font-extrabold"
+            style={{ color: tone.dot }}
+          >
+            {fmtVal(metric.current_value)}
+          </div>
+          <div className="text-[10px] text-text-muted">
+            of {fmtVal(metric.target_value)} target
+          </div>
         </div>
         {editable && (
-          <div className="flex gap-1.5 flex-shrink-0">
-            <button
-              onClick={() => setLogOpen((v) => !v)}
-              className="text-[11px] px-2.5 py-1 rounded-md bg-beroe-blue text-white font-semibold"
-            >
-              {logOpen ? "Cancel" : "Log value"}
-            </button>
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border text-text-muted hover:text-red-700 hover:border-red-300"
-              title="Delete metric"
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="text-text-muted hover:text-text-secondary text-[11px] px-1.5"
+            title="Delete metric"
+          >
+            ✕
+          </button>
         )}
       </div>
 
-      {/* Big current / target display */}
-      <div className="flex items-baseline gap-3 mb-3">
-        <span className={cn("text-[22px] font-bold", tone.text)}>
-          {metric.current_value ?? "—"}
-        </span>
-        <span className="text-[12px] text-text-muted">
-          / {metric.target_value ?? "—"} target
-        </span>
-        {metric.last_updated_at && (
-          <span className="text-[10px] text-text-muted ml-auto">
-            Updated {new Date(metric.last_updated_at).toLocaleString()}
-          </span>
-        )}
-      </div>
-
-      {/* Progress bar for quantitative */}
-      {metric.metric_type === "quantitative" && metric.target_value && metric.current_value && (
-        <ProgressBar
-          target={metric.target_value}
-          current={metric.current_value}
-          status={metric.status}
-        />
+      {/* 6px progress bar (prototype line 3012). */}
+      {!isQual && metric.target_value && metric.current_value && (
+        <div
+          className="h-1.5 rounded-full overflow-hidden mb-2.5"
+          style={{ background: "#EAF1F5" }}
+        >
+          <div
+            className="h-full transition-all"
+            style={{ width: `${pct}%`, background: tone.dot }}
+          />
+        </div>
       )}
 
       {/* Inline log row */}
       {logOpen && editable && (
         <LogValueRow
           metric={metric}
+          onCancel={() => setLogOpen(false)}
           onSaved={() => {
             setLogOpen(false);
             qc.invalidateQueries({ queryKey });
@@ -258,30 +391,70 @@ function MetricCard({
         />
       )}
 
+      {/* Log-value button + last-updated meta (prototype line 3030-3031). */}
+      {!logOpen && editable && (
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            onClick={() => setLogOpen(true)}
+            className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
+            style={{
+              background: "#fff",
+              border: `1px solid ${INDIGO}40`,
+              color: INDIGO,
+            }}
+          >
+            ↑ Log value
+          </button>
+          <span className="text-[10px] text-text-muted">
+            Last updated:{" "}
+            {metric.last_updated_at
+              ? new Date(metric.last_updated_at).toLocaleString()
+              : "Never"}
+            {metric.last_updated_by ? ` by ${metric.last_updated_by}` : ""}
+          </span>
+        </div>
+      )}
+
       {/* Status override */}
       {editable && (
-        <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-beroe-card-border/60 text-[11px]">
-          <span className="text-text-muted">Override:</span>
-          {(["green", "amber", "red"] as MetricStatus[]).map((s) => (
-            <button
-              key={s}
-              onClick={() =>
-                overrideMutation.mutate(metric.status_override === s ? null : s)
-              }
-              className={cn(
-                "px-2 py-0.5 rounded-md border",
-                metric.status_override === s
-                  ? cn(STATUS_COLORS[s].bg, STATUS_COLORS[s].border, STATUS_COLORS[s].text)
-                  : "border-beroe-card-border text-text-muted hover:text-text-secondary",
-              )}
-            >
-              {STATUS_LABELS[s]}
-            </button>
-          ))}
+        <div
+          className="flex items-center gap-2 mt-2.5 pt-2"
+          style={{ borderTop: "1px solid #f0f4fb" }}
+        >
+          <span className="text-[11px] text-text-muted">Override:</span>
+          {(["green", "amber", "red"] as MetricStatus[]).map((s) => {
+            const isActive = metric.status_override === s;
+            const tc = STATUS_COLORS[s];
+            return (
+              <button
+                key={s}
+                onClick={() =>
+                  overrideMutation.mutate(isActive ? null : s)
+                }
+                className="text-[11px] px-2 py-0.5 rounded-md"
+                style={
+                  isActive
+                    ? {
+                        background: tc.bg,
+                        border: `1px solid ${tc.border}`,
+                        color: tc.text,
+                        fontWeight: 600,
+                      }
+                    : {
+                        background: "#fff",
+                        border: "1px solid #e4eaf6",
+                        color: "#94a3b8",
+                      }
+                }
+              >
+                {STATUS_LABELS[s]}
+              </button>
+            );
+          })}
           {metric.status_override && (
             <button
               onClick={() => overrideMutation.mutate(null)}
-              className="text-text-muted hover:text-text-secondary underline ml-1"
+              className="text-[11px] text-text-muted hover:text-text-secondary underline ml-1"
             >
               Clear
             </button>
@@ -291,38 +464,64 @@ function MetricCard({
 
       {/* Log history */}
       {metric.log_entries.length > 0 && (
-        <div className="mt-3 pt-2.5 border-t border-beroe-card-border/60">
+        <div
+          className="mt-2.5 pt-2"
+          style={{ borderTop: "1px solid #f0f4fb" }}
+        >
           <button
             onClick={() => setHistoryOpen((v) => !v)}
-            className="text-[11px] text-beroe-blue font-semibold"
+            className="text-[11px] font-semibold"
+            style={{ color: INDIGO }}
           >
             {historyOpen ? "Hide" : "Show"} value log ({metric.log_entries.length})
           </button>
           {historyOpen && (
             <ul className="mt-2 space-y-1.5">
-              {[...metric.log_entries].reverse().map((e, i) => (
-                <li
-                  key={(e.at ?? "") + i}
-                  className="text-[11px] bg-beroe-bg/40 border border-beroe-card-border/40 rounded-md px-2 py-1.5"
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-text-primary">
-                      {e.value ?? "—"}
-                    </span>
-                    {e.at && (
-                      <span className="text-text-muted">
-                        {new Date(e.at).toLocaleString()}
+              {[...metric.log_entries].reverse().map((e, i) => {
+                // Use ↑ when the log moved us forward, ↓ when it moved
+                // backward (e.g. correction). Defaults to ↑.
+                const arrow = "↑";
+                return (
+                  <li
+                    key={(e.at ?? "") + i}
+                    className="text-[11px] rounded-md px-2 py-1.5"
+                    style={{
+                      background: "#EAF1F580",
+                      border: "1px solid #e4eaf6",
+                    }}
+                  >
+                    <div className="flex items-start gap-2 flex-wrap">
+                      <span
+                        className="font-bold flex-shrink-0"
+                        style={{ color: RISK_GREEN }}
+                      >
+                        {arrow}
                       </span>
+                      <span
+                        className="font-semibold"
+                        style={{ color: MIDNIGHT }}
+                      >
+                        {e.value ?? "—"}
+                      </span>
+                      {e.at && (
+                        <span className="text-text-muted ml-auto">
+                          {new Date(e.at).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    {e.source && (
+                      <div className="text-text-secondary mt-0.5">
+                        📎 {e.source}
+                      </div>
                     )}
-                  </div>
-                  {e.source && (
-                    <div className="text-text-secondary mt-0.5">📎 {e.source}</div>
-                  )}
-                  {e.note && (
-                    <div className="text-text-muted italic mt-0.5">{e.note}</div>
-                  )}
-                </li>
-              ))}
+                    {e.note && (
+                      <div className="text-text-muted italic mt-0.5">
+                        {e.note}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -341,39 +540,13 @@ function MetricCard({
   );
 }
 
-function ProgressBar({
-  target,
-  current,
-  status,
-}: {
-  target: string;
-  current: string;
-  status: MetricStatus;
-}) {
-  const t = parseFloat(target.replace(/[^0-9.]/g, ""));
-  const c = parseFloat(current.replace(/[^0-9.]/g, ""));
-  if (!t || isNaN(c)) return null;
-  const pct = Math.min(100, Math.round((c / t) * 100));
-  return (
-    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-      <div
-        className={cn(
-          "h-full transition-all",
-          status === "green" ? "bg-green-500"
-            : status === "amber" ? "bg-amber-500"
-              : "bg-red-500",
-        )}
-        style={{ width: `${pct}%` }}
-      />
-    </div>
-  );
-}
-
 function LogValueRow({
   metric,
+  onCancel,
   onSaved,
 }: {
   metric: SuccessMetric;
+  onCancel: () => void;
   onSaved: () => void;
 }) {
   const [value, setValue] = useState("");
@@ -393,47 +566,81 @@ function LogValueRow({
   });
 
   return (
-    <div className="mt-3 pt-2.5 border-t border-beroe-card-border/60 grid grid-cols-1 md:grid-cols-3 gap-2">
-      <input
-        type="text"
-        placeholder={
-          metric.metric_type === "qualitative" ? "High / Medium / Low" : "New value"
-        }
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="text-[12px] px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
-      />
-      <input
-        type="text"
-        placeholder="Source / evidence (link, PO #, QBR ref)"
-        value={source}
-        onChange={(e) => setSource(e.target.value)}
-        className="text-[12px] px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
-      />
-      <div className="flex gap-1.5">
+    <div
+      className="mt-2 pt-2"
+      style={{ borderTop: "1px solid #f0f4fb" }}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <input
+          type="text"
+          placeholder={
+            metric.metric_type === "qualitative"
+              ? "High / Medium / Low"
+              : "New value"
+          }
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className={inputCls()}
+        />
+        <input
+          type="text"
+          placeholder="Source / evidence (link, PO #, QBR ref)"
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
+          className={inputCls()}
+        />
         <input
           type="text"
           placeholder="Note (required)"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="flex-1 text-[12px] px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
+          className={inputCls()}
         />
+      </div>
+      <div className="flex items-center gap-2 mt-2">
         <button
           onClick={() => mutation.mutate()}
           disabled={!value.trim() || !note.trim() || mutation.isPending}
           title={!note.trim() ? "A note is required to log a value" : ""}
-          className="text-[12px] px-3 py-1.5 rounded-md bg-green-600 text-white font-semibold disabled:opacity-50"
+          className="text-[12px] px-3 py-1.5 rounded-md font-semibold text-white disabled:opacity-50"
+          style={{ background: INDIGO }}
         >
           {mutation.isPending ? "Saving…" : "Save"}
         </button>
+        <button
+          onClick={onCancel}
+          className="text-[12px] px-3 py-1.5 rounded-md"
+          style={{
+            background: "#fff",
+            border: "1px solid #e4eaf6",
+            color: MIDNIGHT,
+          }}
+        >
+          Cancel
+        </button>
+        {error && (
+          <span
+            className="text-[11px] ml-auto px-2 py-1 rounded-md"
+            style={{
+              color: RISK_RED,
+              background: `${RISK_RED}10`,
+              border: `1px solid ${RISK_RED}30`,
+            }}
+          >
+            {error}
+          </span>
+        )}
       </div>
-      {error && <div className="md:col-span-3 text-[11px] text-red-700">{error}</div>}
     </div>
   );
 }
 
+function inputCls(): string {
+  return "text-[12px] px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none focus:ring-1 focus:ring-beroe-blue/20";
+}
+
 // ============================================================
-// Create metric modal
+// Create metric modal — brand-painted
 // ============================================================
 
 function CreateMetricModal({
@@ -467,33 +674,39 @@ function CreateMetricModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 flex items-center justify-center z-50 p-4"
+      style={{ background: "rgba(0,17,55,0.4)" }}
       onClick={onClose}
     >
       <div
         className="bg-white rounded-card p-5 w-full max-w-md"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-[14px] font-bold mb-3">Add a metric</h3>
+        <h3
+          className="text-[14px] font-bold mb-3"
+          style={{ color: MIDNIGHT }}
+        >
+          Add a metric
+        </h3>
         <div className="space-y-2.5">
           <input
             placeholder='Metric name (e.g. "Documented savings")'
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border"
+            className={cn("w-full", inputCls())}
           />
           <textarea
             placeholder="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border"
+            className={cn("w-full", inputCls())}
           />
           <div className="flex gap-2">
             <select
               value={type}
               onChange={(e) => setType(e.target.value as MetricType)}
-              className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border"
+              className={inputCls()}
             >
               <option value="quantitative">Quantitative</option>
               <option value="qualitative">Qualitative</option>
@@ -502,36 +715,53 @@ function CreateMetricModal({
               <select
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border"
+                className={inputCls()}
               >
                 {["$", "€", "%", "MAU", "#", "hours", "score"].map((u) => (
-                  <option key={u} value={u}>{u}</option>
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
                 ))}
               </select>
             )}
             <input
-              placeholder={type === "qualitative" ? "High / Medium / Low" : "Target"}
+              placeholder={
+                type === "qualitative" ? "High / Medium / Low" : "Target"
+              }
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              className="flex-1 text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border"
+              className={cn("flex-1", inputCls())}
             />
           </div>
           {error && (
-            <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2 py-1">
+            <div
+              className="text-[11px] rounded-md px-2 py-1"
+              style={{
+                color: RISK_RED,
+                background: `${RISK_RED}10`,
+                border: `1px solid ${RISK_RED}30`,
+              }}
+            >
               {error}
             </div>
           )}
           <div className="flex gap-2 pt-1">
             <button
               onClick={onClose}
-              className="flex-1 text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border text-text-secondary"
+              className="flex-1 text-[12px] px-3 py-1.5 rounded-md"
+              style={{
+                background: "#fff",
+                border: "1px solid #e4eaf6",
+                color: MIDNIGHT,
+              }}
             >
               Cancel
             </button>
             <button
               onClick={() => mutation.mutate()}
               disabled={!name.trim() || mutation.isPending}
-              className="flex-1 text-[12px] px-3 py-1.5 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+              className="flex-1 text-[12px] px-3 py-1.5 rounded-md text-white font-semibold disabled:opacity-50"
+              style={{ background: INDIGO }}
             >
               {mutation.isPending ? "Adding…" : "Add metric"}
             </button>
@@ -556,14 +786,20 @@ function DeleteConfirm({
   const [reason, setReason] = useState("");
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 flex items-center justify-center z-50 p-4"
+      style={{ background: "rgba(0,17,55,0.4)" }}
       onClick={onCancel}
     >
       <div
         className="bg-white rounded-card p-5 w-full max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-[14px] font-bold mb-2">Delete metric?</h3>
+        <h3
+          className="text-[14px] font-bold mb-2"
+          style={{ color: MIDNIGHT }}
+        >
+          Delete metric?
+        </h3>
         <p className="text-[12px] text-text-muted mb-3">
           Soft delete — admins can restore. Reason is required.
         </p>
@@ -572,19 +808,25 @@ function DeleteConfirm({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
-          className="w-full text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border mb-3"
+          className={cn("w-full mb-3", inputCls())}
         />
         <div className="flex gap-2">
           <button
             onClick={onCancel}
-            className="flex-1 text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border"
+            className="flex-1 text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              background: "#fff",
+              border: "1px solid #e4eaf6",
+              color: MIDNIGHT,
+            }}
           >
             Cancel
           </button>
           <button
             onClick={() => onConfirm(reason)}
             disabled={reason.trim().length < 5}
-            className="flex-1 text-[12px] px-3 py-1.5 rounded-md bg-red-600 text-white font-semibold disabled:opacity-50"
+            className="flex-1 text-[12px] px-3 py-1.5 rounded-md text-white font-semibold disabled:opacity-50"
+            style={{ background: RISK_RED }}
           >
             Delete
           </button>
@@ -595,7 +837,7 @@ function DeleteConfirm({
 }
 
 // ============================================================
-// Row 52 (25-May-2026) — Overall Value Delivered rollup
+// Row 52 (25-May-2026) — VDD 3-bucket value rollup, brand-painted
 // ============================================================
 
 function OverallValueDelivered({ accountId }: { accountId: string }) {
@@ -626,17 +868,26 @@ function OverallValueDelivered({ accountId }: { accountId: string }) {
   const impl = sum("implemented_musd");
   const fmt = (n: number) => `$${n.toFixed(2)}M`;
   return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+    <div
+      className="rounded-card p-4"
+      style={{ background: "#fff", border: "1px solid #e4eaf6" }}
+    >
       <div className="flex items-center justify-between mb-3">
         <div>
-          <div className="text-[14px] font-bold">💰 Overall Value Delivered</div>
+          <div
+            className="text-[13px] font-bold"
+            style={{ color: MIDNIGHT }}
+          >
+            💰 Overall Value Delivered
+          </div>
           <div className="text-[11px] text-text-muted mt-0.5">
             Three-bucket rollup from the Value Delivery Document.
           </div>
         </div>
         <a
           href={`/accounts/${accountId}/success-management/vdd`}
-          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+          className="text-[11px] font-semibold hover:underline"
+          style={{ color: INDIGO }}
         >
           → Edit in VDD
         </a>
@@ -651,38 +902,17 @@ function OverallValueDelivered({ accountId }: { accountId: string }) {
       ) : (
         <>
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-md border bg-slate-50 border-slate-200 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
-                Identified
-              </div>
-              <div className="text-[18px] font-extrabold text-slate-900 mt-0.5">
-                {fmt(ident)}
-              </div>
-            </div>
-            <div className="rounded-md border bg-amber-50 border-amber-200 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-amber-800">
-                Committed
-              </div>
-              <div className="text-[18px] font-extrabold text-amber-900 mt-0.5">
-                {fmt(comm)}
-              </div>
-            </div>
-            <div className="rounded-md border bg-emerald-50 border-emerald-200 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-800">
-                Implemented
-              </div>
-              <div className="text-[18px] font-extrabold text-emerald-900 mt-0.5">
-                {fmt(impl)}
-              </div>
-            </div>
+            <RollupTile label="Identified" value={fmt(ident)} color={RISK_AMBER} />
+            <RollupTile label="Committed" value={fmt(comm)} color={INDIGO} />
+            <RollupTile label="Implemented" value={fmt(impl)} color={RISK_GREEN} />
           </div>
           <div className="mt-3 text-[11px] text-text-muted">
-            Across <b className="text-text-primary">{rows.length}</b>{" "}
+            Across <b style={{ color: MIDNIGHT }}>{rows.length}</b>{" "}
             initiative{rows.length === 1 ? "" : "s"}
             {data?.locked_at && (
               <>
                 {" "}· 🔒 VDD locked on{" "}
-                <b className="text-text-primary">
+                <b style={{ color: MIDNIGHT }}>
                   {new Date(data.locked_at).toLocaleDateString()}
                 </b>
               </>
@@ -690,6 +920,39 @@ function OverallValueDelivered({ accountId }: { accountId: string }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function RollupTile({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div
+      className="rounded-md px-3 py-2"
+      style={{
+        background: `${color}10`,
+        border: `1px solid ${color}30`,
+      }}
+    >
+      <div
+        className="text-[10px] font-bold uppercase"
+        style={{ color, letterSpacing: "0.05em" }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[18px] font-extrabold mt-0.5"
+        style={{ color }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
