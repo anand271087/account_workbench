@@ -224,12 +224,14 @@ def _real_score_cached(prompt_hash: str, text: str) -> QualityCheckResponse:
             break
 
     # Fall back to the deterministic stub so the UI never breaks.
+    # No "AI service unavailable" prefix on the comment — the is_stub
+    # flag already drives the "Stub AI" badge on the frontend.
     err_name = type(last_err).__name__ if last_err else "unknown"
     logger.warning("Claude unavailable (%s); using heuristic stub", err_name)
     stub = _stub_score(text)
     return QualityCheckResponse(
         score=stub.score,
-        comment=f"AI service unavailable ({err_name}) — used heuristic. {stub.comment}",
+        comment=stub.comment,
         word_count=stub.word_count,
         is_stub=True,
     )
@@ -263,19 +265,44 @@ def _truncate_for_prompt(text: str, hard_limit: int = 24_000) -> str:
 
 
 def _stub_doc_summary(text: str, kind: str) -> dict:
-    """Deterministic placeholder so the UI is demo-able without a real Claude key."""
-    head = " ".join((text or "").split())[:300]
-    summary = (
-        f"[Stub summary — Anthropic key not configured.] "
-        f"Document kind: {kind}. First ~300 chars: {head}…"
-        if head
-        else f"[Stub summary — empty document, kind={kind}.]"
-    )
-    # Cheap entity heuristic — pull capitalised tokens that look like names + dated lines.
-    import re
+    """Deterministic placeholder so the UI is demo-able without a real Claude key.
 
-    people = sorted({m.group(0) for m in re.finditer(r"\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b", text)})[:5]
-    dates = sorted({m.group(0) for m in re.finditer(r"\b\d{4}-\d{2}-\d{2}\b", text)})[:5]
+    Produces a CLEAN short summary by extracting the first few meaningful
+    sentences from the doc — strips PPT slide markers, markdown header
+    hashes, leading bullets / numbering. No "[Stub summary — Anthropic
+    key not configured.]" prefix in the field itself; the frontend
+    `is_stub` flag drives the "Stub AI" badge separately.
+    """
+    import re as _re
+
+    body = text or ""
+    # Drop slide / cue markers + markdown header chars that look ugly in
+    # a Solutioning form (e.g. `<!-- Slide number: 1 -->` and `# Title`).
+    body = _re.sub(r"<!--[^>]*-->", " ", body)
+    body = _re.sub(r"(?m)^\s*#+\s*", "", body)
+    body = _re.sub(r"[`*_~>]", "", body)
+    body = " ".join(body.split())
+
+    # Pick the first 2-3 sentences (>=30 chars each) for the summary.
+    sentences: list[str] = []
+    for raw in _re.split(r"(?<=[.!?])\s+", body):
+        s = raw.strip()
+        if len(s) < 30 or len(s) > 320:
+            continue
+        sentences.append(s)
+        if len(sentences) >= 3:
+            break
+    summary = " ".join(sentences) if sentences else body[:300]
+    if not summary:
+        summary = f"Empty document ({kind})."
+
+    # Cheap entity heuristic — pull capitalised tokens that look like names + dated lines.
+    people = sorted(
+        {m.group(0) for m in _re.finditer(r"\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b", body)}
+    )[:5]
+    dates = sorted(
+        {m.group(0) for m in _re.finditer(r"\b\d{4}-\d{2}-\d{2}\b", body)}
+    )[:5]
     actions: list[str] = []
     for line in (text or "").splitlines():
         s = line.strip(" -•*")
@@ -369,9 +396,10 @@ def summarise_document(text: str, kind: str) -> dict:
 
     err_name = type(last_err).__name__ if last_err else "unknown"
     logger.warning("Claude doc-summary unavailable (%s); using heuristic stub", err_name)
-    stub = _stub_doc_summary(text, kind)
-    stub["summary"] = f"AI service unavailable ({err_name}) — used heuristic. " + stub["summary"]
-    return stub
+    # No "AI service unavailable" prefix — the is_stub flag drives the UI
+    # badge separately; this text lands directly in user-facing fields
+    # (proposed_solution, value_definition) when extraction inherits it.
+    return _stub_doc_summary(text, kind)
 
 
 # ---------- aggregate (account-level Sales Discovery summary) ----------
@@ -386,11 +414,14 @@ def _stub_aggregate_summary(per_doc_summaries: list[str]) -> str:
             "Risks & concerns:\n- None recorded.\n"
         )
     head = " ".join(s.strip() for s in per_doc_summaries[:5])[:900]
+    # Clean aggregate — no "[Stub aggregate — Anthropic key not configured.]"
+    # marker in the field text. The is_stub flag on the response drives
+    # any badge the UI shows.
     return (
-        f"Narrative:\n- [Stub aggregate — Anthropic key not configured.] {head}…\n"
-        "Decisions:\n- (Connect a real Anthropic key to extract decisions.)\n"
-        "Action items:\n- (Connect a real Anthropic key to extract actions.)\n"
-        "Risks & concerns:\n- (Connect a real Anthropic key to surface risks.)\n"
+        f"Narrative:\n- {head}\n"
+        "Decisions:\n- —\n"
+        "Action items:\n- —\n"
+        "Risks & concerns:\n- —\n"
     )
 
 
@@ -422,14 +453,100 @@ def _real_aggregate_summary(per_doc_summaries: list[str]) -> str:
 
 
 def _stub_vpd_extract(text: str) -> dict:
-    """Heuristic VPD extract for the no-key path."""
-    head = " ".join((text or "").split())[:300]
+    """Heuristic VPD extract for the no-key path.
+
+    Produces CLEAN business-sentence-style proposed_solution and value_def
+    by:
+      - Stripping slide markers, markdown header chars, code-fence tildes
+      - Picking sentences that mention what Beroe will DELIVER (proposed)
+      - Picking sentences that mention $ / % / "savings" / outcomes (value)
+      - Returning null when nothing meaningful matches (no raw-text dump)
+    """
+    import re as _re
+
+    body = text or ""
+    # Strip ugly markup.
+    body = _re.sub(r"<!--[^>]*-->", " ", body)
+    body = _re.sub(r"(?m)^\s*#+\s*", "", body)
+    body = _re.sub(r"[`*_~>]", "", body)
+    body = " ".join(body.split())
+
+    # Split into sentences (kept reasonable length: 30-280 chars).
+    sentences = [
+        s.strip() for s in _re.split(r"(?<=[.!?])\s+", body)
+        if 30 <= len(s.strip()) <= 280
+    ]
+
+    # "Proposed Solution" = the first sentence that mentions what Beroe
+    # provides / delivers / enables. Falls back to the first long
+    # sentence; falls back to null if there's truly nothing.
+    proposed = None
+    deliver_re = _re.compile(
+        r"\b(provide|deliver|enable|equip|support|license|access|platform|"
+        r"intelligence|module|capability|solution|service|offer)\b",
+        _re.IGNORECASE,
+    )
+    for s in sentences:
+        if deliver_re.search(s):
+            proposed = s
+            break
+    if not proposed and sentences:
+        proposed = sentences[0]
+
+    # "Value Definition" = first sentence with quantified value ($, %,
+    # savings/risk reduction/ROI keywords).
+    value_def = None
+    value_re = _re.compile(
+        r"(\$\s?\d|\d\s?%|\bsavings?\b|\brisk\b|\broi\b|\bbenchmark\b|"
+        r"\bnegotiat|\boutcome\b|\bimpact\b)",
+        _re.IGNORECASE,
+    )
+    for s in sentences:
+        if s == proposed:
+            continue
+        if value_re.search(s):
+            value_def = s
+            break
+
+    # Engagement type hints — heuristic keyword sniff.
+    lower = body.lower()
+    engagement_type: str | None = None
+    if "subscription" in lower or "annual license" in lower:
+        engagement_type = "subscription"
+    elif "retainer" in lower:
+        engagement_type = "retainer"
+    elif "pilot" in lower or "proof of concept" in lower or "poc" in lower:
+        engagement_type = "pilot"
+    elif "one-time" in lower or "one time" in lower:
+        engagement_type = "one_time"
+
+    # Value-theme extraction — pick 3-5 short noun phrases that follow
+    # known theme cues.
+    themes: list[str] = []
+    theme_cues = (
+        "cost reduction",
+        "risk mitigation",
+        "supplier risk",
+        "category intelligence",
+        "negotiation",
+        "supplier discovery",
+        "sustainability",
+        "compliance",
+        "benchmark",
+        "price intelligence",
+    )
+    for cue in theme_cues:
+        if cue in lower and cue.title() not in themes:
+            themes.append(cue.title() if len(cue.split()) > 1 else cue.capitalize())
+        if len(themes) >= 5:
+            break
+
     return {
-        "proposed_solution": head[:600] or None,
-        "engagement_type": "subscription" if "subscription" in (text or "").lower() else None,
+        "proposed_solution": proposed,
+        "engagement_type": engagement_type,
         "engagement_duration_months": None,
-        "value_themes": [],
-        "value_definition": None,
+        "value_themes": themes,
+        "value_definition": value_def,
         "estimated_value_musd": None,
         "is_stub": True,
     }
@@ -515,12 +632,9 @@ def extract_vpd_fields(text: str) -> dict:
 
     err_name = type(last_err).__name__ if last_err else "unknown"
     logger.warning("Claude VPD extract unavailable (%s); using stub", err_name)
-    out = _stub_vpd_extract(text)
-    out["proposed_solution"] = (
-        f"AI service unavailable ({err_name}) — heuristic extraction. "
-        + (out.get("proposed_solution") or "")
-    )[:2000]
-    return out
+    # No "AI service unavailable" prefix on user-facing proposed_solution.
+    # The is_stub flag (returned by _stub_vpd_extract) drives the UI badge.
+    return _stub_vpd_extract(text)
 
 
 # ============================================================
@@ -893,6 +1007,5 @@ def aggregate_account_summary(per_doc_summaries: list[str]) -> str:
 
     err_name = type(last_err).__name__ if last_err else "unknown"
     logger.warning("Claude aggregate unavailable (%s); using stub", err_name)
-    return f"AI service unavailable ({err_name}) — heuristic rollup. " + _stub_aggregate_summary(
-        per_doc_summaries
-    )
+    # No "AI service unavailable" prefix on user-facing aggregate text.
+    return _stub_aggregate_summary(per_doc_summaries)
