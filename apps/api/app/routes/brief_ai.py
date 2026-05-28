@@ -46,6 +46,7 @@ Section = Literal[
     "value_anchors",
     "cheat_sheet",
     "attendees",
+    "closing_scenarios",
 ]
 
 
@@ -219,6 +220,39 @@ def _stub_attendees(name: str, industry: str | None) -> list[dict]:
     ]
 
 
+def _stub_closing_scenarios(name: str, industry: str | None) -> list[dict]:
+    ind = industry or "the industry"
+    return [
+        {
+            "type": "good",
+            "label": "Strong close",
+            "text": (
+                f"{name} agrees to a 2-week scoped pilot on top-3 categories "
+                f"with a named champion + executive sponsor. Beroe owns the "
+                f"first-pilot report by week 4."
+            ),
+        },
+        {
+            "type": "neutral",
+            "label": "Warm handoff",
+            "text": (
+                "Champion validates the value story but defers commitment to "
+                "the next budget cycle. We agree on a follow-up touchpoint "
+                "before quarter-end with one usable artefact in hand."
+            ),
+        },
+        {
+            "type": "poor",
+            "label": "Keep door open",
+            "text": (
+                f"No commitment — they hold an existing vendor in {ind}. We "
+                f"leave 1-page benchmark summary, log the renewal date, and "
+                f"re-engage 30 days before that vendor's renewal window."
+            ),
+        },
+    ]
+
+
 _STUBS = {
     "company_snapshot": _stub_company_snapshot,
     "discovery_questions": _stub_discovery_questions,
@@ -227,6 +261,7 @@ _STUBS = {
     "value_anchors": _stub_value_anchors,
     "cheat_sheet": lambda n, i: _stub_cheat_sheet(n),
     "attendees": _stub_attendees,
+    "closing_scenarios": _stub_closing_scenarios,
 }
 
 
@@ -302,6 +337,17 @@ _PROMPTS: dict[str, str] = {
         "Each item: {initials, name, role, primary_objective, objectives:[], "
         "background:[2 bullets], opening_ask}. Bias roles to procurement / "
         "sourcing / category leads, not commercial / IT."
+    ),
+    "closing_scenarios": (
+        "Produce exactly 3 closing scenarios — one for each meeting outcome: "
+        "good (strong close), neutral (warm handoff), poor (keep door open). "
+        "Each item: {type, label, text}. `type` MUST be one of 'good', "
+        "'neutral', 'poor' — return in that order. `label` is a short title "
+        "(e.g. 'Strong close', 'Warm handoff', 'Keep door open'). `text` is "
+        "1-3 sentences describing what success / partial / fallback looks "
+        "like for this specific account given the engagement_objective and "
+        "target_categories context. Ground in concrete next-steps the rep "
+        "can drive, not platitudes."
     ),
 }
 

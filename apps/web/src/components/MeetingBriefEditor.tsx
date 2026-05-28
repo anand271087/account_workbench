@@ -160,7 +160,8 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       | "objectives"
       | "value_anchors"
       | "cheat_sheet"
-      | "attendees",
+      | "attendees"
+      | "closing_scenarios",
   ) => {
     try {
       const r = await api.post<{ section: string; suggestions: unknown[] }>(
@@ -224,6 +225,23 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
           opening_ask: a.opening_ask ?? null,
         }));
         setForm({ ...form, attendees: [...form.attendees, ...enriched] });
+      } else if (section === "closing_scenarios") {
+        // Each suggestion is {type, label, text}. We clamp `type` to the
+        // ScenarioType union so a hallucinated value (e.g. "great") falls
+        // back to "neutral" rather than crashing the editor.
+        const VALID: ScenarioType[] = ["good", "neutral", "poor"];
+        const enriched = (suggestions as Partial<ClosingScenario>[]).map((s) => {
+          const t = (s.type as ScenarioType | undefined) ?? "neutral";
+          return {
+            type: VALID.includes(t) ? t : ("neutral" as ScenarioType),
+            label: s.label ?? null,
+            text: s.text ?? "",
+          };
+        });
+        setForm({
+          ...form,
+          closing_scenarios: [...form.closing_scenarios, ...enriched],
+        });
       }
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "AI suggest failed";
@@ -242,7 +260,8 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       | "objectives"
       | "value_anchors"
       | "cheat_sheet"
-      | "attendees";
+      | "attendees"
+      | "closing_scenarios";
     label?: string;
   }) => {
     const busy = suggesting === section;
@@ -285,8 +304,8 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
             </div>
             <div className="text-[11px] text-violet-800/80">
               Fills empty sections (snapshot · attendees · objectives ·
-              discovery · minefields · value anchors · cheat sheet) in one
-              click. Existing entries stay untouched.
+              discovery · minefields · value anchors · closing scenarios ·
+              cheat sheet) in one click. Existing entries stay untouched.
             </div>
           </div>
           <button
@@ -299,6 +318,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
                 | "discovery_questions"
                 | "minefields"
                 | "value_anchors"
+                | "closing_scenarios"
                 | "cheat_sheet"
               )[] = [];
               if (form.company_snapshot.length === 0) sections.push("company_snapshot");
@@ -307,6 +327,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
               if (form.discovery_questions.length === 0) sections.push("discovery_questions");
               if (form.minefields.length === 0) sections.push("minefields");
               if (form.value_anchors.length === 0) sections.push("value_anchors");
+              if (form.closing_scenarios.length === 0) sections.push("closing_scenarios");
               if (
                 form.cheat_sheet_never_say.length === 0 &&
                 form.cheat_sheet_opening_asks.length === 0
@@ -1149,6 +1170,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
       <BriefSection
         title={`Closing scenarios (${form.closing_scenarios.length})`}
         subtitle="Playbooks for good / neutral / poor end-states."
+        actions={editable ? <SuggestBtn section="closing_scenarios" /> : null}
       >
         <ItemList
           items={form.closing_scenarios}
