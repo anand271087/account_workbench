@@ -3,6 +3,9 @@ export interface Category {
   name: string;
   parent_id: string | null;
   approved: boolean;
+  // Added in migration 0050 — Beroe canonical category list.
+  domain: string | null;
+  availability: string | null;
 }
 
 export interface Geography {

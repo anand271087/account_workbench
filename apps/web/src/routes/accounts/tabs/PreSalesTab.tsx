@@ -599,14 +599,25 @@ function CategoryPicker({
   onChange: (next: string[]) => void;
   disabled: boolean;
 }) {
+  // Migration 0050 grew the canonical list to ~2,879 categories across
+  // 22 domains. Listing them all as buttons caused unusable scroll, so
+  // this picker is now:
+  //   - selected chips on top (clickable to remove)
+  //   - domain filter dropdown (top of suggestions)
+  //   - typeahead search input (case-insensitive substring)
+  //   - results capped at 30 matches; "Show all N" expands
+  //   - propose-new at the bottom (unchanged flow)
   const qc = useQueryClient();
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["categories"],
     queryFn: () => api.get<Category[]>("/api/v1/lookups/categories"),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
   const [proposeText, setProposeText] = useState("");
   const [proposeError, setProposeError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [domainFilter, setDomainFilter] = useState<string>("");
+  const [showAllMatches, setShowAllMatches] = useState(false);
   const proposeMutation = useMutation({
     mutationFn: (name: string) => api.post<Category>("/api/v1/lookups/categories", { name }),
     onSuccess: (c) => {
@@ -618,7 +629,44 @@ function CategoryPicker({
     onError: (e: ApiError) => setProposeError(e.message),
   });
 
-  const all = (categories ?? []).map((c) => c);
+  // Stable identity per render so useMemo deps don't churn.
+  const all = useMemo(() => categories ?? [], [categories]);
+
+  // Unique domain list for the dropdown — sorted alphabetically, with
+  // "Other" sinking to the end so the meaningful buckets surface first.
+  const domains = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of all) if (c.domain) set.add(c.domain);
+    const arr = Array.from(set);
+    arr.sort((a, b) => {
+      if (a === "Other") return 1;
+      if (b === "Other") return -1;
+      return a.localeCompare(b);
+    });
+    return arr;
+  }, [all]);
+
+  // Filter pipeline: domain → search → drop already-selected.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return all.filter((c) => {
+      if (selected.includes(c.name)) return false;
+      if (domainFilter && c.domain !== domainFilter) return false;
+      if (q && !c.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [all, search, domainFilter, selected]);
+
+  // Render cap to keep the panel small — typing further narrows results.
+  const RENDER_CAP = 30;
+  const visible = showAllMatches ? filtered : filtered.slice(0, RENDER_CAP);
+
+  // Reset "show all" when the search/domain changes so a fresh query
+  // doesn't dump thousands of rows.
+  useEffect(() => {
+    setShowAllMatches(false);
+  }, [search, domainFilter]);
+
   return (
     <div>
       <div className="flex flex-wrap gap-1 mb-2">
@@ -634,32 +682,83 @@ function CategoryPicker({
 
       {!disabled && (
         <>
-          <div className="flex flex-wrap gap-1">
-            {all
-              .filter((c) => !selected.includes(c.name))
-              .map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => onChange([...selected, c.name])}
-                  className={cn(
-                    "text-xs px-2 py-0.5 rounded-full border",
-                    c.approved
-                      ? "border-slate-200 text-text-secondary hover:bg-slate-50"
-                      : "border-amber-200 text-amber-800 bg-amber-50",
-                  )}
-                  title={c.approved ? "" : "Pending admin approval"}
-                >
-                  {c.name}{c.approved ? "" : " (pending)"}
-                </button>
+          {/* Search + domain filter row */}
+          <div className="flex flex-col sm:flex-row gap-2 mb-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`🔍 Search ${all.length.toLocaleString()} categories…`}
+              className="flex-1 px-2 py-1.5 text-[12px] rounded-md border border-slate-200 focus:outline-none focus:border-beroe-blue"
+            />
+            <select
+              value={domainFilter}
+              onChange={(e) => setDomainFilter(e.target.value)}
+              className="text-[12px] rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none focus:border-beroe-blue bg-white sm:max-w-[200px]"
+            >
+              <option value="">All domains ({domains.length})</option>
+              {domains.map((d) => (
+                <option key={d} value={d}>{d}</option>
               ))}
+            </select>
           </div>
 
+          {/* Hint when nothing is being filtered yet */}
+          {!search && !domainFilter && (
+            <div className="text-[11px] text-text-muted mb-2 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5">
+              💡 Type to search ({all.length.toLocaleString()} categories) or pick
+              a domain to narrow down. Showing first {RENDER_CAP} alphabetically.
+            </div>
+          )}
+
+          {/* Result count */}
+          <div className="text-[10px] text-text-muted mb-1">
+            {filtered.length === 0
+              ? "No matches."
+              : `${filtered.length.toLocaleString()} match${filtered.length === 1 ? "" : "es"}${
+                  visible.length < filtered.length ? ` · showing first ${RENDER_CAP}` : ""
+                }`}
+          </div>
+
+          {/* Result chips */}
+          <div className="flex flex-wrap gap-1 max-h-64 overflow-y-auto p-1">
+            {visible.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => onChange([...selected, c.name])}
+                className={cn(
+                  "text-xs px-2 py-0.5 rounded-full border",
+                  c.approved
+                    ? "border-slate-200 text-text-secondary hover:bg-slate-50"
+                    : "border-amber-200 text-amber-800 bg-amber-50",
+                )}
+                title={
+                  c.approved
+                    ? (c.domain ? `${c.domain}${c.availability === "pipeline" ? " · pipeline" : ""}` : "")
+                    : "Pending admin approval"
+                }
+              >
+                {c.name}{c.approved ? "" : " (pending)"}
+              </button>
+            ))}
+          </div>
+
+          {filtered.length > RENDER_CAP && !showAllMatches && (
+            <button
+              onClick={() => setShowAllMatches(true)}
+              className="mt-1 text-[11px] text-beroe-blue font-semibold hover:underline"
+            >
+              Show all {filtered.length.toLocaleString()} matches
+            </button>
+          )}
+
+          {/* Propose-new */}
           <div className="mt-3 flex gap-1">
             <input
               type="text"
               value={proposeText}
               onChange={(e) => setProposeText(e.target.value)}
-              placeholder="Propose a new category…"
+              placeholder="Don't see it? Propose a new category…"
               className="flex-1 px-2 py-1 text-xs rounded-md border border-slate-200 focus:outline-none focus:border-beroe-blue"
             />
             <button
