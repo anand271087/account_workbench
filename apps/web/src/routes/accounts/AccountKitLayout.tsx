@@ -93,87 +93,89 @@ export default function AccountKitLayout() {
 }
 
 function KitCompletion({ account }: { account: AccountDetail }) {
-  // Heuristic: each step is "done" when the strongest signal of completion
-  // on its tab is set. We avoid fan-out queries by leaning on AccountDetail
-  // fields surfaced by the layout (engagement.objective live in /engagement;
-  // we don't fetch it here — Pre-Sales is treated as "complete" once the
-  // user has handed off to Solutioning, which is the gate to leave that step).
-  // 27-May Row 73 — steps now reflect the merged Pre-Sales & Solutioning
-  // tab; Brief moved last to match the new SUB_NAV order.
-  const steps: { label: string; done: boolean }[] = [
+  // 28-May — Verbatim port of prototype line 5814-5840 (Kit Completion
+  // bar). Multi-segment bar — each step occupies an equal-width segment;
+  // the segment's COLOUR is fixed per-step and its OPACITY = step's
+  // completion percentage (0 → invisible / 1 → fully coloured).
+  //
+  // Prototype uses 6 steps; we have 4 since Row 73 merged Pre-Sales +
+  // Solutioning. The colour palette is taken straight from the prototype
+  // (line 5822) — pick first N colours for our N steps.
+  const steps: { label: string; done: boolean; col: string }[] = [
     {
       label: "Pre-Sales & Solutioning",
       done: account.handed_off_to_solutioning,
+      col: "#4A00F8", // violet
     },
-    { label: "Sales Hand-off", done: account.gate_signed },
-    { label: "CS Onboarding", done: account.cs_entry_type !== null },
-    { label: "Brief", done: account.handed_off_to_solutioning },
+    { label: "Sales Hand-off", done: account.gate_signed, col: "#EF9637" }, // orange
+    { label: "CS Onboarding", done: account.cs_entry_type !== null, col: "#C344C7" }, // magenta
+    { label: "Brief", done: account.handed_off_to_solutioning, col: "#35E1D4" }, // teal
   ];
   const completed = steps.filter((s) => s.done).length;
-  const pct = Math.round((completed / steps.length) * 100);
+  const overallPct = Math.round((completed / steps.length) * 100);
+  const overallCol =
+    overallPct >= 75 ? "#2fb87a" : overallPct >= 40 ? "#d88520" : "#FD576B";
+
   return (
-    <div className="mb-3 bg-white border border-beroe-card-border rounded-card px-4 py-3">
-      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-        <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
+    <div className="mb-3 bg-white border border-beroe-card-border rounded-card px-4 py-2.5">
+      <div className="flex items-center gap-3.5 flex-wrap">
+        <div className="text-[11px] font-bold whitespace-nowrap text-text-primary">
           Kit Completion
         </div>
-        <div className="flex items-center gap-2">
-          <div className="text-[11px] font-bold text-text-primary">
-            {completed} / {steps.length} steps · {pct}%
-          </div>
-          {/* 27-May Row 74 — Download Kit button. Opens a printable
-              summary in a new window using existing AccountDetail data;
-              user can save as PDF via the browser print dialog. */}
-          <button
-            type="button"
-            onClick={() => downloadAccountKit(account)}
-            className="text-[10px] px-2 py-0.5 rounded border border-beroe-blue/40 bg-beroe-blue/5 text-beroe-blue font-semibold hover:bg-beroe-blue/10"
-            title="Open a printable summary in a new window"
+
+        {/* Multi-segment bar — verbatim from prototype line 5818-5823 */}
+        <div className="flex-1 flex items-center gap-1.5 min-w-[200px]">
+          <div
+            className="flex-1 h-2 rounded-full overflow-hidden flex gap-px"
+            style={{ background: "#e8eef8" }}
           >
-            ⬇ Download Kit
-          </button>
+            {steps.map((s) => {
+              const pct = s.done ? 100 : 0;
+              return (
+                <div
+                  key={s.label}
+                  className="flex-1 h-full"
+                  style={{
+                    background: s.col,
+                    opacity: pct / 100,
+                  }}
+                />
+              );
+            })}
+          </div>
+          <span
+            className="text-[12px] font-bold"
+            style={{ color: overallCol }}
+          >
+            {overallPct}%
+          </span>
         </div>
-      </div>
-      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-        <div
-          className={cn(
-            "h-full transition-all",
-            pct === 100 ? "bg-emerald-500" : "bg-beroe-blue",
-          )}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {steps.map((s, i) => {
-          // 27-May Row 74 — per-step color coding (4-stage workflow):
-          //   1 Pre-Sales & Solutioning → emerald
-          //   2 Sales Hand-off          → blue
-          //   3 CS Onboarding           → violet
-          //   4 Brief                   → amber
-          // Each step shows its assigned colour when done; muted-slate
-          // when not done. Easier to tell at a glance which stage the
-          // account is in than the previous all-emerald pattern.
-          const PALETTE = [
-            { bg: "bg-emerald-50", txt: "text-emerald-700", border: "border-emerald-200" },
-            { bg: "bg-blue-50", txt: "text-blue-700", border: "border-blue-200" },
-            { bg: "bg-violet-50", txt: "text-violet-700", border: "border-violet-200" },
-            { bg: "bg-amber-50", txt: "text-amber-700", border: "border-amber-200" },
-          ];
-          const p = PALETTE[i % PALETTE.length];
-          return (
-            <span
-              key={s.label}
-              className={cn(
-                "text-[10px] px-1.5 py-0.5 rounded-full border font-semibold",
-                s.done
-                  ? `${p.bg} ${p.txt} ${p.border}`
-                  : "bg-slate-50 text-text-muted border-beroe-card-border",
-              )}
-            >
-              {s.done ? "✓" : "○"} {s.label}
-            </span>
-          );
-        })}
+
+        {/* Per-step % labels (prototype line 5826) */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {steps.map((s) => {
+            const pct = s.done ? 100 : 0;
+            return (
+              <span
+                key={s.label}
+                className="text-[9px] font-semibold whitespace-nowrap"
+                style={{ color: s.col }}
+              >
+                {s.label} {pct}%
+              </span>
+            );
+          })}
+        </div>
+
+        {/* 27-May Row 74 — Download Kit button. */}
+        <button
+          type="button"
+          onClick={() => downloadAccountKit(account)}
+          className="text-[10px] px-2.5 py-1 rounded border border-beroe-blue/40 bg-beroe-blue/5 text-beroe-blue font-semibold hover:bg-beroe-blue/10 whitespace-nowrap"
+          title="Open a printable summary in a new window"
+        >
+          ⬇ Download Kit
+        </button>
       </div>
     </div>
   );
