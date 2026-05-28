@@ -97,7 +97,16 @@ export default function PreSalesTab() {
       setSavingError(null);
       setAiResult(null);
     },
-    onError: (e: ApiError) => setSavingError(e.message),
+    onError: (e: ApiError) => {
+      setSavingError(e.message);
+      // 28-May — Same revert-on-lock pattern as SolutioningTab. If the
+      // server rejects the save (409 lock / 403 RBAC), clear the dirty
+      // state so the user can navigate freely. The banner / 403 redirect
+      // already communicates why edits aren't possible.
+      if ((e.status === 409 || e.status === 403) && data) {
+        setForm(data);
+      }
+    },
   });
 
   const aiMutation = useMutation({

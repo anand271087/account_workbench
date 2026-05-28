@@ -73,7 +73,19 @@ export default function SolutioningTab() {
       setForm(saved);
       setSavingError(null);
     },
-    onError: (e: ApiError) => setSavingError(e.message),
+    onError: (e: ApiError) => {
+      setSavingError(e.message);
+      // 28-May — On a lock/forbidden failure (409 Conflict from the
+      // sales-handoff lock, 403 from RBAC), the user's edits can't be
+      // persisted. Revert form to the last server-known data so:
+      //   1. dirty clears → nav guard stops blocking the next tab click
+      //   2. Save button disables (dirty=false)
+      //   3. The locked banner already communicates why edits aren't
+      //      possible.
+      if ((e.status === 409 || e.status === 403) && data) {
+        setForm(data);
+      }
+    },
   });
 
   // 28-May — In the merged Pre-Sales & Solutioning tab, Pre-Sales is
