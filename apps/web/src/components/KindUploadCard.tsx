@@ -215,8 +215,14 @@ export function KindUploadCard({
 
   const rerunMutation = useMutation({
     mutationFn: (id: string) => api.post<Job>(`/api/v1/documents/${id}/rerun-ai`),
-    onSuccess: (job) => {
+    onSuccess: (job, docId) => {
       setActiveJobIds((s) => [...s, job.id]);
+      // Clear the "already applied" flags for this doc so the auto-apply
+      // useEffect will pick up the fresh extracted fields when the worker
+      // finishes. Without this, a doc that was applied once (possibly
+      // with stub data) is locked out from re-apply on subsequent reruns.
+      sessionStorage.removeItem(appliedKey(docId));
+      localStorage.removeItem(appliedKey(docId));
       qc.invalidateQueries({ queryKey });
     },
   });
