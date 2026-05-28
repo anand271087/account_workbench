@@ -113,18 +113,35 @@ export default function CSOnboardingTab() {
   );
 
   return (
-    <div className="space-y-4">
-      {/* ---------- Card 1: Entry type picker ---------- */}
-      <Section title="CS Onboarding Entry">
+    <div className="space-y-3">
+      {/* CS Onboarding track divider — verbatim port of prototype
+          line 6125-6130. */}
+      <div className="flex items-center gap-2.5 mb-1 mt-1.5">
+        <div className="flex-1 border-t-[1.5px] border-dashed border-beroe-card-border" />
+        <span className="text-[10px] text-text-muted font-semibold whitespace-nowrap">
+          CS Onboarding · Entry → Stakeholders → Success Management
+        </span>
+        <div className="flex-1 border-t-[1.5px] border-dashed border-beroe-card-border" />
+      </div>
+
+      {/* ---------- Card 1: Entry type picker ----------
+          Prototype line 6132-6165: left-border 3px #4A00F8 violet,
+          numbered badge "1", CS team badge. */}
+      <NumberedCard
+        n="1"
+        title="CS Onboarding Entry"
+        col="#4A00F8"
+        teamLabel="CS"
+      >
         <p className="text-xs text-text-muted mb-3">
           Two ways into CS. Pick A when you got a clean handover from Sales
           on signing. Pick B when you're inheriting an account mid-contract
           and need to record what you're walking into.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
           <EntryButton
-            label="Entry A — New Account (Clean Handover)"
-            desc="Sales passed a complete handover package on signing."
+            label="✅ Entry A — New Account (Clean Handover)"
+            desc="Sales passed a complete handover package to CS"
             active={form.cs_entry_type === "A"}
             disabled={!editable || !account.gate_signed}
             disabledHint={
@@ -132,139 +149,75 @@ export default function CSOnboardingTab() {
                 ? "Account isn't signed yet — Entry A activates after signing."
                 : undefined
             }
-            tone="blue"
+            col="#4A00F8"
+            activeBg="#f3f0ff"
             onClick={() => setEntry("A")}
           />
           <EntryButton
-            label="Entry B — Existing Account (Mid-Contract Pickup)"
-            desc="CSM inherited this account with no formal handover. Capture baseline."
+            label="🔄 Entry B — Existing Account (Mid-Contract)"
+            desc="CSM picks up account with no clean handover"
             active={form.cs_entry_type === "B"}
             disabled={!editable}
-            tone="amber"
+            col="#EF9637"
+            activeBg="#fff8eb"
             onClick={() => setEntry("B")}
           />
         </div>
+
+        {/* When Entry A — inline handover quality checklist
+            (prototype line 6148-6155). */}
+        {form.cs_entry_type === "A" && account.gate_signed && (
+          <HandoverChecklistInline
+            checklist={form.cs_handover_checklist}
+            editable={editable}
+            saving={instant.isPending}
+            onToggle={(k, v) =>
+              instant.mutate({ cs_handover_checklist: { [k]: v } })
+            }
+          />
+        )}
+
+        {/* When Entry B — inline VDD baseline (prototype line 6156-6163). */}
+        {form.cs_entry_type === "B" && (
+          <EntryBBaselineInline
+            form={form}
+            editable={editable}
+            onChange={setForm}
+          />
+        )}
+
         {savingError && (
           <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             {savingError}
           </div>
         )}
-      </Section>
+      </NumberedCard>
 
-      {/* Idle state — neither entry chosen yet */}
+      {/* Idle state — neither entry chosen yet (prototype line 6164). */}
       {!activated && form.cs_entry_type !== "A" && form.cs_entry_type !== "B" && (
-        <div className="bg-slate-50 rounded-card border border-beroe-card-border p-5 text-xs text-text-muted">
-          Pick an entry type above to start CS Onboarding. The handover
-          checklist + stakeholder map appear once you do.
+        <div className="bg-slate-50 rounded-card border border-beroe-card-border p-3 text-xs text-text-muted text-center">
+          Select an entry type to begin CS onboarding.
         </div>
       )}
 
-      {/* ---------- Card 2A: Handover Checklist (Entry A) ---------- */}
-      {form.cs_entry_type === "A" && account.gate_signed && (
-        <Section title="Handover Quality Check — CSM side">
-          <p className="text-xs text-text-muted mb-3">
-            Confirm receipt of the four things Sales should pass on signing.
-            Saves instantly. The Sales-side handshake lives on the Sales
-            Hand-off tab — both columns must align.
-          </p>
-          {/* R20 — auto banner: complete (green) vs. incomplete (amber). */}
-          {(() => {
-            const checked = CS_HANDOVER_ITEMS.filter(
-              (it) => !!form.cs_handover_checklist[it.key],
-            ).length;
-            const total = CS_HANDOVER_ITEMS.length;
-            const complete = checked === total;
-            return (
-              <div
-                className={cn(
-                  "mb-3 rounded-lg border px-3 py-2 text-xs font-semibold flex items-center gap-2",
-                  complete
-                    ? "bg-green-50 border-green-200 text-green-800"
-                    : "bg-amber-50 border-amber-200 text-amber-800",
-                )}
-              >
-                <span>{complete ? "✓" : "⚠"}</span>
-                <span>
-                  {complete
-                    ? "Handover complete — all 4 items confirmed."
-                    : `Handover incomplete — ${checked} of ${total} items confirmed.`}
-                </span>
-              </div>
-            );
-          })()}
-          <ul className="space-y-2">
-            {CS_HANDOVER_ITEMS.map((it) => {
-              const checked = !!form.cs_handover_checklist[it.key];
-              return (
-                <li
-                  key={it.key}
-                  className="flex items-start gap-3 bg-slate-50/40 border border-slate-200 rounded-lg px-3 py-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!editable || instant.isPending}
-                    onChange={(e) =>
-                      instant.mutate({
-                        cs_handover_checklist: { [it.key]: e.target.checked },
-                      })
-                    }
-                    className="mt-0.5"
-                  />
-                  <span className="text-sm text-text-primary">{it.label}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </Section>
-      )}
-
-      {/* ---------- Card 2B: Baseline Context (Entry B) ---------- */}
-      {form.cs_entry_type === "B" && (
-        <Section title="Mid-contract baseline">
-          <p className="text-xs text-text-muted mb-3">
-            What you walked into. Don't try to perfect this — capture the
-            facts as you know them so the rest of CS Onboarding has somewhere
-            to anchor.
-          </p>
-          <Field label="Context — recent history, where the relationship is">
-            <textarea
-              rows={4}
-              maxLength={8000}
-              value={form.cs_entry_b_context ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, cs_entry_b_context: e.target.value || null })
-              }
-              disabled={!editable}
-              placeholder="e.g. Signed in 2024 under previous CSM. Renewal next quarter. Champion is engaged; CPO has gone quiet."
-              className={textareaCls(editable)}
-            />
-          </Field>
-          <Field label="Goals agreed with client (best understanding)">
-            <textarea
-              rows={4}
-              maxLength={8000}
-              value={form.cs_entry_b_goals ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, cs_entry_b_goals: e.target.value || null })
-              }
-              disabled={!editable}
-              placeholder="e.g. 1) Cocoa price intelligence drives Q2 contract negotiation. 2) RSPO compliance evidence by H2."
-              className={textareaCls(editable)}
-            />
-          </Field>
-        </Section>
-      )}
-
-      {/* ---------- Card 3: Stakeholder map ---------- */}
+      {/* ---------- Card 2: Stakeholder Map ----------
+          Prototype line 6167-6201: left-border 3px #C344C7 magenta,
+          numbered badge "2", X/3 roles pill in header, 3-column grid
+          with per-role colour + icon. */}
       {activated && (
-        <Section
+        <NumberedCard
+          n="2"
           title="Stakeholder Map"
-          subtitle="Three mandatory roles. Names alone are fine to start; backfill email + phone as you confirm."
+          col="#C344C7"
+          teamLabel="CS"
+          trailing={<RoleCoveragePill stakeholders={form.cs_stakeholders} />}
         >
-          {/* Dedup banner — same person can't fill two roles. */}
+          <p className="text-[10px] text-text-muted mb-2.5">
+            All 3 roles must be named before proceeding to goals and success
+            contract.
+          </p>
           <StakeholderDuplicateBanner stakeholders={form.cs_stakeholders} />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
             {STAKEHOLDER_ROLES.map((r) => {
               const cur = form.cs_stakeholders[r.key] ?? {
                 name: null,
@@ -281,6 +234,8 @@ export default function CSOnboardingTab() {
                   key={r.key}
                   label={r.label}
                   desc={r.desc}
+                  col={r.col}
+                  icon={r.icon}
                   value={cur}
                   editable={editable}
                   duplicateOf={dup}
@@ -297,11 +252,12 @@ export default function CSOnboardingTab() {
               );
             })}
           </div>
-          <RoleCoverage stakeholders={form.cs_stakeholders} />
-        </Section>
+        </NumberedCard>
       )}
 
-      {/* ---------- R21 — Goal Validation & Alignment surface ---------- */}
+      {/* ---------- Card 3: Goal Validation & Alignment ----------
+          Prototype line 6203+: left-border 3px #4A00F8 violet,
+          numbered badge "3". */}
       {activated && <GoalAlignmentSurface accountId={account.id} />}
 
       {/* Sticky save bar — for the text-field changes (Entry B + stakeholders). */}
@@ -384,49 +340,251 @@ export default function CSOnboardingTab() {
 // Sub-components
 // ============================================================
 
-function Section({
+/** NumberedCard — verbatim port of prototype's
+ *    `<div class="card" style="border-left:3px solid {col}">`
+ *    + numbered badge + team badge pattern (line 6133-6137,
+ *    6168-6173, 6203-6240).
+ *    Used for all three CS Onboarding step cards. */
+function NumberedCard({
+  n,
   title,
-  subtitle,
+  col,
+  teamLabel,
+  trailing,
   children,
 }: {
+  n: string;
   title: string;
-  subtitle?: string;
+  col: string;
+  teamLabel?: string;
+  trailing?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-card border border-beroe-card-border p-5">
-      <h2 className="text-sm font-bold text-text-primary">{title}</h2>
-      {subtitle && <p className="text-xs text-text-muted mt-0.5 mb-3">{subtitle}</p>}
-      {!subtitle && <div className="mb-2" />}
+    <div
+      className="bg-white rounded-card border border-beroe-card-border p-4 mb-3"
+      style={{ borderLeft: `3px solid ${col}` }}
+    >
+      <div className="flex items-center gap-2 mb-2.5">
+        <span
+          className="inline-flex items-center justify-center w-[22px] h-[22px] rounded-md text-[10px] font-extrabold text-white"
+          style={{ background: col }}
+        >
+          {n}
+        </span>
+        <span className="text-[14px] font-bold text-text-primary">{title}</span>
+        {teamLabel && (
+          <span
+            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
+            style={{ background: `${col}15`, color: col }}
+          >
+            {teamLabel}
+          </span>
+        )}
+        {trailing && <span className="ml-2">{trailing}</span>}
+      </div>
       {children}
     </div>
   );
 }
 
-function Field({
-  label,
-  children,
+/** Inline handover checklist — rows with green bg when checked,
+ *  rounded checkbox icon, strike-through text. Prototype line 6149-6155. */
+function HandoverChecklistInline({
+  checklist,
+  editable,
+  saving,
+  onToggle,
 }: {
-  label: string;
-  children: React.ReactNode;
+  checklist: Record<string, boolean>;
+  editable: boolean;
+  saving: boolean;
+  onToggle: (key: string, v: boolean) => void;
 }) {
+  const allDone = CS_HANDOVER_ITEMS.every((it) => !!checklist[it.key]);
   return (
-    <div className="mb-3 last:mb-0">
-      <label className="block text-[11px] uppercase tracking-wider text-text-muted font-bold mb-1">
-        {label}
-      </label>
-      {children}
+    <div className="mt-2">
+      <div
+        className="text-[11px] font-bold uppercase tracking-wider mb-2"
+        style={{ color: "#6b7fa0" }}
+      >
+        Handover Quality Check — All 4 must be present
+      </div>
+      {CS_HANDOVER_ITEMS.map((it) => {
+        const checked = !!checklist[it.key];
+        return (
+          <button
+            key={it.key}
+            type="button"
+            disabled={!editable || saving}
+            onClick={() => onToggle(it.key, !checked)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 mb-1 rounded-md text-left disabled:cursor-not-allowed"
+            style={{ background: checked ? "#f0fdf4" : "#f8f9fc" }}
+          >
+            <span
+              className="inline-flex items-center justify-center flex-shrink-0 text-white"
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 4,
+                border: `2px solid ${checked ? "#40CC8F" : "#cbd5e1"}`,
+                background: checked ? "#40CC8F" : "#fff",
+                fontSize: 10,
+              }}
+            >
+              {checked ? "✓" : ""}
+            </span>
+            <span
+              className="text-[12px]"
+              style={{
+                color: checked ? "#2fb87a" : undefined,
+                textDecoration: checked ? "line-through" : "none",
+              }}
+            >
+              {it.label}
+            </span>
+          </button>
+        );
+      })}
+      {allDone ? (
+        <div
+          className="mt-2 text-[11px] px-3 py-2 rounded-md"
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #40CC8F30",
+            color: "#2fb87a",
+          }}
+        >
+          ✅ Handover complete. Proceed to stakeholder mapping and success
+          contract.
+        </div>
+      ) : (
+        <div
+          className="mt-2 text-[11px] px-3 py-2 rounded-md"
+          style={{
+            background: "#fff8eb",
+            border: "1px solid #EF963730",
+            color: "#b45309",
+          }}
+        >
+          ⚠️ Incomplete handover — resolve missing items with Sales before
+          proceeding.
+        </div>
+      )}
     </div>
   );
 }
 
+/** Inline Entry-B VDD baseline block. Prototype line 6156-6163. */
+function EntryBBaselineInline({
+  form,
+  editable,
+  onChange,
+}: {
+  form: CSOnboarding;
+  editable: boolean;
+  onChange: (next: CSOnboarding) => void;
+}) {
+  const captured = !!form.cs_entry_b_context?.trim();
+  return (
+    <div className="mt-2">
+      <div
+        className="text-[11px] font-bold uppercase tracking-wider mb-1.5"
+        style={{ color: "#6b7fa0" }}
+      >
+        Value Delivery Document (VDD) — Catch-up Baseline
+      </div>
+      <p className="text-[11px] text-text-muted mb-2">
+        Upload or enter prior context. Goals must be agreed with budget owner
+        and client SPOC.
+      </p>
+      <textarea
+        rows={4}
+        maxLength={8000}
+        value={form.cs_entry_b_context ?? ""}
+        onChange={(e) =>
+          onChange({ ...form, cs_entry_b_context: e.target.value || null })
+        }
+        disabled={!editable}
+        placeholder="Prior context, notes, activity history..."
+        className={cn(textareaCls(editable), "mb-2")}
+      />
+      <textarea
+        rows={3}
+        maxLength={8000}
+        value={form.cs_entry_b_goals ?? ""}
+        onChange={(e) =>
+          onChange({ ...form, cs_entry_b_goals: e.target.value || null })
+        }
+        disabled={!editable}
+        placeholder="Goals agreed with budget owner and client SPOC..."
+        className={textareaCls(editable)}
+      />
+      {captured ? (
+        <div
+          className="mt-2 text-[11px] px-3 py-2 rounded-md"
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #40CC8F30",
+            color: "#2fb87a",
+          }}
+        >
+          ✅ Baseline captured. Proceed to stakeholder mapping.
+        </div>
+      ) : (
+        <div
+          className="mt-2 text-[11px] px-3 py-2 rounded-md"
+          style={{
+            background: "#fff8eb",
+            border: "1px solid #EF963730",
+            color: "#b45309",
+          }}
+        >
+          ⚠️ Account not activated until VDD baseline is complete.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "X/3 roles" pill in the Stakeholder Map header.
+ *  Prototype line 6172: filled===3 → green, >0 → amber, 0 → red. */
+function RoleCoveragePill({
+  stakeholders,
+}: {
+  stakeholders: Record<string, Stakeholder>;
+}) {
+  const filled = STAKEHOLDER_ROLES.filter(
+    (r) => !!stakeholders[r.key]?.name?.trim(),
+  ).length;
+  const total = STAKEHOLDER_ROLES.length;
+  const tone =
+    filled === total
+      ? { bg: "#dcfce7", fg: "#166534" }
+      : filled > 0
+        ? { bg: "#fef3c7", fg: "#92400e" }
+        : { bg: "#fee2e2", fg: "#991b1b" };
+  return (
+    <span
+      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+      style={{ background: tone.bg, color: tone.fg }}
+    >
+      {filled}/{total} roles
+    </span>
+  );
+}
+
+/** EntryButton — verbatim port of prototype line 6139-6146.
+ *  When active: border 2px solid {col} + bg {activeBg} + text {col}.
+ *  When inactive: border 2px solid card-border + bg white + text default. */
 function EntryButton({
   label,
   desc,
   active,
   disabled,
   disabledHint,
-  tone,
+  col,
+  activeBg,
   onClick,
 }: {
   label: string;
@@ -434,36 +592,33 @@ function EntryButton({
   active: boolean;
   disabled: boolean;
   disabledHint?: string;
-  tone: "blue" | "amber";
+  col: string;
+  activeBg: string;
   onClick: () => void;
 }) {
-  const activeBorder = tone === "blue" ? "border-beroe-blue" : "border-amber-400";
-  const activeBg = tone === "blue" ? "bg-beroe-blue/5" : "bg-amber-50";
-  const activeText = tone === "blue" ? "text-beroe-blue" : "text-amber-900";
   return (
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       title={disabled ? disabledHint : ""}
       className={cn(
-        "text-left rounded-lg border-2 px-4 py-3 transition-colors",
-        active
-          ? `${activeBorder} ${activeBg}`
-          : "border-slate-200 bg-white hover:border-slate-300",
+        "text-left rounded-[10px] p-3 transition-colors",
         disabled && "opacity-50 cursor-not-allowed",
       )}
+      style={{
+        border: `2px solid ${active ? col : "#e4eaf6"}`,
+        background: active ? activeBg : "#fff",
+      }}
     >
       <div
-        className={cn(
-          "text-sm font-bold mb-1",
-          active ? activeText : "text-text-primary",
-        )}
+        className="text-[12px] font-bold mb-1"
+        style={{ color: active ? col : "#1f2937" }}
       >
         {label}
       </div>
-      <div className="text-xs text-text-muted">{desc}</div>
+      <div className="text-[10px] text-text-muted">{desc}</div>
       {disabled && disabledHint && (
-        <div className="text-[11px] text-text-muted italic mt-1.5">
+        <div className="text-[10px] text-text-muted italic mt-1.5">
           {disabledHint}
         </div>
       )}
@@ -471,9 +626,15 @@ function EntryButton({
   );
 }
 
+/** StakeholderCard — verbatim port of prototype line 6183-6198.
+ *  When filled: bg {col}08 + border 1.5px {col}30 + role title in {col}.
+ *  When empty: bg #f8f9fc + border 1.5px card-border. Per-role icon
+ *  next to the label, ✓ badge when filled. */
 function StakeholderCard({
   label,
   desc,
+  col,
+  icon,
   value,
   editable,
   duplicateOf,
@@ -481,6 +642,8 @@ function StakeholderCard({
 }: {
   label: string;
   desc: string;
+  col: string;
+  icon: string;
   value: Stakeholder;
   editable: boolean;
   duplicateOf: { roleLabel: string; field: "name" | "email" } | null;
@@ -489,20 +652,31 @@ function StakeholderCard({
   const filled = !!value.name?.trim();
   return (
     <div
-      className={cn(
-        "rounded-lg border-2 p-3 transition-colors",
-        duplicateOf
-          ? "border-red-300 bg-red-50/40"
+      className="rounded-card p-3 transition-colors"
+      style={{
+        background: duplicateOf
+          ? "#fff0f2"
           : filled
-            ? "border-green-200 bg-green-50/30"
-            : "border-slate-200 bg-slate-50/30",
-      )}
+            ? `${col}08`
+            : "#f8f9fc",
+        border: `1.5px solid ${duplicateOf ? "#FD576B30" : filled ? `${col}30` : "#e4eaf6"}`,
+      }}
     >
-      <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted mb-0.5">
-        {label}
-        {filled && <span className="ml-1 text-green-700">✓</span>}
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-[14px]">{icon}</span>
+        <span
+          className="text-[12px] font-bold flex-1"
+          style={{ color: col }}
+        >
+          {label}
+        </span>
+        {filled && (
+          <span className="text-[10px]" style={{ color: "#2fb87a" }}>
+            ✓
+          </span>
+        )}
       </div>
-      <div className="text-[11px] text-text-muted mb-2">{desc}</div>
+      <div className="text-[10px] text-text-muted mb-2">{desc}</div>
       <input
         type="text"
         maxLength={200}
@@ -510,7 +684,7 @@ function StakeholderCard({
         placeholder="Name"
         onChange={(e) => onChange({ name: e.target.value || null })}
         disabled={!editable}
-        className={inputCls(editable)}
+        className={cn(inputCls(editable), "mb-1.5")}
       />
       <input
         type="email"
@@ -519,7 +693,7 @@ function StakeholderCard({
         placeholder="Email"
         onChange={(e) => onChange({ email: e.target.value || null })}
         disabled={!editable}
-        className={cn(inputCls(editable), "mt-2")}
+        className={cn(inputCls(editable), "mb-1.5")}
       />
       <input
         type="tel"
@@ -528,10 +702,10 @@ function StakeholderCard({
         placeholder="Phone"
         onChange={(e) => onChange({ phone: e.target.value || null })}
         disabled={!editable}
-        className={cn(inputCls(editable), "mt-2")}
+        className={inputCls(editable)}
       />
       {duplicateOf && (
-        <div className="mt-2 text-[10px] text-red-700 font-semibold flex items-start gap-1">
+        <div className="mt-2 text-[10px] font-semibold flex items-start gap-1" style={{ color: "#e63950" }}>
           <span>⚠</span>
           <span>
             Same {duplicateOf.field} as the {duplicateOf.roleLabel} role —
@@ -589,36 +763,6 @@ function StakeholderDuplicateBanner({
   );
 }
 
-function RoleCoverage({
-  stakeholders,
-}: {
-  stakeholders: Record<string, Stakeholder>;
-}) {
-  const filled = STAKEHOLDER_ROLES.filter(
-    (r) => !!stakeholders[r.key]?.name?.trim(),
-  ).length;
-  const total = STAKEHOLDER_ROLES.length;
-  const complete = filled === total;
-  return (
-    <div
-      className={cn(
-        "mt-3 rounded-md px-3 py-2 text-xs border",
-        complete
-          ? "border-green-200 bg-green-50 text-green-800"
-          : "border-amber-200 bg-amber-50 text-amber-900",
-      )}
-    >
-      {complete ? (
-        <>✓ All three roles named.</>
-      ) : (
-        <>
-          {filled}/{total} roles named — fill in the remaining{" "}
-          {total - filled} to unblock Goal Validation.
-        </>
-      )}
-    </div>
-  );
-}
 
 // ============================================================
 // Helpers
@@ -687,15 +831,40 @@ function GoalAlignmentSurface({ accountId }: { accountId: string }) {
       ),
   });
   const goals = data?.items ?? [];
+
+  // Status message ported from prototype line 6215.
+  const aligned = goals.filter((g) => g.alignment_status === "aligned").length;
+  const total = goals.length;
+  const statusMsg =
+    total === 0
+      ? ""
+      : aligned === total
+        ? "🟢 All goals aligned — initiatives ready"
+        : aligned > 0
+          ? `🟡 Alignment in progress — ${aligned} of ${total} goals aligned`
+          : "🔴 Not started — validate goals before picking initiatives";
+
   return (
-    <Section
-      title="Goal Validation & Alignment"
-      subtitle="Each goal walks through three checks: what it means, the groundwork, and the agreed target. Click any row to expand."
+    <NumberedCard
+      n="3"
+      title="🎯 Goal Validation & Alignment"
+      col="#4A00F8"
+      trailing={
+        statusMsg && (
+          <span className="text-[10px] font-semibold text-text-secondary">
+            {statusMsg}
+          </span>
+        )
+      }
     >
-      <div className="flex items-center justify-end mb-2">
+      <div className="flex items-start justify-between gap-3 mb-2.5">
+        <p className="text-[10px] text-text-muted">
+          Validate each goal before defining initiatives. This step ensures
+          you and the client are aligned on what success means.
+        </p>
         <a
           href={`/accounts/${accountId}/goals`}
-          className="text-xs text-beroe-blue font-semibold hover:underline"
+          className="text-[10px] text-beroe-blue font-semibold hover:underline whitespace-nowrap"
         >
           Manage Goals →
         </a>
@@ -703,8 +872,9 @@ function GoalAlignmentSurface({ accountId }: { accountId: string }) {
       {isLoading ? (
         <div className="text-xs text-text-muted italic">Loading goals…</div>
       ) : goals.length === 0 ? (
-        <div className="text-xs text-text-muted italic">
-          No goals captured yet. Add the first goal from the Manage Goals page.
+        <div className="text-xs text-text-muted italic px-2 py-2">
+          Goals will appear here from the Sales handover. If none are showing,
+          check the Sales Hand-off section above.
         </div>
       ) : (
         <ul className="space-y-2">
@@ -713,7 +883,7 @@ function GoalAlignmentSurface({ accountId }: { accountId: string }) {
           ))}
         </ul>
       )}
-    </Section>
+    </NumberedCard>
   );
 }
 

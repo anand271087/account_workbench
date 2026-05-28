@@ -27,22 +27,31 @@ export interface CSOnboardingUpdate {
   cs_stakeholders?: Record<string, Partial<Stakeholder>>;
 }
 
-/** Three canonical CS stakeholder roles, in render order. */
+/** Three canonical CS stakeholder roles, in render order.
+ *
+ * `col` + `icon` ported verbatim from prototype line 6176-6180 so the
+ * card colour matches the visual reference exactly. */
 export const STAKEHOLDER_ROLES = [
   {
     key: "commercial",
     label: "Budget Owner",
     desc: "Signed the contract. Holds the budget. Renewal decision rests here.",
+    col: "#4A00F8",
+    icon: "💼",
   },
   {
     key: "champion",
     label: "Day-to-day Champion",
     desc: "Client SPOC. Uses Beroe regularly. Validates value at checkpoints.",
+    col: "#40CC8F",
+    icon: "⭐",
   },
   {
     key: "category",
     label: "Category Manager",
     desc: "Implements initiatives. Confirms savings realised. Key voice at QBR.",
+    col: "#EF9637",
+    icon: "📊",
   },
 ] as const;
 
