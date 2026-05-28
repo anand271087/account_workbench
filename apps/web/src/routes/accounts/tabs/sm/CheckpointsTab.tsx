@@ -18,6 +18,7 @@ import {
   daysUntil,
   STATUS_LABELS,
   STATUS_TONES,
+  TYPE_COLORS,
   TYPE_ICONS,
   type Checkpoint,
   type CheckpointAttachment,
@@ -31,6 +32,12 @@ import {
 import type { MetricListResponse } from "@/types/metric";
 
 const TYPES: CheckpointType[] = ["Kickoff", "MBR", "QBR", "Renewal"];
+
+// Beroe brand palette anchors.
+const INDIGO = "#4A00F8";
+const MIDNIGHT = "#001137";
+const RISK_GREEN = "#6EC457";
+const RISK_RED = "#CF4548";
 
 export default function CheckpointsTab() {
   const account = useAccountFromLayout();
@@ -46,7 +53,6 @@ export default function CheckpointsTab() {
   });
 
   const [signOffFor, setSignOffFor] = useState<Checkpoint | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
 
   const editable = !!data?.is_editable;
   const items = data?.items ?? [];
@@ -59,45 +65,61 @@ export default function CheckpointsTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey }),
   });
 
+  const [quickAddType, setQuickAddType] = useState<CheckpointType | null>(null);
+  const existingTypes = new Set(items.map((c) => c.type));
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between">
+    <div className="space-y-3.5">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-[14px] font-bold text-text-primary">Checkpoints</h2>
-          <p className="text-[11px] text-text-muted">
+          <div
+            className="text-[11px] font-bold uppercase"
+            style={{ color: "#35E1D4", letterSpacing: "0.05em" }}
+          >
+            Checkpoint Cadence
+          </div>
+          <p className="text-[11px] text-text-muted mt-0.5">
             The cadence that proves value. Kickoff → MBR (+90d) → QBR (+180d) →
             Renewal (T−14d). Sign-off snapshots become the evidence Renewal
             Readiness reads from.
           </p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
-          {editable && items.length === 0 && (
-            <button
-              onClick={() => autoSchedule.mutate()}
-              disabled={autoSchedule.isPending}
-              className="text-[12px] px-3 py-1.5 rounded-lg bg-beroe-blue text-white font-semibold disabled:opacity-50"
-              title={
-                !account.gate_signed
-                  ? "Account must be signed before auto-scheduling"
-                  : undefined
-              }
-            >
-              {autoSchedule.isPending ? "Scheduling…" : "📅 Auto-schedule"}
-            </button>
-          )}
-          {editable && (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="text-[12px] px-3 py-1.5 rounded-lg border border-beroe-card-border text-text-secondary"
-            >
-              + Add checkpoint
-            </button>
-          )}
-        </div>
+        {/* Prototype line 4360 — one quick-add button per type. */}
+        {editable && (
+          <div className="flex gap-1.5 flex-wrap">
+            {TYPES.map((t) => {
+              const exists = existingTypes.has(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setQuickAddType(t)}
+                  disabled={exists}
+                  title={exists ? `${t} already scheduled` : `Add a ${t} checkpoint`}
+                  className="text-[11px] px-2.5 py-1 rounded-md font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{
+                    background: "#fff",
+                    border: `1px solid ${TYPE_COLORS[t]}40`,
+                    color: TYPE_COLORS[t],
+                  }}
+                >
+                  {TYPE_ICONS[t]} + {t}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {autoSchedule.error && (
-        <div className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <div
+          className="text-[12px] rounded-lg px-3 py-2"
+          style={{
+            color: RISK_RED,
+            background: `${RISK_RED}10`,
+            border: `1px solid ${RISK_RED}30`,
+          }}
+        >
           {(autoSchedule.error as ApiError).message}
         </div>
       )}
@@ -107,15 +129,40 @@ export default function CheckpointsTab() {
       {isLoading && <div className="text-sm text-text-muted">Loading checkpoints…</div>}
 
       {!isLoading && items.length === 0 && (
-        <div className="bg-white border border-beroe-card-border rounded-card p-8 text-center">
-          <div className="text-[13px] font-semibold text-text-primary mb-1">
-            No checkpoints yet
+        <div
+          className="rounded-card text-center p-8"
+          style={{ background: "#fff", border: "1px solid #e4eaf6" }}
+        >
+          <div className="text-[24px] mb-2">📅</div>
+          <div
+            className="text-[13px] font-bold mb-1"
+            style={{ color: MIDNIGHT }}
+          >
+            No checkpoints scheduled yet
           </div>
-          <p className="text-[12px] text-text-muted">
+          <p className="text-[11px] text-text-muted max-w-[400px] mx-auto">
             {account.gate_signed
-              ? "Click Auto-schedule to lay down the standard Kickoff/MBR/QBR/Renewal cadence."
+              ? "Click Auto-schedule to lay down the standard cadence below."
               : "Once the account is signed, you can auto-schedule the standard cadence."}
           </p>
+          {account.gate_signed && editable && (
+            <>
+              <button
+                onClick={() => autoSchedule.mutate()}
+                disabled={autoSchedule.isPending}
+                className="mt-3 text-[12px] px-4 py-2 rounded-md font-semibold text-white disabled:opacity-50"
+                style={{ background: INDIGO }}
+              >
+                {autoSchedule.isPending
+                  ? "Scheduling…"
+                  : "📅 Auto-schedule standard cadence"}
+              </button>
+              <div className="text-[10px] text-text-muted mt-1.5">
+                Creates: Kickoff → MBR (90d) → QBR (180d) → Renewal (14d
+                before expiry)
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -131,13 +178,14 @@ export default function CheckpointsTab() {
         ))}
       </div>
 
-      {showCreate && (
+      {quickAddType && (
         <CreateCheckpointModal
           accountId={account.id}
-          existingTypes={new Set(items.map((c) => c.type))}
-          onClose={() => setShowCreate(false)}
+          initialType={quickAddType}
+          existingTypes={existingTypes}
+          onClose={() => setQuickAddType(null)}
           onCreated={() => {
-            setShowCreate(false);
+            setQuickAddType(null);
             qc.invalidateQueries({ queryKey });
           }}
         />
@@ -198,30 +246,51 @@ function CheckpointCard({
   });
 
   return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+    <div
+      className="rounded-card p-3.5"
+      style={{
+        background: overdue ? `${RISK_RED}10` : "#fff",
+        border: "1px solid #e4eaf6",
+        borderLeft: `3px solid ${tone.dot}`,
+      }}
+    >
       <div className="flex items-start gap-3">
-        <div className="text-[24px] flex-shrink-0 leading-none mt-0.5">
+        <div className="text-[20px] flex-shrink-0 leading-none mt-0.5">
           {TYPE_ICONS[cp.type]}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-[14px] font-bold text-text-primary">{cp.type}</h3>
-            <span
-              className={cn(
-                "text-[10px] font-bold px-2 py-0.5 rounded-full",
-                tone.bg,
-                tone.text,
-              )}
+            <h3
+              className="text-[13px] font-bold"
+              style={{ color: MIDNIGHT }}
             >
-              {STATUS_LABELS[cp.status]}
+              {cp.type}
+            </h3>
+            <span
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{
+                background: tone.bg,
+                border: `1px solid ${tone.border}`,
+                color: tone.text,
+              }}
+            >
+              {cp.status === "held" && !cp.signed_off_at
+                ? "⏳ Awaiting sign-off"
+                : STATUS_LABELS[cp.status]}
             </span>
             {overdue && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+              <span
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{
+                  background: `${RISK_RED}15`,
+                  color: RISK_RED,
+                }}
+              >
                 ⚠ Overdue
               </span>
             )}
           </div>
-          <div className="text-[11px] text-text-muted mt-0.5">
+          <div className="text-[10px] text-text-muted mt-0.5">
             {cp.scheduled_date && (
               <span>
                 Scheduled {new Date(cp.scheduled_date).toLocaleDateString()}
@@ -245,7 +314,12 @@ function CheckpointCard({
                     held_date: new Date().toISOString().slice(0, 10),
                   })
                 }
-                className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
+                className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
+                style={{
+                  background: "#fff",
+                  border: `1px solid ${INDIGO}40`,
+                  color: INDIGO,
+                }}
               >
                 Mark held
               </button>
@@ -253,9 +327,10 @@ function CheckpointCard({
             {cp.status === "held" && (
               <button
                 onClick={onSignOff}
-                className="text-[11px] px-2.5 py-1 rounded-md bg-green-600 text-white font-semibold"
+                className="text-[11px] px-2.5 py-1 rounded-md font-semibold text-white"
+                style={{ background: RISK_GREEN }}
               >
-                🔒 Sign off
+                ✓ Mark signed off
               </button>
             )}
             {cp.status === "not_held" && (
@@ -263,7 +338,13 @@ function CheckpointCard({
                 onClick={() => {
                   if (confirm(`Delete ${cp.type} checkpoint?`)) deleteMutation.mutate();
                 }}
-                className="text-[11px] px-2 py-1 rounded-md border border-beroe-card-border text-text-muted hover:text-red-700 hover:border-red-300"
+                className="text-[11px] px-2 py-1 rounded-md"
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e4eaf6",
+                  color: "#94a3b8",
+                }}
+                title="Delete checkpoint"
               >
                 ✕
               </button>
@@ -273,14 +354,14 @@ function CheckpointCard({
       </div>
 
       {/* Notes */}
-      <div className="mt-3">
+      <div className="mt-2.5">
         {editingNotes && editable && !isSignedOff ? (
           <div className="flex flex-col gap-2">
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
-              className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
+              className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none focus:ring-1 focus:ring-beroe-blue/20"
               placeholder="Meeting notes, outcomes, decisions…"
             />
             <div className="flex gap-2">
@@ -289,7 +370,8 @@ function CheckpointCard({
                   patchMutation.mutate({ notes: notes || null });
                   setEditingNotes(false);
                 }}
-                className="text-[11px] px-3 py-1 rounded-md bg-beroe-blue text-white font-semibold"
+                className="text-[11px] px-3 py-1 rounded-md font-semibold text-white"
+                style={{ background: INDIGO }}
               >
                 Save notes
               </button>
@@ -298,7 +380,12 @@ function CheckpointCard({
                   setNotes(cp.notes ?? "");
                   setEditingNotes(false);
                 }}
-                className="text-[11px] px-3 py-1 rounded-md border border-beroe-card-border"
+                className="text-[11px] px-3 py-1 rounded-md"
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e4eaf6",
+                  color: MIDNIGHT,
+                }}
               >
                 Cancel
               </button>
@@ -307,9 +394,14 @@ function CheckpointCard({
         ) : cp.notes ? (
           <div
             className={cn(
-              "text-[12px] text-text-secondary bg-beroe-bg/40 rounded-md px-3 py-2",
-              editable && !isSignedOff && "cursor-pointer hover:bg-beroe-bg/70",
+              "text-[11px] rounded-md px-3 py-2",
+              editable && !isSignedOff && "cursor-pointer",
             )}
+            style={{
+              background: "#EAF1F580",
+              border: "1px solid #e4eaf6",
+              color: "#475569",
+            }}
             onClick={() => {
               if (editable && !isSignedOff) setEditingNotes(true);
             }}
@@ -320,7 +412,8 @@ function CheckpointCard({
           editable && !isSignedOff && (
             <button
               onClick={() => setEditingNotes(true)}
-              className="text-[11px] text-beroe-blue"
+              className="text-[11px] font-semibold"
+              style={{ color: INDIGO }}
             >
               + Add notes
             </button>
@@ -331,24 +424,42 @@ function CheckpointCard({
       {/* R31 — attachments (files / recordings). Stored as { name, url } pairs. */}
       <AttachmentsRow cp={cp} editable={editable && !isSignedOff} accountId={accountId} />
 
-      {/* Signed-off snapshot */}
+      {/* Signed-off snapshot — Risk-Green-tinted, brand palette. */}
       {isSignedOff && cp.signed_off_snapshot && (
-        <div className="mt-3 pt-3 border-t border-beroe-card-border/60">
+        <div
+          className="mt-3 pt-3"
+          style={{ borderTop: "1px solid #f0f4fb" }}
+        >
           <button
             onClick={() => setSnapshotOpen((v) => !v)}
-            className="text-[11px] font-semibold text-green-700"
+            className="text-[11px] font-semibold"
+            style={{ color: RISK_GREEN }}
           >
-            {snapshotOpen ? "Hide" : "Show"} sign-off snapshot
+            📋 {snapshotOpen ? "Hide" : "Show"} sign-off snapshot
           </button>
           {snapshotOpen && (
-            <div className="mt-2 bg-green-50/60 border border-green-200 rounded-md px-3 py-2.5 text-[11px] space-y-2">
+            <div
+              className="mt-2 rounded-md px-3 py-2.5 text-[11px] space-y-2"
+              style={{
+                background: `${RISK_GREEN}10`,
+                border: `1px solid ${RISK_GREEN}30`,
+              }}
+            >
               {(cp.signed_off_snapshot.initiatives ?? []).length > 0 && (
                 <div>
-                  <div className="font-bold text-green-800 mb-0.5">Initiatives reviewed</div>
+                  <div
+                    className="font-bold mb-0.5"
+                    style={{ color: "#1d6b35" }}
+                  >
+                    Initiatives reviewed
+                  </div>
                   <ul className="list-disc list-inside text-text-secondary">
                     {cp.signed_off_snapshot.initiatives.map((i, n) => (
                       <li key={n}>
-                        {i.name} {i.stage && <span className="text-text-muted">— {i.stage}</span>}
+                        {i.name}{" "}
+                        {i.stage && (
+                          <span className="text-text-muted">— {i.stage}</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -356,12 +467,21 @@ function CheckpointCard({
               )}
               {(cp.signed_off_snapshot.metrics ?? []).length > 0 && (
                 <div>
-                  <div className="font-bold text-green-800 mb-0.5">Metrics discussed</div>
+                  <div
+                    className="font-bold mb-0.5"
+                    style={{ color: "#1d6b35" }}
+                  >
+                    Metrics discussed
+                  </div>
                   <ul className="list-disc list-inside text-text-secondary">
                     {cp.signed_off_snapshot.metrics.map((m, n) => (
                       <li key={n}>
                         {m.name}: {m.value ?? "—"}
-                        {m.target && <span className="text-text-muted"> / {m.target}</span>}
+                        {m.target && (
+                          <span className="text-text-muted">
+                            {" "}/ {m.target}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -369,15 +489,25 @@ function CheckpointCard({
               )}
               {cp.signed_off_snapshot.client_acknowledgement && (
                 <div>
-                  <div className="font-bold text-green-800 mb-0.5">Client acknowledgement</div>
+                  <div
+                    className="font-bold mb-0.5"
+                    style={{ color: "#1d6b35" }}
+                  >
+                    Client acknowledgement
+                  </div>
                   <p className="text-text-secondary italic">
-                    “{cp.signed_off_snapshot.client_acknowledgement}”
+                    &ldquo;{cp.signed_off_snapshot.client_acknowledgement}&rdquo;
                   </p>
                 </div>
               )}
               {cp.signed_off_snapshot.next_actions && (
                 <div>
-                  <div className="font-bold text-green-800 mb-0.5">Next actions</div>
+                  <div
+                    className="font-bold mb-0.5"
+                    style={{ color: "#1d6b35" }}
+                  >
+                    Next actions
+                  </div>
                   <p className="text-text-secondary">
                     {cp.signed_off_snapshot.next_actions}
                   </p>
@@ -397,16 +527,18 @@ function CheckpointCard({
 
 function CreateCheckpointModal({
   accountId,
+  initialType,
   existingTypes,
   onClose,
   onCreated,
 }: {
   accountId: string;
+  initialType?: CheckpointType;
   existingTypes: Set<CheckpointType>;
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [type, setType] = useState<CheckpointType>("MBR");
+  const [type, setType] = useState<CheckpointType>(initialType ?? "MBR");
   const [scheduled, setScheduled] = useState("");
 
   const mutation = useMutation({
@@ -420,15 +552,20 @@ function CreateCheckpointModal({
 
   return (
     <Modal onClose={onClose}>
-      <h3 className="text-[14px] font-bold mb-3">Add a checkpoint</h3>
+      <h3
+        className="text-[14px] font-bold mb-3"
+        style={{ color: MIDNIGHT }}
+      >
+        Add a checkpoint
+      </h3>
       <div className="flex flex-col gap-2.5">
         <select
           value={type}
           onChange={(e) => setType(e.target.value as CheckpointType)}
-          className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border"
+          className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
         >
           {TYPES.map((t) => (
-            <option key={t} value={t}>
+            <option key={t} value={t} disabled={existingTypes.has(t)}>
               {TYPE_ICONS[t]} {t}
               {existingTypes.has(t) && " (already exists)"}
             </option>
@@ -438,19 +575,25 @@ function CreateCheckpointModal({
           type="date"
           value={scheduled}
           onChange={(e) => setScheduled(e.target.value)}
-          className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border"
+          className="text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
         />
         <div className="flex gap-2 mt-2">
           <button
             onClick={onClose}
-            className="flex-1 text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border"
+            className="flex-1 text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              background: "#fff",
+              border: "1px solid #e4eaf6",
+              color: MIDNIGHT,
+            }}
           >
             Cancel
           </button>
           <button
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending}
-            className="flex-1 text-[12px] px-3 py-1.5 rounded-md bg-beroe-blue text-white font-semibold"
+            className="flex-1 text-[12px] px-3 py-1.5 rounded-md font-semibold text-white"
+            style={{ background: INDIGO }}
           >
             {mutation.isPending ? "Adding…" : "Add"}
           </button>
@@ -619,7 +762,14 @@ function SignOffModal({
         </div>
 
         {error && (
-          <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2 py-1">
+          <div
+            className="text-[11px] rounded-md px-2 py-1"
+            style={{
+              color: RISK_RED,
+              background: `${RISK_RED}10`,
+              border: `1px solid ${RISK_RED}30`,
+            }}
+          >
             {error}
           </div>
         )}
@@ -627,14 +777,20 @@ function SignOffModal({
         <div className="flex gap-2 pt-1">
           <button
             onClick={onClose}
-            className="flex-1 text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border text-text-secondary"
+            className="flex-1 text-[12px] px-3 py-1.5 rounded-md"
+            style={{
+              background: "#fff",
+              border: "1px solid #e4eaf6",
+              color: MIDNIGHT,
+            }}
           >
             Cancel
           </button>
           <button
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending}
-            className="flex-1 text-[12px] px-3 py-1.5 rounded-md bg-green-600 text-white font-semibold disabled:opacity-50"
+            className="flex-1 text-[12px] px-3 py-1.5 rounded-md font-semibold text-white disabled:opacity-50"
+            style={{ background: RISK_GREEN }}
           >
             {mutation.isPending ? "Signing off…" : "🔒 Sign off — final"}
           </button>
@@ -655,7 +811,8 @@ function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 flex items-center justify-center z-50 p-4"
+      style={{ background: "rgba(0,17,55,0.4)" }}
       onClick={onClose}
     >
       <div
@@ -712,8 +869,13 @@ function AttachmentsRow({
   if (attachments.length === 0 && !editable) return null;
 
   return (
-    <div className="mt-3 pt-3 border-t border-beroe-card-border/60">
-      <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1.5">
+    <div
+      className="mt-3 pt-3"
+      style={{ borderTop: "1px solid #f0f4fb" }}
+    >
+      <div
+        className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1.5"
+      >
         Attachments
       </div>
       {attachments.length === 0 ? (
@@ -725,7 +887,11 @@ function AttachmentsRow({
           {attachments.map((a, i) => (
             <li
               key={i}
-              className="flex items-center gap-2 text-[11px] bg-slate-50 border border-beroe-card-border rounded-md px-2 py-1"
+              className="flex items-center gap-2 text-[11px] rounded-md px-2 py-1"
+              style={{
+                background: "#EAF1F580",
+                border: "1px solid #e4eaf6",
+              }}
             >
               <span className="text-[14px]">📎</span>
               {a.url ? (
@@ -733,17 +899,24 @@ function AttachmentsRow({
                   href={a.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-beroe-blue font-semibold hover:underline"
+                  className="font-semibold hover:underline"
+                  style={{ color: INDIGO }}
                 >
                   {a.name}
                 </a>
               ) : (
-                <span className="font-semibold text-text-primary">{a.name}</span>
+                <span
+                  className="font-semibold"
+                  style={{ color: MIDNIGHT }}
+                >
+                  {a.name}
+                </span>
               )}
               {editable && (
                 <button
                   onClick={() => removeAt(i)}
-                  className="ml-auto text-text-muted hover:text-red-700"
+                  className="ml-auto text-text-muted hover:opacity-80"
+                  style={{ color: "#94a3b8" }}
                   title="Remove attachment"
                 >
                   ✕
@@ -761,19 +934,20 @@ function AttachmentsRow({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="File / recording name (e.g. QBR-deck.pdf, call-recording.mp4)"
-                className="text-[12px] px-2 py-1 rounded-md border border-beroe-card-border"
+                className="text-[12px] px-2 py-1 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
               />
               <input
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="URL (optional — paste a link to the file)"
-                className="text-[12px] px-2 py-1 rounded-md border border-beroe-card-border"
+                className="text-[12px] px-2 py-1 rounded-md border border-beroe-card-border focus:border-beroe-blue focus:outline-none"
               />
               <div className="flex gap-2">
                 <button
                   onClick={addOne}
                   disabled={!name.trim() || patch.isPending}
-                  className="text-[11px] px-2.5 py-1 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+                  className="text-[11px] px-2.5 py-1 rounded-md font-semibold text-white disabled:opacity-50"
+                  style={{ background: INDIGO }}
                 >
                   Add
                 </button>
@@ -783,7 +957,12 @@ function AttachmentsRow({
                     setName("");
                     setUrl("");
                   }}
-                  className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border"
+                  className="text-[11px] px-2.5 py-1 rounded-md"
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #e4eaf6",
+                    color: MIDNIGHT,
+                  }}
                 >
                   Cancel
                 </button>
@@ -792,7 +971,8 @@ function AttachmentsRow({
           ) : (
             <button
               onClick={() => setAdding(true)}
-              className="text-[11px] text-beroe-blue font-semibold"
+              className="text-[11px] font-semibold"
+              style={{ color: INDIGO }}
             >
               + Attach file / recording
             </button>
@@ -887,24 +1067,23 @@ const CHECKPOINT_GUIDE: Record<
   },
 };
 
-const CHECKPOINT_TONES: Record<CheckpointType, string> = {
-  Kickoff: "border-sky-200 bg-sky-50",
-  MBR: "border-indigo-200 bg-indigo-50",
-  QBR: "border-violet-200 bg-violet-50",
-  Renewal: "border-amber-200 bg-amber-50",
-};
-
 function CheckpointReferenceCard() {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border border-beroe-card-border rounded-card bg-white">
+    <div
+      className="rounded-card"
+      style={{ background: "#fff", border: "1px solid #e4eaf6" }}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center justify-between px-4 py-2.5 text-left"
       >
         <div>
-          <div className="text-[12px] font-bold text-text-primary">
+          <div
+            className="text-[12px] font-bold"
+            style={{ color: MIDNIGHT }}
+          >
             What must be shown at each checkpoint
           </div>
           <p className="text-[10px] text-text-muted">
@@ -912,23 +1091,33 @@ function CheckpointReferenceCard() {
             Kickoff · MBR · QBR · Renewal.
           </p>
         </div>
-        <span className="text-[11px] text-text-muted">{open ? "▴ Hide" : "▾ Show"}</span>
+        <span className="text-[11px] text-text-muted">
+          {open ? "▴ Hide" : "▾ Show"}
+        </span>
       </button>
       {open && (
-        <div className="border-t border-beroe-card-border p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div
+          className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3"
+          style={{ borderTop: "1px solid #e4eaf6" }}
+        >
           {TYPES.map((type) => {
             const g = CHECKPOINT_GUIDE[type];
+            const col = TYPE_COLORS[type];
             return (
               <div
                 key={type}
-                className={cn(
-                  "rounded-lg border p-3",
-                  CHECKPOINT_TONES[type],
-                )}
+                className="rounded-lg p-3"
+                style={{
+                  background: `${col}08`,
+                  border: `1px solid ${col}30`,
+                }}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[14px]">{TYPE_ICONS[type]}</span>
-                  <span className="text-[12px] font-bold text-text-primary">
+                  <span
+                    className="text-[12px] font-bold"
+                    style={{ color: col }}
+                  >
                     {type}
                   </span>
                 </div>

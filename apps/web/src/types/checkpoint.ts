@@ -80,17 +80,42 @@ export const STATUS_LABELS: Record<CheckpointStatus, string> = {
   signed_off: "Signed off",
 };
 
-export const STATUS_TONES: Record<CheckpointStatus, { bg: string; text: string; border: string }> = {
-  not_held:    { bg: "bg-slate-50",  text: "text-slate-700",  border: "border-slate-300" },
-  held:        { bg: "bg-blue-50",   text: "text-blue-700",   border: "border-blue-300" },
-  signed_off:  { bg: "bg-green-50",  text: "text-green-700",  border: "border-green-300" },
+/** Brand-palette colours per checkpoint status (Beroe brand book Sept 2025).
+ *  Hex values so callers can use them in inline styles. Mapping (prototype
+ *  bCheckpoints line 4384 → brand):
+ *    not_held    → brand grey #94a3b8
+ *    held        → Indigo     #4A00F8 (on brand)
+ *    signed_off  → Risk Green #6EC457 (was prototype #40CC8F)
+ */
+export const STATUS_TONES: Record<
+  CheckpointStatus,
+  { dot: string; bg: string; border: string; text: string }
+> = {
+  not_held:   { dot: "#94a3b8", bg: "#94a3b815", border: "#94a3b830", text: "#475569" },
+  held:       { dot: "#4A00F8", bg: "#4A00F810", border: "#4A00F830", text: "#4A00F8" },
+  signed_off: { dot: "#6EC457", bg: "#6EC45715", border: "#6EC45740", text: "#1d6b35" },
 };
 
+/** Type icons — verbatim port of prototype line 4351-4354. */
 export const TYPE_ICONS: Record<CheckpointType, string> = {
   Kickoff: "🚀",
   MBR:     "📊",
   QBR:     "🏆",
-  Renewal: "🔄",
+  Renewal: "✅",
+};
+
+/** Per-type brand colour for the Reference card tile + accents.
+ *  Maps the 4 checkpoints to brand palette anchors:
+ *    Kickoff → Indigo     (Pre-Sales / start)
+ *    MBR     → Aqua       (mid-cycle)
+ *    QBR     → Fuscia     (quarterly accent)
+ *    Renewal → Risk Amber (decision gate, attention)
+ */
+export const TYPE_COLORS: Record<CheckpointType, string> = {
+  Kickoff: "#4A00F8",
+  MBR:     "#35E1D4",
+  QBR:     "#C344C7",
+  Renewal: "#F0BC41",
 };
 
 /** Days from today to the scheduled date. Negative = overdue. */
