@@ -70,3 +70,28 @@ export const TERM_OPTIONS = [
   "3 years",
   "Custom",
 ] as const;
+
+// 28-May — vocab ported verbatim from prototype line 6079-6092.
+// Modules = pill-toggle list (multi-select); Platform Tier + Segment =
+// fixed selects. Subscribers stays free-text since the prototype shows
+// values like "Unlimited (Enterprise)" / numeric seat counts side by
+// side.
+export const MODULE_OPTIONS = [
+  "Category Watch",
+  "Abi Intelligence",
+  "Benchmarks",
+  "Custom Credits",
+  "Supplier Discovery",
+  "Risk Watch",
+  "MMD",
+] as const;
+
+export const PLATFORM_TIER_OPTIONS = [
+  "EL Plus",
+  "EL Base",
+  "Professional",
+  "Starter",
+  "N/A",
+] as const;
+
+export const SEGMENT_OPTIONS = ["A", "B", "C", "D"] as const;

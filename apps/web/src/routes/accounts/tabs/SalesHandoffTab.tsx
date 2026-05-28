@@ -25,6 +25,9 @@ import {
 } from "@/types/solutioning";
 import {
   HANDOVER_QC_ITEMS,
+  MODULE_OPTIONS,
+  PLATFORM_TIER_OPTIONS,
+  SEGMENT_OPTIONS,
   TERM_OPTIONS,
   type ContractDocBody,
   type HandoverChecklistBody,
@@ -663,55 +666,76 @@ function SigningGateCard({
             </Field>
           </div>
           {/* R18 — additional metadata captured at signing time so CS Onboarding
-              doesn't need a second PATCH right after. All optional. */}
+              doesn't need a second PATCH right after. All optional.
+              28-May — picker vocab ported from prototype line 6079-6092:
+              modules = pill toggle list, tier/segment = fixed selects. */}
+          <Field label="Modules contracted">
+            <div className="flex flex-wrap gap-1.5">
+              {MODULE_OPTIONS.map((m) => {
+                const on = (signForm.gate_contract_modules ?? []).includes(m);
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      const cur = signForm.gate_contract_modules ?? [];
+                      setSignForm({
+                        ...signForm,
+                        gate_contract_modules: on
+                          ? cur.filter((x) => x !== m)
+                          : [...cur, m],
+                      });
+                    }}
+                    className={cn(
+                      "text-[11px] px-2.5 py-1 rounded-full border font-semibold transition-colors",
+                      on
+                        ? "bg-beroe-blue/10 border-beroe-blue/40 text-beroe-blue"
+                        : "bg-white border-beroe-card-border text-text-secondary hover:border-beroe-blue/30",
+                    )}
+                  >
+                    {on ? "✓ " : ""}{m}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-            <Field label="Modules contracted">
-              <input
-                type="text"
-                value={(signForm.gate_contract_modules ?? []).join(", ")}
-                onChange={(e) =>
-                  setSignForm({
-                    ...signForm,
-                    gate_contract_modules: e.target.value
-                      .split(",")
-                      .map((m) => m.trim())
-                      .filter(Boolean),
-                  })
-                }
-                placeholder="MMD, Abi, SD (comma-separated)"
-                className={inputCls(true)}
-              />
-            </Field>
             <Field label="Platform tier">
-              <input
-                type="text"
+              <select
                 value={signForm.gate_platform_tier ?? ""}
                 onChange={(e) =>
                   setSignForm({ ...signForm, gate_platform_tier: e.target.value })
                 }
-                placeholder="Enterprise / Pro / Starter"
                 className={inputCls(true)}
-              />
+              >
+                <option value="">— Select —</option>
+                {PLATFORM_TIER_OPTIONS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
             </Field>
-            <Field label="Account segment">
-              <input
-                type="text"
+            <Field label="Segment">
+              <select
                 value={signForm.gate_account_segment ?? ""}
                 onChange={(e) =>
                   setSignForm({ ...signForm, gate_account_segment: e.target.value })
                 }
-                placeholder="Enterprise / Mid-Market / SMB"
                 className={inputCls(true)}
-              />
+              >
+                <option value="">— Select —</option>
+                {SEGMENT_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </Field>
-            <Field label="Subscribers / seats">
+            <Field label="Subscribers">
               <input
                 type="text"
                 value={signForm.gate_subscribers ?? ""}
                 onChange={(e) =>
                   setSignForm({ ...signForm, gate_subscribers: e.target.value })
                 }
-                placeholder="e.g. 25 seats"
+                placeholder="e.g. Unlimited (Enterprise)"
                 className={inputCls(true)}
               />
             </Field>
@@ -750,27 +774,42 @@ function SigningGateCard({
           signing. */}
       {isSigned && !gate.gate_unlocked && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            <SignedStat
-              label="Modules contracted"
-              value={
-                gate.gate_contract_modules.length > 0
-                  ? gate.gate_contract_modules.join(", ")
-                  : "—"
-              }
-            />
-            <SignedStat
-              label="Platform tier"
-              value={gate.gate_platform_tier || "—"}
-            />
-            <SignedStat
-              label="Segment"
-              value={gate.gate_account_segment || "—"}
-            />
-            <SignedStat
-              label="Subscribers"
-              value={gate.gate_subscribers || "—"}
-            />
+          <div className="border-t border-beroe-card-border pt-3 mb-3">
+            <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1.5">
+              Modules Contracted
+            </div>
+            <div className="flex flex-wrap gap-1 mb-3">
+              {gate.gate_contract_modules.length > 0 ? (
+                gate.gate_contract_modules.map((m) => (
+                  <span
+                    key={m}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue font-semibold"
+                  >
+                    {m}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-text-muted">None</span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <SignedStat
+                label="Platform Tier"
+                value={gate.gate_platform_tier || "—"}
+              />
+              <SignedStat
+                label="Segment"
+                value={
+                  gate.gate_account_segment
+                    ? `Segment ${gate.gate_account_segment}`
+                    : "—"
+                }
+              />
+              <SignedStat
+                label="Subscribers"
+                value={gate.gate_subscribers || "—"}
+              />
+            </div>
           </div>
           {/* H41 — "Confirmed by NAME on DATE" line — always shown when signed. */}
           <div className="text-[11px] text-text-muted mb-3">
@@ -872,33 +911,54 @@ function HandoverQualityCheck({
 }) {
   void account;
   const overrides = gate.handover_quality_check ?? {};
+  // 28-May — literal port of prototype line 6055-6075. 2-column tile
+  // grid: green (#f0fdf4 / #40CC8F30 / #2fb87a) when checked, red
+  // (#fff0f2 / #FD576B30 / #e63950) when missing. Bottom status line
+  // flips between red-italic "Incomplete handover" and green "Handover
+  // complete". Tiles are clickable so a user with write access can flip
+  // them in place.
+  const items = HANDOVER_QC_ITEMS.map((it) => ({
+    key: it.key,
+    label: it.label,
+    ok: !!overrides[it.key],
+  }));
+  const allGood = items.every((i) => i.ok);
   return (
     <Section title="Handover Quality Check">
       <p className="text-xs text-text-muted mb-3">
         Manual sign-off on the four things every Pre-Sales handover must
-        deliver. Tick when complete; the audit log records who confirmed
-        what.
+        deliver. Click a tile to toggle; the audit log records who
+        confirmed what.
       </p>
-      <ul className="space-y-2">
-        {HANDOVER_QC_ITEMS.map((it) => {
-          const checked = !!overrides[it.key];
-          return (
-            <li
-              key={it.key}
-              className="flex items-start gap-3 bg-slate-50/40 border border-slate-200 rounded-lg px-3 py-2"
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={saving}
-                onChange={(e) => onSet({ [it.key]: e.target.checked })}
-                className="mt-0.5"
-              />
-              <span className="text-sm text-text-primary">{it.label}</span>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mb-2">
+        {items.map((i) => (
+          <button
+            key={i.key}
+            type="button"
+            disabled={saving}
+            onClick={() => onSet({ [i.key]: !i.ok })}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium text-left disabled:opacity-60"
+            style={{
+              background: i.ok ? "#f0fdf4" : "#fff0f2",
+              border: `1px solid ${i.ok ? "#40CC8F30" : "#FD576B30"}`,
+              color: i.ok ? "#2fb87a" : "#e63950",
+            }}
+          >
+            <span className="text-[10px]">{i.ok ? "✓" : "✗"}</span>
+            {i.label}
+          </button>
+        ))}
+      </div>
+      {allGood ? (
+        <div className="text-[10px]" style={{ color: "#2fb87a" }}>
+          ✓ Handover complete
+        </div>
+      ) : (
+        <div className="text-[10px] italic" style={{ color: "#e63950" }}>
+          ⚠️ Incomplete handover — flag missing items to Sales before
+          proceeding to CS workflow.
+        </div>
+      )}
     </Section>
   );
 }
