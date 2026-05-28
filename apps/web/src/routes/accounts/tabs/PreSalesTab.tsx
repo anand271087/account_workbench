@@ -210,8 +210,11 @@ export default function PreSalesTab() {
         </div>
       </details>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 space-y-4">
+      {/* Single-column layout — the old right column held a free-text
+          Stakeholders section that was removed in 27-May Row 77 (merged
+          into the Client Contacts card at the bottom). Keeping the
+          col-span-2 wrapper left a blank right third of the page. */}
+      <div className="space-y-4">
         {/* R14 — Engagement Info. 27-May Row 76 — field order is now
             Discovery Date → Discovery Lead → Sales Lead, with SDR
             (existing field, kept for data continuity) moved to the
@@ -525,7 +528,6 @@ export default function PreSalesTab() {
           onStay={guard.stay}
         />
       )}
-      </div>
     </div>
   );
 }
