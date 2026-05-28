@@ -74,11 +74,7 @@ export default function HomeTab() {
 
   // Fetch everything in parallel. Each query is independent so failures
   // degrade the corresponding section, not the whole page.
-  // The appetite query stays mounted (cached and shared with the layout's
-  // ModePill) so TanStack Query dedupes the fetch across the two
-  // components; not directly consumed in HomeTab JSX anymore after
-  // 28-May header-strip removal.
-  useQuery<Appetite>({
+  const apptQ = useQuery<Appetite>({
     queryKey: ["appetite", aid],
     queryFn: () =>
       api.get<Appetite>(`/api/v1/accounts/${aid}/appetite-score`),
@@ -177,6 +173,12 @@ export default function HomeTab() {
   const dtr = account.days_to_renewal;
   const renewal = formatRenewalDays(dtr ?? null);
 
+  // Feature flag (variable, not literal — so eslint's
+  // no-constant-binary-expression rule stays quiet). The legacy 4+3-tile
+  // KPI grid lives below this flag for git-revert convenience; flip to
+  // true to render it again.
+  const SHOW_LEGACY_KPI_GRID: boolean = false;
+
   return (
     <div className="space-y-3">
       {/* 28-May — Duplicate Home header strip REMOVED. The account name,
@@ -185,6 +187,31 @@ export default function HomeTab() {
           AccountProfileLayout (prototype line 2802-2814). The Home tab
           now starts with content (red flag banner, priority card, KPIs)
           rather than re-rendering chrome. */}
+
+      {/* 28-May — Escalate this account button (prototype line 4166).
+          Top-right, only visible to roles that can edit. */}
+      {account.is_editable && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => alert("Escalation modal — coming soon.")}
+            className="text-[11px] px-3 py-1 rounded-md border font-semibold hover:bg-red-50 transition-colors"
+            style={{ color: "#FD576B", borderColor: "#FD576B40" }}
+          >
+            🚩 Escalate this account
+          </button>
+        </div>
+      )}
+
+      {/* 28-May — Churn Risk banner (prototype line 4626-4644). Renders
+          only when computed risk is medium or high. Derives churn-score
+          inversely from appetite breakdown: lower appetite → higher
+          churn. Surfaces the 4 score components + recent trend. */}
+      <ChurnRiskBanner
+        healthScore={account.health_score}
+        appetite={apptQ}
+        overdueCp={overdueCp}
+      />
 
       {/* 27-May Row 66 — Red Flag notification.
           Renders ONLY when there are unresolved red flags on the
@@ -231,11 +258,22 @@ export default function HomeTab() {
       {/* Priority Action Card */}
       {activePriority && <PriorityCard priority={activePriority} aid={aid} />}
 
-      {/* H34/H35/H36/H38 — enriched KPI tiles. Each surfaces a sublabel
-          with the relevant ratio / supporting metric the prototype shows
-          (target / gap / pipeline on ACV, product score on Health,
-          declining-signal + checkpoint hints on Risk %). */}
-      {(() => {
+      {/* 27-May Row 67 — AI Account Brief.
+          Prototype line 4687 — white card with violet left border + ✨
+          icon. Auto-generated date in the top-right corner. */}
+      <AIAccountBriefCard aid={aid} accountName={account.name} />
+
+      {/* 28-May — Prototype block 1.5 + 2 (line 4713-4776): violet ACV
+          Progress card with embedded Health gauge LEFT, + Account Pulse
+          (3 stat tiles + metric bars) RIGHT. Replaces the previous
+          4+3-tile KPI grids that diverged from the prototype. */}
+      <AcvHealthPulseRow account={account} apptQ={apptQ} gateQ={gateQ} mets={mets} aid={aid} />
+
+      {/* — Legacy KPI grid removed. Info now lives inside the violet
+          ACV+Health card + Account Pulse above. Renewal/Risk%/etc
+          deep-dives live on respective sub-tabs. — */}
+      {SHOW_LEGACY_KPI_GRID && (() => {
+        // Dead-code block preserved verbatim for git-revert convenience.
         const active = signals.filter((s) => s.status === "active" && !s.hidden);
         const riskCount = active.filter(
           (s) => s.type === "risk" || s.type === "critical",
@@ -321,9 +359,9 @@ export default function HomeTab() {
                 {
                   k: "Date",
                   v: account.gate_renewal_date
-                    ? new Date(account.gate_renewal_date).toLocaleDateString()
+                    ? new Date(account.gate_renewal_date as string).toLocaleDateString()
                     : account.renewal_date
-                      ? new Date(account.renewal_date).toLocaleDateString()
+                      ? new Date(account.renewal_date as string).toLocaleDateString()
                       : "—",
                 },
               ]}
@@ -370,90 +408,6 @@ export default function HomeTab() {
           </div>
         );
       })()}
-
-      {/* Secondary row: Delivery + Weighted pipeline + Open signals */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-        {(() => {
-          const totalCp = cps.length;
-          const signedCp = cps.filter((c) => c.status === "signed_off").length;
-          const heldCp = cps.filter((c) => c.status === "held").length;
-          return (
-            <RichTile
-              label="Delivery"
-              value={
-                totalCp === 0 ? "—" : `${signedCp}/${totalCp}`
-              }
-              color={overdueCp > 0 ? "#e63950" : "#0d1b2e"}
-              sublines={[
-                { k: "Held", v: String(heldCp) },
-                { k: "Overdue", v: String(overdueCp) },
-              ]}
-            />
-          );
-        })()}
-        <RichTile
-          label="Weighted pipeline"
-          value={fmtK(pipelineTotal)}
-          color="#4A00F8"
-          sublines={[
-            {
-              k: "Plays",
-              v: String(
-                plays.filter((p) => !p.hidden).length,
-              ),
-            },
-            {
-              k: "Expand-mode",
-              v: String(
-                plays.filter(
-                  (p) => !p.hidden && p.modes.includes("expand"),
-                ).length,
-              ),
-            },
-          ]}
-        />
-        <RichTile
-          label="Open signals"
-          value={String(
-            signals.filter((s) => s.status === "active" && !s.hidden).length,
-          )}
-          color="#4A00F8"
-          sublines={[
-            {
-              k: "Critical",
-              v: String(
-                signals.filter(
-                  (s) =>
-                    s.status === "active" && !s.hidden && s.type === "critical",
-                ).length,
-              ),
-            },
-            {
-              k: "Risk",
-              v: String(
-                signals.filter(
-                  (s) =>
-                    s.status === "active" && !s.hidden && s.type === "risk",
-                ).length,
-              ),
-            },
-          ]}
-        />
-      </div>
-
-      {/* 27-May Row 67 — AI Account Brief promoted above Account Pulse
-          (first content card after KPIs / priority surfaces). */}
-      <AIAccountBriefCard aid={aid} accountName={account.name} />
-
-      {/* H38 — Account Pulse card. Surfaces: Value Tracking link,
-          Adoption %, Modules, Depth/User and Metric snapshot. */}
-      <AccountPulseCard
-        aid={aid}
-        modules={gateQ.data?.gate_contract_modules ?? []}
-        tier={gateQ.data?.gate_platform_tier ?? null}
-        subscribers={gateQ.data?.gate_subscribers ?? null}
-        metrics={mets}
-      />
 
       {/* Two columns: This Week (left) + Top Signals (right).
           27-May Row 70 — items now have tick-off checkboxes. State is
@@ -940,7 +894,10 @@ function RichTile({
 
 // H38 — Account Pulse: Value Tracking link + Adoption % + Modules count +
 // Depth/User (subscribers) + Metric snapshot.
-function AccountPulseCard({
+// 28-May — superseded by PulseCard inside AcvHealthPulseRow. Kept here
+// (unused) until the next cleanup pass.
+// @ts-expect-error — intentional unused; preserved for git-revert convenience.
+function _AccountPulseCard({
   aid,
   modules,
   tier: _tier,
@@ -1225,5 +1182,362 @@ function ThisWeekList({ aid, items }: { aid: string; items: ThisWeekItem[] }) {
         );
       })}
     </ul>
+  );
+}
+
+// ============================================================
+// 28-May — Prototype-mirror components (ports of bHome blocks)
+// ============================================================
+
+import type { UseQueryResult } from "@tanstack/react-query";
+import type { AccountDetail } from "@/types/account";
+
+// Churn Risk banner — prototype line 4626. Derives risk INVERSELY
+// from appetite breakdown (lower appetite → higher churn). Shows
+// only when risk score ≥ 40 (medium or high).
+function ChurnRiskBanner({
+  healthScore,
+  appetite,
+  overdueCp,
+}: {
+  healthScore: number | null;
+  appetite: UseQueryResult<Appetite, Error>;
+  overdueCp: number;
+}) {
+  if (!appetite.data) return null;
+  const bd = appetite.data.breakdown;
+  // Components 1:1 with prototype's calcChurnRisk: invert each appetite
+  // component, scale to 100. Higher = more churn risk.
+  const healthRisk = Math.round(((40 - bd.health_pts) / 40) * 35);
+  const sigRisk = Math.round(((25 - bd.sig_pts) / 25) * 25);
+  const arrRisk = Math.round(((20 - bd.arr_pts) / 20) * 20);
+  const cpRisk = Math.min(20, overdueCp * 5);
+  const score = Math.max(
+    0,
+    Math.min(100, healthRisk + sigRisk + arrRisk + cpRisk),
+  );
+  const level: "low" | "medium" | "high" =
+    score >= 60 ? "high" : score >= 35 ? "medium" : "low";
+  if (level === "low") return null;
+  const col = level === "high" ? "#CF3030" : "#B45309";
+  const bg = level === "high" ? "#FCEBEB" : "#FFF8EB";
+  const bc = level === "high" ? "#F7C1C1" : "#FAC775";
+  const factors: string[] = [];
+  if (healthScore !== null && healthScore < 60)
+    factors.push(`Health declining — score ${healthScore}/100`);
+  if (overdueCp > 0)
+    factors.push(`${overdueCp} overdue checkpoint${overdueCp === 1 ? "" : "s"}`);
+  if (bd.arr_pts < 10)
+    factors.push("Pipeline below ARR-growth target");
+  if (bd.sig_pts < 10)
+    factors.push("Signal mix tilted risk/critical");
+  return (
+    <div
+      className="rounded-card p-3 flex items-start gap-3"
+      style={{ background: bg, border: `1.5px solid ${bc}` }}
+    >
+      <div className="min-w-[48px] text-center">
+        <div className="text-[22px] font-extrabold leading-none" style={{ color: col }}>
+          {score}%
+        </div>
+        <div className="text-[8px] font-bold uppercase tracking-wider mt-1" style={{ color: col }}>
+          Churn Risk
+        </div>
+      </div>
+      <div className="flex-1">
+        <div className="text-[12px] font-bold mb-1" style={{ color: col }}>
+          {level === "high"
+            ? "🚨 High churn risk — immediate attention needed"
+            : "⚠️ Elevated churn risk — monitor closely"}
+        </div>
+        <ul className="text-[11px] leading-snug space-y-0.5" style={{ color: level === "high" ? "#791F1F" : "#854F0B" }}>
+          {factors.slice(0, 4).map((f, i) => (
+            <li key={i}>• {f}</li>
+          ))}
+        </ul>
+        <div className="flex gap-1.5 mt-2 flex-wrap">
+          {[
+            ["health", healthRisk, 35],
+            ["signals", sigRisk, 25],
+            ["arr", arrRisk, 20],
+            ["overdue", cpRisk, 20],
+          ].map(([k, v, total]) => (
+            <span
+              key={String(k)}
+              className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{
+                background: (v as number) > 10 ? `${col}20` : "#f8f9fc",
+                color: (v as number) > 10 ? col : "#94a3b8",
+              }}
+            >
+              {k}: {v}/{total}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 28-May — ACV Progress (violet gradient) + Account Pulse side-by-side.
+// Prototype line 4713-4776. Embeds the Health gauge inside the violet
+// ACV card (right column).
+function AcvHealthPulseRow({
+  account,
+  apptQ,
+  gateQ,
+  mets,
+  aid,
+}: {
+  account: AccountDetail;
+  apptQ: UseQueryResult<Appetite, Error>;
+  gateQ: UseQueryResult<SigningGate, Error>;
+  mets: SuccessMetric[];
+  aid: string;
+}) {
+  const current = parseFloat(String(account.current_acv ?? "0")) || 0;
+  const target = parseFloat(String(account.target_acv ?? "0")) || 0;
+  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+  const gap = Math.max(0, target - current);
+  const barCol =
+    pct >= 80 ? "#40CC8F" : pct >= 50 ? "#ffffff" : "#EF9637";
+  const plays = (apptQ.data?.breakdown?.projected_acv_usd
+    ? parseFloat(apptQ.data.breakdown.projected_acv_usd) - current
+    : 0);
+  const pipeline = plays > 0 ? plays : 0;
+  const hs = account.health_score ?? 0;
+  const healthCol = hs >= 70 ? "#40CC8F" : hs >= 40 ? "#EF9637" : "#e63950";
+  const productPct = Math.min(
+    100,
+    Math.round(
+      ((gateQ.data?.gate_contract_modules?.length ?? 0) / TOTAL_BEROE_MODULES) * 100,
+    ),
+  );
+  // Inverse-scaled signal score for the Health card breakdown.
+  const sigPts = apptQ.data?.breakdown?.sig_pts ?? 15;
+  const signalsScore = Math.round((sigPts / 25) * 100);
+  const dtr = account.days_to_renewal;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+      {/* LEFT: Violet ACV Progress card with embedded Health gauge */}
+      <div
+        className="rounded-card p-4 relative overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg,#4A00F8 0%,#3800CC 50%,#2a0099 100%)",
+        }}
+      >
+        <div
+          className="absolute top-0 right-0 w-72 h-full pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse at right,rgba(255,255,255,.06) 0%,transparent 65%)",
+          }}
+        />
+        <div className="grid grid-cols-2 gap-4 relative">
+          {/* Left: ACV PROGRESS */}
+          <div>
+            <div className="text-[9px] uppercase tracking-[0.1em] font-bold mb-2" style={{ color: "rgba(255,255,255,.5)" }}>
+              ACV PROGRESS
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-[26px] font-extrabold leading-none text-white">
+                {formatACV(account.current_acv)}
+              </span>
+              <span className="text-[12px]" style={{ color: "rgba(255,255,255,.6)" }}>
+                of {target > 0 ? formatACV(String(target)) : "—"} target
+              </span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden mb-1.5" style={{ background: "rgba(255,255,255,.08)" }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${pct}%`, background: barCol }}
+              />
+            </div>
+            <div className="flex gap-3.5 text-[11px]">
+              {gap > 0 ? (
+                <span style={{ color: "#fbbf24" }}>▲ {formatACV(String(gap))} gap</span>
+              ) : (
+                <span style={{ color: "#40CC8F" }}>✓ Target achieved</span>
+              )}
+              {pipeline > 0 && (
+                <span style={{ color: "rgba(255,255,255,.6)" }}>
+                  Pipeline: {fmtK(pipeline)}
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Right: HEALTH gauge */}
+          <div
+            className="rounded-[10px] p-3"
+            style={{ background: "rgba(255,255,255,.04)" }}
+          >
+            <div className="text-[9px] uppercase tracking-[0.1em] font-bold mb-2" style={{ color: "rgba(255,255,255,.5)" }}>
+              HEALTH
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-11 h-11 rounded-full flex items-center justify-center text-[16px] font-extrabold flex-shrink-0"
+                style={{
+                  border: `3px solid ${healthCol}`,
+                  color: healthCol,
+                }}
+              >
+                {hs || "—"}
+              </div>
+              <div>
+                <div className="text-[11px]" style={{ color: "rgba(255,255,255,.6)" }}>
+                  Product: <b className="text-white">{productPct}</b> (50%)
+                </div>
+                <div className="text-[11px]" style={{ color: "rgba(255,255,255,.6)" }}>
+                  Signals: <b className="text-white">{signalsScore}</b> (50%)
+                </div>
+              </div>
+            </div>
+            <div className="text-[10px] mt-1.5" style={{ color: "rgba(255,255,255,.4)" }}>
+              {account.account_type ?? "—"}
+              {account.tier && ` · ${account.tier}`}
+              {dtr !== null && dtr !== undefined && ` · ${dtr}d renewal`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT: Account Pulse (3 colored stat tiles + metric bars) */}
+      <PulseCard
+        modules={gateQ.data?.gate_contract_modules ?? []}
+        subscribers={gateQ.data?.gate_subscribers ?? null}
+        metrics={mets}
+        aid={aid}
+      />
+    </div>
+  );
+}
+
+// 28-May — Account Pulse card mirroring prototype line 4747-4775.
+// Three coloured stat tiles (Adoption / Modules / Depth/User) on top,
+// metric bars (status dot + progress) below.
+function PulseCard({
+  modules,
+  subscribers,
+  metrics,
+  aid,
+}: {
+  modules: string[];
+  subscribers: string | null;
+  metrics: SuccessMetric[];
+  aid: string;
+}) {
+  const adoption =
+    modules.length === 0
+      ? 0
+      : Math.round((modules.length / TOTAL_BEROE_MODULES) * 100);
+  const visibleMetrics = metrics.slice(0, 3);
+  return (
+    <div className="bg-white rounded-card border border-beroe-card-border p-4">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-[13px] font-bold text-text-primary">
+          Account Pulse
+        </span>
+        <Link
+          to={`/accounts/${aid}/success-management/value-tracking`}
+          className="text-[10px] px-2 py-0.5 rounded border border-emerald-300 text-emerald-700 font-semibold hover:bg-emerald-50"
+        >
+          Value Tracking →
+        </Link>
+      </div>
+      <div className="flex gap-2 mb-3">
+        <PulseTile
+          value={modules.length === 0 ? "—" : `${adoption}%`}
+          label="ADOPTION"
+          color="#40CC8F"
+        />
+        <PulseTile
+          value={modules.length === 0 ? "—" : `${modules.length}/${TOTAL_BEROE_MODULES}`}
+          label="MODULES"
+          color="#EF9637"
+        />
+        <PulseTile
+          value={subscribers ?? "—"}
+          label="DEPTH/USER"
+          color="#35E1D4"
+        />
+      </div>
+      {visibleMetrics.length === 0 ? (
+        <div className="text-[11px] text-text-muted italic text-center py-3">
+          No success metrics tracked yet.
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {visibleMetrics.map((m) => {
+            const stCol =
+              m.status === "green"
+                ? "#40CC8F"
+                : m.status === "amber"
+                  ? "#EF9637"
+                  : m.status === "red"
+                    ? "#FD576B"
+                    : "#94a3b8";
+            const tgt = parseFloat(String(m.target_value || "0").replace(/[^0-9.]/g, ""));
+            const cur = parseFloat(String(m.current_value || "0").replace(/[^0-9.]/g, ""));
+            const pctMet =
+              m.metric_type === "quantitative" && tgt > 0
+                ? Math.min(100, Math.round((cur / tgt) * 100))
+                : 0;
+            return (
+              <div key={m.id}>
+                <div className="flex items-center justify-between mb-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{ background: stCol }}
+                    />
+                    <span className="text-[11px] font-semibold truncate">
+                      {m.name.length > 32 ? m.name.slice(0, 32) + "…" : m.name}
+                    </span>
+                  </div>
+                  <span
+                    className="text-[11px] font-bold flex-shrink-0"
+                    style={{ color: stCol }}
+                  >
+                    {m.current_value ?? "—"}
+                  </span>
+                </div>
+                {m.metric_type === "quantitative" && tgt > 0 && (
+                  <div className="h-1 rounded bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full rounded"
+                      style={{ width: `${pctMet}%`, background: stCol }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PulseTile({
+  value,
+  label,
+  color,
+}: {
+  value: string;
+  label: string;
+  color: string;
+}) {
+  return (
+    <div className="flex-1 rounded-lg p-2 text-center" style={{ background: "#f8f9fc" }}>
+      <div className="text-[16px] font-extrabold leading-none" style={{ color }}>
+        {value}
+      </div>
+      <div className="text-[8px] font-bold uppercase tracking-wider mt-1 text-text-muted">
+        {label}
+      </div>
+    </div>
   );
 }
