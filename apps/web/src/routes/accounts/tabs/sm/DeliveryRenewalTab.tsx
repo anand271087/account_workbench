@@ -186,40 +186,140 @@ export default function DeliveryRenewalTab() {
         )}
       </div>
 
-      {/* Red-flag banner — verbatim port of prototype line 3518-3525.
-          First card after the heading, 2px Risk Red border, dynamic
-          reason list pulled from the open red_flags + "Fix Track 1
-          first." tagline. */}
-      {hasRedFlag && (
-        <div
-          className="rounded-card flex items-start gap-2.5"
-          style={{
-            background: `${RISK_RED}10`,
-            border: `2px solid ${RISK_RED}`,
-            padding: "12px 16px",
-          }}
-        >
-          <span className="text-[16px] leading-none mt-0.5">🚨</span>
-          <div className="flex-1">
-            <div
-              className="text-[13px] font-bold"
-              style={{ color: RISK_RED }}
-            >
-              Red Flag — Track 2 Paused
-            </div>
-            <div
-              className="text-[11px] leading-snug mt-0.5"
-              style={{ color: "#7F1D1D" }}
-            >
-              {form.red_flags
-                .filter((f) => f.resolved_at === null)
-                .map((f) => `${FLAG_LABELS[f.type]}.`)
-                .join(" ")}{" "}
-              Fix Track 1 first.
+      {/* Red flags — moved to the first position (before Track 1)
+          matching prototype line 3518-3525. When at least one flag is
+          open, the whole Card flips to a Risk-Red banner with the
+          "Red Flag — Track 2 Paused" headline + dynamic reason list +
+          "Fix Track 1 first." tagline embedded in the Card header.
+          The raise / resolve UI lives inside the same Card so red-flag
+          concerns surface and get managed in one place at the top. */}
+      <div
+        className="rounded-card"
+        style={{
+          background: hasRedFlag ? `${RISK_RED}10` : "#fff",
+          border: hasRedFlag
+            ? `2px solid ${RISK_RED}`
+            : "1px solid #e4eaf6",
+          padding: "14px 16px",
+        }}
+      >
+        <div className="flex items-start justify-between gap-2.5 mb-2 flex-wrap">
+          <div className="flex items-start gap-2.5">
+            {hasRedFlag && (
+              <span className="text-[16px] leading-none mt-0.5">🚨</span>
+            )}
+            <div>
+              <div
+                className="text-[13px] font-bold"
+                style={{ color: hasRedFlag ? RISK_RED : MIDNIGHT }}
+              >
+                {hasRedFlag
+                  ? "Red Flag — Track 2 Paused"
+                  : "Red flags"}
+              </div>
+              <div
+                className="text-[11px] leading-snug mt-0.5"
+                style={{
+                  color: hasRedFlag ? "#7F1D1D" : "#94a3b8",
+                }}
+              >
+                {hasRedFlag ? (
+                  <>
+                    {form.red_flags
+                      .filter((f) => f.resolved_at === null)
+                      .map((f) => `${FLAG_LABELS[f.type]}.`)
+                      .join(" ")}{" "}
+                    Fix Track 1 first.
+                  </>
+                ) : (
+                  "Any unresolved flag pauses the expand pipeline."
+                )}
+              </div>
             </div>
           </div>
+          {editable && !flagDraft && (
+            <button
+              onClick={() => setFlagDraft({ type: "missed_checkpoint", note: "" })}
+              className="text-[11px] px-2.5 py-1 rounded-md font-semibold whitespace-nowrap"
+              style={{
+                background: "#fff",
+                border: `1px solid ${RISK_RED}40`,
+                color: RISK_RED,
+              }}
+            >
+              + Raise flag
+            </button>
+          )}
         </div>
-      )}
+
+        {flagDraft && (
+          <div
+            className="rounded-md p-3 mb-3 space-y-2"
+            style={{
+              background: `${RISK_RED}08`,
+              border: `1px solid ${RISK_RED}30`,
+            }}
+          >
+            <div className="flex gap-2">
+              <select
+                value={flagDraft.type}
+                onChange={(e) =>
+                  setFlagDraft({
+                    ...flagDraft,
+                    type: e.target.value as RedFlagType,
+                  })
+                }
+                className="text-[12px] border border-beroe-card-border rounded-md px-2 py-1 focus:border-beroe-blue focus:outline-none"
+              >
+                {FLAG_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {FLAG_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={flagDraft.note}
+                onChange={(e) =>
+                  setFlagDraft({ ...flagDraft, note: e.target.value })
+                }
+                placeholder="Why?"
+                className="flex-1 text-[12px] border border-beroe-card-border rounded-md px-2 py-1 focus:border-beroe-blue focus:outline-none"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setFlagDraft(null)}
+                className="text-[11px] px-2.5 py-1 rounded-md"
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e4eaf6",
+                  color: MIDNIGHT,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => addFlagMutation.mutate(flagDraft)}
+                disabled={addFlagMutation.isPending}
+                className="text-[11px] px-2.5 py-1 rounded-md font-semibold text-white disabled:opacity-50"
+                style={{ background: RISK_RED }}
+              >
+                Raise flag
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Open + resolved flag rows. Always rendered so the user can
+            see history even when nothing's currently open. */}
+        {(form.red_flags.length > 0 || flagDraft) && (
+          <RedFlagList
+            flags={form.red_flags}
+            editable={editable}
+            onResolve={(id) => resolveFlagMutation.mutate(id)}
+          />
+        )}
+      </div>
 
       {/* Dual-track top row — prototype line 3527-3538. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -270,92 +370,6 @@ export default function DeliveryRenewalTab() {
             expand pipeline.
           </div>
         )}
-      </Card>
-
-      {/* Red flags */}
-      <Card>
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <div className="text-[13px] font-semibold text-text-primary">
-              Red flags
-            </div>
-            <div className="text-[11px] text-text-muted">
-              Any unresolved flag pauses the expand pipeline.
-            </div>
-          </div>
-          {editable && !flagDraft && (
-            <button
-              onClick={() => setFlagDraft({ type: "missed_checkpoint", note: "" })}
-              className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
-              style={{
-                background: "#fff",
-                border: `1px solid ${RISK_RED}40`,
-                color: RISK_RED,
-              }}
-            >
-              + Raise flag
-            </button>
-          )}
-        </div>
-
-        {flagDraft && (
-          <div
-            className="rounded-md p-3 mb-3 space-y-2"
-            style={{
-              background: `${RISK_RED}08`,
-              border: `1px solid ${RISK_RED}30`,
-            }}
-          >
-            <div className="flex gap-2">
-              <select
-                value={flagDraft.type}
-                onChange={(e) =>
-                  setFlagDraft({ ...flagDraft, type: e.target.value as RedFlagType })
-                }
-                className="text-[12px] border border-beroe-card-border rounded-md px-2 py-1 focus:border-beroe-blue focus:outline-none"
-              >
-                {FLAG_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {FLAG_LABELS[t]}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={flagDraft.note}
-                onChange={(e) => setFlagDraft({ ...flagDraft, note: e.target.value })}
-                placeholder="Why?"
-                className="flex-1 text-[12px] border border-beroe-card-border rounded-md px-2 py-1 focus:border-beroe-blue focus:outline-none"
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setFlagDraft(null)}
-                className="text-[11px] px-2.5 py-1 rounded-md"
-                style={{
-                  background: "#fff",
-                  border: "1px solid #e4eaf6",
-                  color: MIDNIGHT,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => addFlagMutation.mutate(flagDraft)}
-                disabled={addFlagMutation.isPending}
-                className="text-[11px] px-2.5 py-1 rounded-md font-semibold text-white disabled:opacity-50"
-                style={{ background: RISK_RED }}
-              >
-                Raise flag
-              </button>
-            </div>
-          </div>
-        )}
-
-        <RedFlagList
-          flags={form.red_flags}
-          editable={editable}
-          onResolve={(id) => resolveFlagMutation.mutate(id)}
-        />
       </Card>
 
       {/* Renewal Readiness */}
