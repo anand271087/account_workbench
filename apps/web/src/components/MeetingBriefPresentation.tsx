@@ -16,6 +16,7 @@ import {
   BRIEF_CALL_TYPE_LABELS,
   type MeetingBrief,
 } from "@/types/meeting_brief";
+import type { Engagement } from "@/types/engagement";
 
 // Prototype palette — keep in sync with bMomBrief inline colours.
 const MP = "#534AB7"; // Beroe purple
@@ -35,6 +36,17 @@ export function MeetingBriefPresentation({
     queryKey: ["meeting-brief", accountId],
     queryFn: () =>
       api.get<MeetingBrief>(`/api/v1/accounts/${accountId}/meeting-brief`),
+  });
+
+  // Categories fallback — the brief has its own `categories` list, but
+  // it's usually empty until a user explicitly fills it. The richer
+  // source is `account_engagement.target_categories` from Pre-Sales.
+  // We surface a "from Pre-Sales" label when sourced this way so the
+  // user can see where the data came from.
+  const { data: engagement } = useQuery<Engagement>({
+    queryKey: ["engagement", accountId],
+    queryFn: () =>
+      api.get<Engagement>(`/api/v1/accounts/${accountId}/engagement`),
   });
 
   if (isLoading || !data) {
@@ -739,60 +751,108 @@ export function MeetingBriefPresentation({
         )}
 
         {/* ============================================================
-            11. CLOSING SCENARIOS
+            11. CLOSING SCENARIOS — verbatim port of prototype 8955-8962.
+               Always rendered; if empty, an explicit hint tells the
+               user where the data should come from (Edit mode).
             ============================================================ */}
-        {data.closing_scenarios.length > 0 && (
-          <Section title="Closing Scenarios">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Section title="Closing Scenarios">
+          {data.closing_scenarios.length > 0 ? (
+            <div
+              className="grid gap-2.5"
+              style={{
+                gridTemplateColumns: `repeat(${Math.min(data.closing_scenarios.length, 3)}, 1fr)`,
+              }}
+            >
               {data.closing_scenarios.map((c, i) => {
-                const col =
-                  c.type === "good" ? MG : c.type === "neutral" ? MA : MR;
-                const bg =
-                  c.type === "good"
-                    ? "#f0fdf4"
-                    : c.type === "neutral"
-                      ? "#fefce8"
-                      : "#fff5f5";
+                const isGood = c.type === "good";
+                const isNeutral = c.type === "neutral";
+                const bg = isGood ? "#EAF3DE" : isNeutral ? "#f4f3fe" : "#FAEEDA";
+                const bc = isGood
+                  ? "#97C459"
+                  : isNeutral
+                    ? "#e0deff"
+                    : "#FAC775";
+                const tc = isGood ? MG : isNeutral ? MP : MA;
+                const tx = isGood
+                  ? "#173404"
+                  : isNeutral
+                    ? "#1a1a2e"
+                    : "#633806";
                 return (
                   <div
                     key={i}
-                    className="rounded-md px-3 py-2"
-                    style={{ background: bg, borderLeft: `3px solid ${col}` }}
+                    className="rounded-lg px-3.5 py-3"
+                    style={{ background: bg, border: `1px solid ${bc}` }}
                   >
                     <div
-                      className="text-[10px] font-bold uppercase tracking-wider mb-1"
-                      style={{ color: col }}
+                      className="text-[10px] font-bold uppercase tracking-wider mb-1.5"
+                      style={{ color: tc }}
                     >
                       {c.label ?? c.type}
                     </div>
-                    <div className="text-[12px] leading-snug">{c.text}</div>
+                    <div
+                      className="text-[12px] italic leading-relaxed"
+                      style={{ color: tx }}
+                    >
+                      {c.text}
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </Section>
-        )}
+          ) : (
+            <EmptyHint label="No closing scenarios captured yet — add good / neutral / poor scenarios in ✏️ Edit mode." />
+          )}
+        </Section>
 
-        {/* Categories tab (M46 — procurement categories in scope). */}
-        {data.categories.length > 0 && (
-          <Section title="Categories in scope">
-            <div className="flex flex-wrap gap-1.5">
-              {data.categories.map((c, i) => (
-                <span
-                  key={i}
-                  className="text-[11px] font-semibold rounded-full px-2.5 py-1 border"
-                  style={{
-                    background: "#f4f3fe",
-                    color: MP,
-                    borderColor: "#e0deff",
-                  }}
-                >
-                  {c}
-                </span>
-              ))}
-            </div>
-          </Section>
-        )}
+        {/* ============================================================
+            Categories — fallback chain:
+              1. brief.categories (filled in Edit or by AI extraction)
+              2. engagement.target_categories (Pre-Sales tab)
+            We always render the section so it's clear where the data
+            comes from. Source label flips between the two.
+            ============================================================ */}
+        {(() => {
+          const fromBrief = data.categories ?? [];
+          const fromEngagement = engagement?.target_categories ?? [];
+          const list = fromBrief.length > 0 ? fromBrief : fromEngagement;
+          const sourceLabel =
+            fromBrief.length > 0
+              ? "from Brief"
+              : fromEngagement.length > 0
+                ? "from Pre-Sales engagement"
+                : null;
+          return (
+            <Section title="Categories in scope">
+              {list.length > 0 ? (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {list.map((c, i) => (
+                      <span
+                        key={i}
+                        className="text-[11px] font-semibold rounded-full px-2.5 py-1 border"
+                        style={{
+                          background: "#f4f3fe",
+                          color: MP,
+                          borderColor: "#e0deff",
+                        }}
+                      >
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                  {sourceLabel && (
+                    <div className="text-[10px] text-text-muted italic mt-2">
+                      {sourceLabel}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <EmptyHint label="No categories on the Brief or in Pre-Sales engagement. Add them on the Pre-Sales tab (target categories) or directly in ✏️ Edit mode." />
+              )}
+            </Section>
+          );
+        })()}
 
         {/* ============================================================
             12. CHEAT SHEET — verbatim port of prototype line 8964-8981.
