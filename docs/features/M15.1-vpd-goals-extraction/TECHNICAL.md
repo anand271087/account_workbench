@@ -157,3 +157,85 @@ Trigger lives in `KindUploadCard.tsx::DocumentRow`:
 | `test_extract_cs_goals_falls_back_to_stub_without_real_key` | No-key path returns `is_stub: true` |
 
 **All green.**
+
+---
+
+## VPD Success-Metrics Extraction (27-May Row 81)
+
+Shipped as commit `574c248` (27-May 2026). Mirrors the goals-extraction shape exactly so the route + frontend share the same Promise.allSettled fan-out pattern.
+
+### Files added
+
+| File | Purpose |
+|---|---|
+| `apps/api/app/schemas/vpd_metrics_extraction.py` | `ExtractedMetric` + `VpdMetricsExtractionResult` schemas |
+| `apps/api/app/services/claude.py` (functions added) | `_stub_vpd_metrics_extract`, `_real_vpd_metrics_extract`, `extract_metrics_from_vpd` |
+| `apps/api/app/routes/documents.py::extract_metrics` | New endpoint `POST /documents/:id/extract-metrics` |
+| `apps/web/src/types/vpd_metrics_extraction.ts` | TS mirror of the Python schema |
+| `apps/web/src/components/VpdMetricsExtractionReview.tsx` | Review modal with per-row checkbox + edit |
+| `apps/web/src/routes/accounts/tabs/SolutioningTab.tsx` (`VpdMetricsAutofillButton`) | One-click trigger on the Solutioning tab |
+
+### Endpoint
+
+```
+POST /api/v1/documents/:id/extract-metrics
+```
+
+- **RBAC:** view-gated (`can_view_account`). Apply step uses existing `POST /accounts/:id/metrics` which has per-row write RBAC.
+- **422** if `doc.kind != 'vpd'`.
+- **Billed** against the per-user/day `ai_quota` (label `vpd_metrics_extract`).
+- Returns `VpdMetricsExtractionResult { document_id, metrics: [...], is_stub }`.
+
+### Stub heuristic (no-key path)
+
+Lines that include a TARGET token (`$2M`, `80%`, `12 months`, `Q4`) are kept. Quantitative if the target carries digits/`%`/`$`; qualitative otherwise. Cap at 8.
+
+### Real Claude prompt
+
+Strict JSON output:
+```json
+{"metrics": [
+  {"name": "≤180 char metric label",
+   "metric_type": "quantitative|qualitative",
+   "target_value": "'$2M' | '80%' | '12 months' | 'High' | null",
+   "owner": "name or null",
+   "confidence": "high|medium|low",
+   "rationale": "≤2 sentences"}
+]}
+```
+
+Rules baked into the prompt:
+- A success metric is **measurable signal of delivery** (savings $, adoption %, supplier-count cuts, NPS, time-to-value)
+- `quantitative` = numeric/%/$/units; `qualitative` = ordinal (High/Med/Low)
+- Skip activity-level items ("we will hold weekly calls")
+- Cap at 8
+
+### Apply flow (review modal)
+
+Same fan-out pattern as goals:
+
+```js
+await Promise.allSettled(targets.map(async ({ r, i }) => {
+  try {
+    await api.post(`/api/v1/accounts/${accountId}/metrics`, {
+      name: r.name, metric_type: r.metric_type,
+      target_value: r.target_value, owner: r.owner,
+    });
+    updateRow(i, { _status: "done" });
+  } catch (e) {
+    // 409 → "skipped" (idempotent re-apply), other → "failed"
+    const status = (e instanceof ApiError && e.status === 409) ? "skipped" : "failed";
+    updateRow(i, { _status: status, _message: e.message });
+  }
+}));
+qc.invalidateQueries({ queryKey: ["metrics", accountId] });
+```
+
+Default per-row `_selected` = `(confidence ?? "low") !== "low"` — auto-checks medium/high rows.
+
+### Cache
+
+Same 24h `_doc_cache` shared across all VPD extracts, keyed on:
+```
+sha256("vpd-metrics|" + llm.backend_label() + "|" + text)
+```

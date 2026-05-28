@@ -205,3 +205,100 @@ No new env vars over F01.
 - RLS tests at row-level land in M3 (need real account data to test against).
 - Account-scoped RBAC (`require_account_access(account_id)`) lands in M3 with the account list.
 - Admin user-management UI lands in Sprint 5.
+
+---
+
+## Calculation Reference (single source of truth — RBAC predicate map)
+
+Every RBAC check across the codebase calls one of these predicates from [`apps/api/app/core/rbac.py`](../../../apps/api/app/core/rbac.py). The frontend mirrors them via `data.is_editable` / `data.can_view_*` flags returned on entity GETs.
+
+### Global predicates (no account scope)
+
+| Predicate | Returns True for |
+|---|---|
+| `is_global_admin(role)` | `admin · cs_director · vp_csm` |
+| `is_global_reader(role)` | `vp_sales · vp_solutioning · vp_inside_sales` |
+| `can_view_solutioning(role)` | global admin + global reader + solutioning_manager |
+| `can_view_inside_sales(role)` | global admin + global reader + commercial_owner + inside_sales_manager |
+| `can_view_admin_panel(role)` | global admin |
+| `can_manage_users(role)` | global admin |
+| `can_view_audit_log(role)` | global admin + global reader (matrix Q6: "All") |
+| `can_view_leadership(role)` | global admin + VP roles |
+| `can_bulk_import(role)` | global admin (matrix Q8) |
+| `can_reassign_account_owner(role)` | `admin · cs_director · vp_csm · vp_sales` (widened 26-May Row 50) |
+| `can_create_account(role)` | global admin |
+| `can_manage_users_role(role)` | global admin |
+
+### Account-scoped predicates
+
+`is_assigned` = caller is `account.csm_user_id` OR `account.co_user_id`.
+`is_team` = `account.csm_user_id ∈ caller's team` (only meaningful for `cs_team_manager`).
+
+| Predicate | Write set |
+|---|---|
+| `can_write_engagement(role, ...)` | global admin + csm (own) + cs_team_manager (team) + commercial_owner (own) + inside_sales_manager (own). Solutioning Manager: **V only** (matrix Q3) |
+| `can_write_contacts(role, ...)` | same as engagement |
+| `can_write_solutioning(role, ...)` | global admin + solutioning_manager (all) + commercial_owner (own) + inside_sales_manager (own) |
+| `can_write_cs_onboarding(role, ...)` | global admin + csm (own) + cs_team_manager (team) |
+| `can_write_sales_handoff(role, ...)` | global admin + vp_sales + vp_inside_sales + commercial_owner (own) + inside_sales_manager (own) + solutioning_manager (post-lock only) |
+| `can_sign_account(role, ...)` | global admin + vp_sales + vp_inside_sales + commercial_owner (own) + inside_sales_manager (own). CSM + Solutioning **cannot** sign. |
+| `can_unlock_signing(role)` | global admin **only** (asymmetric — every unlock lands under a director-grade user) |
+| `can_view_account(role, ...)` | global admin + global reader + csm + cs_team_manager + solutioning + commercial_owner (own only) |
+| `can_edit_account(role, ...)` | global admin OR (csm + own) OR (cs_team_manager + team) |
+
+### `can_write_documents` per-kind branches
+
+| Kind | Write set |
+|---|---|
+| `mom` (Meeting Records) | global admin + solutioning_manager + csm (own) + cs_team_manager (team) + inside_sales_manager (own) |
+| `vpd` (Value Proposition Deck) | global admin + solutioning_manager **only** |
+| `contract` (27-May Row 50 + 59) | global admin + vp_sales + vp_inside_sales + commercial_owner (own) + inside_sales_manager (own) + **csm (own)** + **cs_team_manager (team)** (widened so CSMs receiving handoff can upload) |
+| `recording / transcript / email / other` | Same as `mom` |
+
+### Asymmetric escape hatches (lock/unlock asymmetry)
+
+This pattern recurs across M13/M19/M21/M22/M23. Forward action is broad; reverse is admin-only so audit trail attributes every undo to a director-grade user.
+
+| Lock / Action | Anyone with write capability | Reverse (admin-only) |
+|---|---|---|
+| M13 Signing | sign | unlock signing |
+| M19 Success Contract lock | lock | unlock |
+| M21 Checkpoint sign-off | sign off (permanent) | admin re-open (deletes snapshot) |
+| M22 VDD lock | lock (after 4-section check) | unlock |
+| M23 D&R outcome stamp | renewed / at_risk / not_renewed | re-open + clear |
+| M27 SoftSignal resolve | resolve (≥5 char note) | reopen |
+| Goals soft-delete | delete (with reason ≥5 chars) | admin restore (within 30 days) |
+
+### Frontend gating contract
+
+Frontend NEVER computes RBAC — just reads capability flags returned on entity GETs:
+
+| Field | Source predicate |
+|---|---|
+| `account.is_editable` | `can_edit_account` |
+| `account.can_view_*` | the matching predicates |
+| Engagement `is_editable` | `can_write_engagement` |
+| Documents `is_editable` | `can_write_documents(kind=<from query>)` — **kind-aware** (Row 50 fix) |
+| Solutioning `is_editable` | `can_write_solutioning AND not locked` |
+| SigningGate `can_sign / can_unlock` | matching predicates |
+
+### 403 → /access-denied redirect
+
+[`apps/web/src/lib/api.ts`](../../../apps/web/src/lib/api.ts) catches every 403 response and pushes the user to `/access-denied?from=<path>&detail=<server msg>`. Prevents silent "click does nothing" failure mode.
+
+### Server-side defense-in-depth
+
+Predicates run at TWO layers per request:
+1. **Endpoint guard** (`require_role(...)` or per-route `can_*` check) → 403 before handler runs
+2. **RLS** at DB level → policy on every table uses `current_user_role()` + `user_assigned_to_account()` helper SQL functions
+
+Both must pass. Bypassing FastAPI (e.g. raw asyncpg) still hits RLS.
+
+### Where to change these values
+
+| To change | Edit |
+|---|---|
+| Any predicate's role set | [`apps/api/app/core/rbac.py`](../../../apps/api/app/core/rbac.py) |
+| RLS policy | [`supabase/migrations/0002_rls_policies.sql`](../../../supabase/migrations/0002_rls_policies.sql) + add a follow-up migration |
+| Contract-kind RBAC widening | `can_write_documents` (kind=="contract" branch) |
+| Frontend gating | Don't — read from the API's capability flags |

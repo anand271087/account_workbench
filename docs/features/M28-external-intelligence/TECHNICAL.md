@@ -31,22 +31,90 @@
 
 ## Service — `app/services/intel_news.py`
 
-Three layers, mirroring the pattern from M16 MoM extraction:
+**REWRITTEN 2026-05-27:** the original 3-path (GDELT → Claude synth → stub) shipped first but stakeholder asked for **real-only news**. Stub fallback REMOVED; synthesised Claude path REMOVED; migration 0049 wiped stub-seeded rows from the DB. Only GDELT remains.
 
-```py
-def stub_generate(*, account_name, industry, today) -> list[dict]:
-    """Deterministic 6-item set. Seed = sha256(account_name).
-    Rotates the 10-category list by seed % 10, picks first 6. Each item
-    uses a per-category template populated with {name} and {industry}."""
+### GDELT integration (production path)
 
-def _real_generate(*, account_name, industry, today) -> list[dict]:
-    """One Claude call. JSON-only schema. Falls back to stub on parse fail."""
+[`apps/api/app/services/intel_news.py`](../../../apps/api/app/services/intel_news.py) calls the **GDELT DOC 2.0 ArtList API** — public, free, no auth required. Source: `https://api.gdeltproject.org/api/v2/doc/doc`.
 
-def generate_intel_news(*, account_name, industry, today) -> tuple[list, bool]:
-    """Public entry. Returns (items, is_stub)."""
+**Request params:**
+```
+query     = "<account_name>" sourcelang:eng    # exact phrase + ISO-639-3 English code
+mode      = ArtList
+format    = json
+maxrecords= 25
+timespan  = 30d
+sort      = DateDesc
 ```
 
-24h cache keyed on `sha256(intel|model|name|industry)`, sharing the `_doc_cache` dict from `services/claude.py`. One retry on transient errors.
+**Required header:** `User-Agent: Mozilla/5.0 (compatible; BeroeAWB/1.0; ...)`. GDELT silently times out on the default `python-httpx/x.y.z` UA.
+
+**Rate-limit floor:** 6.5 seconds between successive hits (in-process). GDELT's documented limit is "1 request / 5 seconds".
+
+**Defensive parsing:**
+- Non-200 status → `[]`
+- non-JSON Content-Type → `[]`
+- Throttle banner ("Please limit requests…") → caught at JSON parse → `[]`
+- Network timeout / HTTPError → `[]`
+
+**Dedup:** title prefix (lowercase first 80 chars).
+
+### Three-step pipeline
+
+```python
+def generate_intel_news(*, account_name, industry, today=None, force_refresh=False
+) -> tuple[list[dict], bool]:
+    # Returns (items, is_stub). is_stub is ALWAYS False — kept for backwards
+    # compat with the route response shape; stubs no longer exist.
+
+    if not llm.is_configured():
+        return [], False                # empty state, never invent news
+
+    cache_hit (unless force_refresh)   → return cached
+
+    1. _fetch_gdelt_articles(account_name)
+         → real headlines (or [] if nothing/error)
+    2. _classify_gdelt_with_llm(articles, account, industry)
+         → Claude batched call: classify each into 10 categories +
+           write procurement-context summary + assign relevance
+         → drops items Claude flags as NOT procurement-relevant
+    3. cache 24h, return (items, False)
+```
+
+### Claude classifier prompt
+
+Batches up to 15 raw headlines + URLs + dates per call. System prompt asks Claude to:
+- **KEEP** items with clear procurement implications (financial, supply-chain, supplier-strategy, regulatory, ESG, digital, geopolitical, M&A, capex, innovation)
+- **REJECT** marketing / HR / sports / exec-bio / general-business stories
+- For each KEEP: classify into ONE category, rewrite summary in procurement context, assign `signal_relevance ∈ {high, medium, low}`
+- Use `input_index` so we can map enriched items back to their source articles (URL + domain + seendate preserved)
+
+Output schema (strict JSON):
+```json
+{"items": [{"input_index": 3, "category": "supply_chain",
+  "summary": "≤300 chars procurement-anglised", "signal_relevance": "high"}]}
+```
+
+Failure modes:
+- JSON parse fail → `[]`
+- Claude HTTP error → caught + `[]`
+- Empty result → `[]`
+
+### Force refresh (Refresh button)
+
+`generate_intel_news(force_refresh=True)` skips the 24h cache lookup. Caller is `/intel-news/refresh` route (Row in 2026-05-27 batch).
+
+### Cache key
+
+```
+sha256("intel|" + llm.backend_label() + "|" + account_name + "|" + (industry or ""))
+```
+
+Shared with `_doc_cache` dict in `services/claude.py`. 24h TTL.
+
+### Stub removed
+
+Migration `0049_purge_synthetic_intel_news.sql` wiped all rows where `source_url IS NULL` (synthetic items, by definition). Going forward only real GDELT articles can land in the table.
 
 ## Routes — `app/routes/intel_news.py`
 

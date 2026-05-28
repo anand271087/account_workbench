@@ -158,3 +158,90 @@ No new env vars beyond what M2 specified. `ANTHROPIC_API_KEY` becomes meaningful
 - Admin UI for approving pending categories ships in Sprint 5; today an admin must hit `POST /api/v1/lookups/categories/:id/approve` directly.
 - The audit writer doesn't yet capture the request_id end-to-end. Auth dep can set `request_id_var` from a request middleware in M6.
 - BRD edge case "Two users edit Engagement Info simultaneously" — currently last-write-wins. The "this was edited by X 2 min ago" toast is a UX polish task for M6 onwards.
+
+---
+
+## Calculation Reference (single source of truth)
+
+### Quality-check 1-5 score (Claude or stub)
+
+`POST /api/v1/ai/quality-check` scores engagement objectives across 3 dimensions:
+
+| Dimension | What's checked |
+|---|---|
+| **Specificity** | Named outcome / category / target |
+| **Measurability** | Concrete metric / number / timeframe |
+| **Value statement** | Business impact (savings, risk, growth) |
+
+#### Score bands
+
+| Score | Meaning | Stub heuristic |
+|---|---|---|
+| 1 | Too short / placeholder | `wc < 20` |
+| 2 | Generic / missing measurable outcomes | `wc < 50 AND not (has_metric AND has_value)` OR neither signal present |
+| 3 | Acceptable, but quantify the value | `has_metric OR has_value` (not both) |
+| 4 | Strong shape, could expand | `has_metric AND has_value AND wc < 100` |
+| 5 | Specific, measurable, value-anchored | `has_metric AND has_value AND wc >= 100` |
+
+#### Stub regex signals
+
+```py
+has_metric = re.search(r"\b(\d+\s*%|\$\d|€\d|\d+m|\d+k|increase|reduce|improve|by\s+\d+)\b", text, re.I)
+has_value  = re.search(r"\b(value|outcome|saving|risk|growth|efficienc|customer|cost|measur|target|"
+                       r"deliver|impact|ROI|benchmark|negotiat|sourcing|adoption|renewal)\b", text, re.I)
+wc = len(re.split(r"\s+", text.strip()))
+```
+
+Real Claude path: one Sonnet 4.5 call, `max_tokens=300`, strict JSON output `{score, comment}`. JSON-fence-stripping wrapper handles markdown-wrapped responses gracefully. Falls back to stub on any transient error or parse failure. (post-c66ab9e: stub no longer prepends "AI service unavailable" — see [M16 stub safety](../M16-mom-extraction/TECHNICAL.md)).
+
+### Word count threshold (BRD AC)
+
+UI shows amber warning when `wc < 120` words. The save isn't blocked — just a warning + auto-dismissable badge. `MIN_OBJECTIVE_WORDS = 120` constant in `PreSalesTab.tsx`.
+
+`ai_quality_dismissed` flag on `account_engagement`: when a CSM clicks "Dismiss this warning" after scoring, this flag is set so the warning doesn't re-appear after saves. Cleared when the objective text changes.
+
+### Category propose flow
+
+`POST /api/v1/lookups/categories` accepts any authenticated user. Behaviour:
+
+| Input | Outcome |
+|---|---|
+| Name `len ≥ 2 AND len ≤ 100` (trimmed) | Inserted with `approved=false` |
+| Case-insensitive match to existing | 409 with the existing row's approval status in the error message |
+| Anything else | 422 |
+
+Pending categories appear in the picker with an amber `(pending)` suffix; they're selectable but visually distinct.
+
+### CategoryPicker UX (post-migration 0050)
+
+After migration 0050 grew the canonical list to 2,879 categories across 22 domains, the picker switched from a dump-list to a search-first interface:
+
+- **🔍 Search** input (case-insensitive substring across all 2,879 names)
+- **Domain dropdown** narrows to one of 22 domains
+- **Render cap** at 30 matches; "Show all N" link expands
+- **Scrollable** `max-h-64` container
+- **Tooltip** on each chip shows `<domain>` or `<domain> · pipeline`
+
+Frontend [`PreSalesTab.tsx::CategoryPicker`](../../../apps/web/src/routes/accounts/tabs/PreSalesTab.tsx) — purely client-side over the cached lookup list (60s stale-while-revalidate).
+
+### Audit-log auto-writer
+
+`AUDITED_MODELS` set in `services/audit_writer.py`. SQLA `before_flush` listener inspects each dirty instance and writes one `audit_log` row per CHANGED field. JSONB `old_value` / `new_value` always carry the parent `account_id` so account-level activity feeds catch child-row edits via JSONB containment:
+
+```sql
+WHERE new_value @> '{"account_id": "<id>"}'
+   OR old_value @> '{"account_id": "<id>"}'
+```
+
+User attribution: `current_user_id_var` is a `ContextVar` set by `get_current_user` dep on every request. Listener reads it at flush time. If unset (e.g. seed script), audit row gets `user_id = NULL`.
+
+### Where to change these values
+
+| To change | Edit |
+|---|---|
+| Quality-check word thresholds (20/50/100) | `_stub_score` in [`apps/api/app/services/claude.py`](../../../apps/api/app/services/claude.py) |
+| Quality-check signal regexes (has_metric/has_value) | same function |
+| MIN_OBJECTIVE_WORDS UI warning (120) | constant in `PreSalesTab.tsx` |
+| Category name length (2-100) | `CategoryProposeRequest` in [`apps/api/app/schemas/lookup.py`](../../../apps/api/app/schemas/lookup.py) |
+| CategoryPicker render cap (30) | `RENDER_CAP` in `PreSalesTab.tsx::CategoryPicker` |
+| Audited models list | `AUDITED_MODELS` in [`services/audit_writer.py`](../../../apps/api/app/services/audit_writer.py) |

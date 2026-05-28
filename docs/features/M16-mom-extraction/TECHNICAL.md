@@ -183,6 +183,50 @@ The Pre-Sales engagement form + Brief editor consume the draft (existing `consum
 - **Bulk extract** — process all complete MoMs on an account in one shot
 - **Better array merge** — replacing `target_categories` and `geographies` wholesale rather than merging is the simplest semantic but loses information when a CSM has hand-tuned them; add a "merge vs replace" toggle later
 
+## Stub safety (post-commit c66ab9e — 28-May 2026)
+
+**Historical issue:** when Anthropic returned `OverloadedError` during VPD/MoM extract, the stub fallback was prepending diagnostic prefixes (`"AI service unavailable (X) — used heuristic."`, `"[Stub summary — Anthropic key not configured.] Document kind: vpd. First ~300 chars: <!-- Slide 1 -->..."`) **DIRECTLY into user-facing fields**. Those strings got persisted into `account_solutioning.proposed_solution / value_definition` and downstream into the M13 `sh_value_from_solutioning` snapshot.
+
+**Fix landed in `c66ab9e`** — all 5 stub-output sites in `apps/api/app/services/claude.py` cleaned:
+
+| Site | Before | After |
+|---|---|---|
+| `_stub_doc_summary` | `"[Stub summary — Anthropic key not configured.] Document kind: X. First ~300 chars: ..."` | First 2-3 clean sentences with slide markup stripped (`<!-- ... -->`, `#` headers, backticks, tildes) |
+| `summarise_document` wrapper | Prepended `"AI service unavailable (X) — used heuristic. "` | No prefix — `is_stub` flag drives the UI badge |
+| `_real_score` quality-check wrapper | Prepended same | No prefix |
+| `_stub_vpd_extract` | Dumped raw 300-char slide text into `proposed_solution` | Picks BUSINESS sentences (verbs: `provide`/`deliver`/`enable`/`license`); returns null if nothing matches |
+| `extract_vpd_fields` wrapper | Prepended same | No prefix |
+| `_stub_aggregate_summary` + wrapper | `"[Stub aggregate — ...]"` + `"heuristic rollup. "` | Clean output |
+
+**Sentence extraction rules** (new `_stub_vpd_extract`):
+- **Proposed Solution** → first sentence matching `provide|deliver|enable|license|platform|module|capability`
+- **Value Definition** → first sentence with `$ / % / savings / risk / ROI / negotiat / outcome`
+- **Engagement Type** → keyword sniff (subscription / retainer / pilot / one_time)
+- **Value Themes** → 10 known cues (Cost Reduction, Risk Mitigation, Category Intelligence, etc.)
+- Returns `null` for any field where no match found (no raw-text dump)
+
+**DB cleanup:** 1 row in `account_solutioning` had the leaky text; cleared via direct SQL during the fix session.
+
+## Rerun flow (post-commit 560218a — 28-May 2026)
+
+Clicking **Rerun** on a VPD/MoM doc now clears the per-doc `localStorage` applied flag so the freshly extracted fields land on the Engagement/Solutioning form as a dirty draft:
+
+```ts
+const rerunMutation = useMutation({
+  mutationFn: (id) => api.post<Job>(`/api/v1/documents/${id}/rerun-ai`),
+  onSuccess: (job, docId) => {
+    setActiveJobIds((s) => [...s, job.id]);
+    // CRITICAL: clear per-doc applied flags so the auto-apply useEffect
+    // picks up the fresh fields when the worker finishes.
+    sessionStorage.removeItem(appliedKey(docId));
+    localStorage.removeItem(appliedKey(docId));
+    qc.invalidateQueries({ queryKey });
+  },
+});
+```
+
+Without this clear, a doc applied once (possibly with stub data) was permanently locked out from re-apply.
+
 ## Costs
 
 Per extraction: one Claude Sonnet 4.5 call with `max_tokens=4000`. Roughly 3–4k input tokens (the MoM text capped at 24k chars) + ~2k output tokens. At Sonnet pricing that's pennies per extraction. The 24h cache makes accidental re-runs free.

@@ -133,3 +133,108 @@ class VocItem(BaseModel):
 ## Route `response_class=None` gotcha
 
 Initial `@router.get("...", response_class=None)` raised `'NoneType' object is not callable` at route registration time. Drop the kwarg — FastAPI picks the default JSONResponse class.
+
+---
+
+## Calculation Reference (single source of truth)
+
+### Reports — server-side HTML generators
+
+All reports use plain Python string concatenation (no Jinja). Generated on-demand; no DB persistence. User saves as PDF via browser Print → Save.
+
+| Report | Endpoint | Generator | Sections |
+|---|---|---|---|
+| **QBR** | `GET /accounts/:id/reports/qbr` | `services/reports.py::generate_qbr_html` | 8 sections: Engagement scope · Usage analysis · Category trends · Abi usage · Success metrics · Checkpoint cadence · Industry benchmark · Expansion pipeline |
+| **MBR** | `GET /accounts/:id/reports/mbr` | `generate_mbr_html` | Monthly snapshot: usage highlights · open checkpoints · top metrics · action items |
+| **Utilization** | `GET /accounts/:id/reports/utilization` | `generate_utilization_html` | Adoption tile + module-wise usage + super-users table |
+| **VDD** | `GET /accounts/:id/reports/vdd` | `generate_vdd_html` (27-May Row 53) | Single-page locked-or-draft report: 3-bucket totals + 4 sections + executive summary |
+
+All filename pattern: `${account.slug}-${type}-${date}.html`.
+
+### Status banding in QBR/MBR HTML
+
+QBR + MBR colour metric rows by `derive_status` output (same logic as M20). Adoption tile uses:
+- `adoption >= 70%` → green
+- `adoption >= 40%` → amber
+- else → red
+
+### Period scaling (Analytics — Option A)
+
+`AnalyticsTab.tsx::periodScale(period)`:
+
+```ts
+function periodScale(period: Period): number {
+  return period === "30d" ? 1/3
+       : period === "90d" ? 1
+       : 4;  // "FY"
+}
+```
+
+Applied per-section:
+
+| Section | Behaviour |
+|---|---|
+| Usage & Logins | Slices last 1/3/12 months from the 12-month series |
+| Module Activity | Per-period totals × scale |
+| Category Watch | Per-period totals × scale |
+| Abi Intelligence | Per-period totals × scale |
+| Supplier Discovery | Proportions unchanged (already share-of-X) |
+| Supplier Risk | Proportions unchanged |
+| Custom Credits | Per-period totals × scale |
+| Super Users | Always-current (no scaling) |
+| 12-month trend chart | Always full year — period only affects the totals tile |
+
+**Why client-side?** Backend doesn't have time-series telemetry yet (`platform_intel` carries 90d-baseline + 12-month series as static JSON). Option B (server-side `?period=` filtering) lands when the ETL pipeline ships.
+
+### Inline-SVG renderers (no Chart.js)
+
+Zero external dependency. 4 chart kinds:
+
+| Component | Use |
+|---|---|
+| `LineChart` | Single-series 12-month trends |
+| `MultiLineChart` | Per-module monthly trends (Module Activity sub-tab) |
+| `BarChart` | Per-period totals |
+| `DonutChart` | Adoption %, supplier-risk mix; centre label shows total |
+
+All SVGs rendered with hand-rolled `<polyline>` / `<path>` / `<circle>` — viewBox-based for responsive sizing.
+
+### `platform_intel` jsonb structure (one column, 6 sections + 3 telemetry)
+
+`accounts.platform_intel` carries the whole snapshot per account. Single-jsonb pattern (same as M19/M22/M23):
+
+```jsonc
+{
+  "cat_intel":       { "top_cats": [...], "section_avg_times": {...}, "insights": [...] },
+  "supplier_watch":  { "risk_tiers": {...}, "tracked_suppliers": [...] },
+  "abi":             { "complexity_mix": {...}, "top_types": [...], "usage_trend": "...", "avg_feedback": "..." },
+  "benchmark":       { "compared_against": [...] },
+  "engagement":      { "channel_kpis": {...}, "user_breakdown": {...} },
+  "nps":             { "score": 42, "voc_quotes": [...] },
+  "usage":           { "12_month": [...], "active_users": ..., "adoption": ... },
+  "modules":         { "period_totals": {...}, "12_month_per_module": {...} },
+  "super_users":     [{ "name": ..., "role": ..., "logins_30d": ... }, ...]
+}
+```
+
+Schema: [`apps/api/app/schemas/platform_intel.py`](../../../apps/api/app/schemas/platform_intel.py). `extra="allow"` everywhere so new telemetry fields land without DDL churn.
+
+### Section-level update semantics
+
+`PATCH /accounts/:id/platform-intel` accepts a partial payload:
+
+| Payload | Effect |
+|---|---|
+| `{ "cat_intel": { ... } }` | Replaces `cat_intel` wholesale; other sections untouched |
+| `{ "cat_intel": null }` | Pops the `cat_intel` key from the jsonb |
+| `{}` | No-op |
+
+### Where to change these values
+
+| To change | Edit |
+|---|---|
+| Adoption tile bands (70/40) | `generate_utilization_html` in [`reports.py`](../../../apps/api/app/services/reports.py) |
+| Period scale multipliers | `periodScale` in `AnalyticsTab.tsx` |
+| QBR section list / order | `generate_qbr_html` template |
+| VDD report layout | `generate_vdd_html` template |
+| `platform_intel` schema | [`schemas/platform_intel.py`](../../../apps/api/app/schemas/platform_intel.py) — Pydantic with `extra="allow"` |

@@ -119,6 +119,183 @@ All Pydantic shapes use `model_config = ConfigDict(extra="allow")` so future pro
 
 Pink theme (`#FD576B` family) per prototype. Leaf tabs consume `account` via `useAccountFromLayout()` — zero per-tab fetching for header data.
 
+## Calculation Reference (single source of truth)
+
+### M19 — Success Contract: 3-lock validation
+
+Auto-drafted on first GET if `accounts.success_contract` is empty. Source mapping:
+
+| Lock field | Default value source | Marked auto-drafted |
+|---|---|---|
+| `primary_metric` | (left null — user fills) | — |
+| `measurement_method` | `account_solutioning.sh_value_validation` | yes |
+| `value_narrative` | `account_solutioning.value_definition` (or `sh_value_from_solutioning` if locked) | yes |
+| `measure_owner` | `sh_stakeholder_signoff` ?? CSM full_name | yes |
+| `measure_freq` | "Quarterly" | yes (default) |
+
+**Lock requires all 3 to satisfy:**
+- `primary_metric` — non-blank
+- `measurement_method` — non-blank
+- `value_narrative` — `len(trim) >= 10` chars
+
+Unlock = admin / cs_director / vp_csm only — sets `success_contract_locked_at/by` back to null.
+
+PATCH with `null` value → pops the key from the jsonb (lets fully-reset contracts hit the auto-draft branch again on next GET).
+
+### M20 — Value Tracking: status derivation engine
+
+`apps/api/app/schemas/metric.py::derive_status` runs server-side on every metric on every read. Pure function (no DB / no side-effects).
+
+| Metric type | Input | Output |
+|---|---|---|
+| `status_override` set | (anything) | the override value (green/amber/red/grey) |
+| Quantitative — `current_value` blank | — | `grey` |
+| Quantitative — both values parseable | `pct = parse_num(current) / parse_num(target)` | `pct ≥ 0.80 → green` · `pct ≥ 0.50 → amber` · else `red` |
+| Quantitative — parse fails | — | `grey` |
+| Qualitative — `current_value.lower()` matches `high` | — | `green` |
+| Qualitative — matches `medium` or `med` | — | `amber` |
+| Qualitative — matches `low` | — | `red` |
+| Qualitative — anything else | — | `grey` |
+
+**parse_num** strips `$`, `%`, `,`, `K`, `M`, `B` suffixes and converts (e.g. `"$2M"` → 2_000_000, `"80%"` → 0.80).
+
+**Status summary tile** (top of Value Tracking) counts `green / amber / red / grey` across all non-deleted metrics — drives the per-metric coloured progress bar.
+
+### M21 — Checkpoints: auto-schedule cadence
+
+`POST /accounts/:id/checkpoints/auto-schedule` is **idempotent** — only inserts checkpoints for `type` values not already present on the account.
+
+**Day 0 = `accounts.gate_signed_date`** (account must be signed; route returns 422 if not).
+
+| Type | Scheduled date |
+|---|---|
+| **Kickoff** | `gate_signed_date` |
+| **MBR** | `gate_signed_date + 90 days` |
+| **QBR** | `gate_signed_date + 180 days` |
+| **Renewal** | `gate_renewal_date − 14 days` (preferred) · falls back to `gate_signed_date + 335 days` |
+
+Sort order: Kickoff → MBR → QBR → Renewal.
+
+**Status transitions:**
+- `not_held` → `held`: PATCH with `held_date` set
+- `held` → `signed_off`: POST `/sign-off` writes an immutable `signed_off_snapshot` (jsonb) containing reviewed initiatives + metrics + client_acknowledgement + next_actions
+
+**Sign-off is permanent evidence:**
+- PATCH on a signed-off row → 409
+- DELETE on a signed-off row → 409
+- Second sign-off → 409
+- Admin re-open is the only escape hatch
+
+### M22 — VDD: 4-section lock validation + CSM-attributed totals
+
+Auto-draft on first GET pulls from upstream:
+- `client_strategic_priorities` ← `success_contract.value_narrative` split on newlines
+- `agreed_success_metrics` ← snapshot of `success_metrics` rows
+- `beroes_approach` ← `cs_goals.initiatives` (mapped to ApproachItem shape)
+- `value_delivered` ← same source, with CSM-attributed dollar columns
+
+**Lock requires ALL 4 sections to have ≥1 item** ([routes/vdd.py:280-300](../../../apps/api/app/routes/vdd.py#L280-L300)):
+
+| Section | Lock check |
+|---|---|
+| `client_strategic_priorities` | `len(list) >= 1` |
+| `agreed_success_metrics` | `len(list) >= 1` |
+| `beroes_approach` | `len(list) >= 1` |
+| `value_delivered` | `len(list) >= 1` |
+
+Missing any → 422 with `"Cannot lock — missing: <list>"`.
+
+**CSM-attributed rollup totals** (rendered as 3 tiles in the UI):
+
+```
+$identified  = Σ value_delivered[i].identified_usd_m   (Decimal millions)
+$committed   = Σ value_delivered[i].committed_usd_m
+$implemented = Σ value_delivered[i].implemented_usd_m
+```
+
+Each `ValueDeliveredItem` carries 3 nullable Decimal fields; nulls treated as 0.
+
+**Lock state:**
+- `vdd_locked_at` + `vdd_locked_by` paired (DB CHECK)
+- PATCH on locked → 409
+- Unlock = admin only, clears both fields
+
+**Mutation safety:** all VDD mutations use `copy.deepcopy(real.value_delivery_document or {})` so SQLAlchemy detects the change (shallow copy + in-place mutation produces value-equal graphs and SQLA skips the UPDATE).
+
+### M23 — Delivery & Renewal: dual-track + readiness + outcome
+
+**Track 1 (delivery hygiene)** — derived live every read from M21 Checkpoints:
+
+```python
+async def _derive_track1(db, account_id):
+    cps = checkpoints(account_id) where not deleted
+    return Track1Derived(
+        next_type           = earliest upcoming non-signed type or None,
+        next_days_until     = (scheduled - today).days for that row,
+        overdue_count       = count(scheduled < today AND status != "signed_off"),
+        signed_off_count    = count(status == "signed_off"),
+    )
+```
+
+**Track 2 (expand)** — Kanban with 4 columns: `value_proof / expand_ask / new_scope / close`. Each item has `{id, title, owner, due_date, notes, archived}`.
+
+**Red flags** — `red_flags` jsonb array. Each `{id, type, raised_at, raised_by, note, resolved_at, resolved_by, resolved_note}`.
+- Flag types: `usage_drop / value_dispute / champion_loss / executive_turnover / integration_block / pricing_pushback / scope_creep / contract_dispute / other`
+- Resolved when all 3 of `resolved_at / resolved_by / resolved_note (≥5 chars)` are set.
+
+**expand_paused** (derived live):
+
+```python
+expand_paused = any(f.resolved_at is None for f in red_flags)
+```
+
+When true the M26 appetite banner shows a "Track 2 paused" hint (UI only — doesn't change scoring math).
+
+**Renewal Readiness 3-question grid** — `readiness` jsonb with 3 `ReadinessAnswer` rows: `delivered_metric / proof_data / client_acknowledged` each with `answer ∈ {yes, no, partial}` + `proof_notes`.
+
+**readiness_score** (0..3, derived live):
+
+```python
+def _readiness_score(r):
+    return sum(1 for a in (r.delivered_metric, r.proof_data, r.client_acknowledged)
+               if a.answer == "yes")
+```
+
+UI shows `<score>/3 yes` badge.
+
+**Outcome** (one-shot decision):
+
+| Value | Effect |
+|---|---|
+| `renewed` | Locks the D&R document — PATCH returns 409 until admin re-opens |
+| `at_risk` | Same lock — re-open required to change |
+| `not_renewed` | Same lock |
+| `undecided` | (clear case — `dr_outcome` is null) |
+
+Stamped on `accounts.dr_outcome / dr_outcome_set_at / dr_outcome_set_by` (DB CHECK enforces the trio).
+
+Re-open = admin-only (`is_global_admin`). Clears all 3 stamp fields.
+
+### Frontend rendering rules
+
+| Surface | Threshold |
+|---|---|
+| M20 status pill colour | `derive_status` output → tone classes (emerald / amber / red / slate) |
+| M21 overdue badge | scheduled < today AND status != "signed_off" → red `⚠` |
+| M21 days-until pill | `>7d → slate`, `≤7d → amber`, `<0 → red` (chip below renewal cell on AccountListPage) |
+| M22 CSM totals | render `null` as `—` (avoid `$0` confusion with truly-zero values) |
+| M23 red-flag count | shown as red pill when > 0 on Home (Row 66) |
+
+### Where to change these values
+
+| To change | Edit | Re-deploy needed |
+|---|---|---|
+| M20 quantitative thresholds (0.80 / 0.50) | [`apps/api/app/schemas/metric.py::derive_status`](../../../apps/api/app/schemas/metric.py) | API only |
+| M21 cadence days (90 / 180 / 14) | [`apps/api/app/routes/checkpoints.py::auto_schedule_checkpoints`](../../../apps/api/app/routes/checkpoints.py) | API only |
+| M22 lock-validation min counts (currently ≥1 each) | [`apps/api/app/routes/vdd.py::lock_vdd`](../../../apps/api/app/routes/vdd.py) | API only |
+| M23 readiness scoring formula | `_readiness_score` in [`apps/api/app/routes/delivery_renewal.py`](../../../apps/api/app/routes/delivery_renewal.py) | API only |
+| Red-flag resolution note ≥5 chars | Pydantic `Field(min_length=5)` on `RedFlag` schema | API only |
+
 ## Tests
 
 | File | Cases | Coverage |
