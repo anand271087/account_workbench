@@ -469,39 +469,71 @@ export default function PreSalesTab() {
         <ClientContactsInline accountId={account.id} />
       </div>
 
-      {/* Handover gate */}
-      {form.is_editable && (
-        <div className="lg:col-span-3 bg-slate-50 rounded-card border border-beroe-card-border p-4 flex items-center gap-3 flex-wrap">
-          <div className="text-sm">
-            <div className="font-bold text-text-primary">Pre-Sales → Solutioning handover</div>
-            <div className="text-xs text-text-muted">
-              {account.handed_off_to_solutioning
-                ? `Already handed off${account.handed_off_at ? ` on ${new Date(account.handed_off_at).toLocaleDateString()}` : ""}.`
-                : "Once you've captured the engagement objective, target categories, and key stakeholders, hand the account to Solutioning to start VPD work."}
-            </div>
-          </div>
+      {/* 28-May — Handoff gate restyled to mirror prototype line 5907-5911.
+          Three states:
+            1) editable + not handed off → full-width VIOLET button with
+               2px dashed violet top border above + caption below
+            2) already handed off       → small green pill "Handed off
+               to Solutioning on DATE" with check icon
+            3) locked (signed)          → handoff is no longer relevant;
+               banner at top already covers locked-state messaging
+          The amber "📤 Handed off to Solutioning · DATE" strip from
+          Row 79 lives below this and stays unchanged. */}
+      {form.is_editable && !account.handed_off_to_solutioning && (
+        <div
+          className="pt-3 mt-2 border-t-[2px] border-dashed"
+          style={{ borderColor: "#4A00F830" }}
+        >
           <button
+            type="button"
             onClick={() => {
-              if (account.handed_off_to_solutioning) {
-                // Row 73 merged Pre-Sales + Solutioning into one tab —
-                // scroll to the Solutioning anchor instead of route-jumping.
-                document.getElementById("sol-section")?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                });
-              } else if (confirm("Hand this account over to Solutioning? This is recorded in the activity log.")) {
+              if (
+                confirm(
+                  "Hand this account over to Solutioning? This is recorded in the activity log.",
+                )
+              ) {
                 handoverMutation.mutate();
               }
             }}
             disabled={handoverMutation.isPending || dirty}
-            className="ml-auto px-3 py-1.5 rounded-lg bg-beroe-blue text-white text-xs font-semibold disabled:opacity-50"
+            className="w-full px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-opacity"
+            style={{ background: "#4A00F8" }}
             title={dirty ? "Save engagement changes before handing off" : ""}
           >
-            {account.handed_off_to_solutioning
-              ? "Open Solutioning →"
-              : handoverMutation.isPending
-                ? "Handing off…"
-                : "Hand over to Solutioning →"}
+            {handoverMutation.isPending
+              ? "Handing off…"
+              : "→ Hand off to Solutioning"}
+          </button>
+          <div className="text-[10px] text-text-muted text-center mt-1">
+            Marks Pre-Sales as complete and notifies the Solutioning team.
+          </div>
+        </div>
+      )}
+      {form.is_editable && account.handed_off_to_solutioning && (
+        <div
+          className="mt-2 rounded-lg px-3 py-2 flex items-center gap-2"
+          style={{ background: "#f0fdf4", border: "1px solid #40CC8F30" }}
+        >
+          <span style={{ color: "#40CC8F" }}>✓</span>
+          <span
+            className="text-[11px] font-semibold"
+            style={{ color: "#2fb87a" }}
+          >
+            Handed off to Solutioning
+            {account.handed_off_at &&
+              ` on ${new Date(account.handed_off_at).toLocaleDateString()}`}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              document
+                .getElementById("sol-section")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className="ml-auto text-[11px] font-semibold hover:underline"
+            style={{ color: "#2fb87a" }}
+          >
+            Open Solutioning ↓
           </button>
         </div>
       )}
