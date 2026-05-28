@@ -26,7 +26,6 @@ import { cn } from "@/lib/utils";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import { formatACV, formatRenewalDays } from "@/lib/format";
 import {
-  MODE_CONF,
   fmtK,
   stageColor,
   stageName,
@@ -75,7 +74,11 @@ export default function HomeTab() {
 
   // Fetch everything in parallel. Each query is independent so failures
   // degrade the corresponding section, not the whole page.
-  const apptQ = useQuery<Appetite>({
+  // The appetite query stays mounted (cached and shared with the layout's
+  // ModePill) so TanStack Query dedupes the fetch across the two
+  // components; not directly consumed in HomeTab JSX anymore after
+  // 28-May header-strip removal.
+  useQuery<Appetite>({
     queryKey: ["appetite", aid],
     queryFn: () =>
       api.get<Appetite>(`/api/v1/accounts/${aid}/appetite-score`),
@@ -173,70 +176,15 @@ export default function HomeTab() {
 
   const dtr = account.days_to_renewal;
   const renewal = formatRenewalDays(dtr ?? null);
-  const appetite = apptQ.data;
 
   return (
     <div className="space-y-3">
-      {/* Header strip — 27-May Row 64 (CSM/Sales name fallback) + Row 65
-          (Growth & Tier next to name). csm_full_name + co_full_name are
-          already returned by the AccountDetail endpoint (joined on user). */}
-      <Card>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
-              Home — single pane of glass
-            </div>
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <h1 className="text-[18px] font-bold text-text-primary">
-                {account.name}
-              </h1>
-              {/* Growth + Tier pills next to the account name */}
-              {account.account_type && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {account.account_type}
-                </span>
-              )}
-              {account.tier && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
-                  Tier {account.tier}
-                </span>
-              )}
-            </div>
-            <div className="text-[12px] text-text-muted">
-              {account.industry ?? "—"} · {account.country ?? "—"}
-              {/* CSM name when present, otherwise Sales (Commercial Owner)
-                  name fallback. Row 64. */}
-              {account.csm_full_name ? (
-                <> · CSM: <b className="text-text-secondary">{account.csm_full_name}</b></>
-              ) : account.co_full_name ? (
-                <> · Sales: <b className="text-text-secondary">{account.co_full_name}</b></>
-              ) : (
-                <> · <span className="italic">Unassigned</span></>
-              )}
-            </div>
-          </div>
-          {appetite && (
-            <div
-              className="rounded-lg border-[1.5px] px-3 py-2 text-right flex-shrink-0"
-              style={{
-                background: MODE_CONF[appetite.current_mode].bg,
-                borderColor: MODE_CONF[appetite.current_mode].col + "40",
-              }}
-            >
-              <div
-                className="text-[12px] font-bold"
-                style={{ color: MODE_CONF[appetite.current_mode].col }}
-              >
-                {MODE_CONF[appetite.current_mode].icon}{" "}
-                {MODE_CONF[appetite.current_mode].label}
-              </div>
-              <div className="text-[10px] text-text-muted mt-0.5">
-                Appetite Score: <b>{appetite.score}/100</b>
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
+      {/* 28-May — Duplicate Home header strip REMOVED. The account name,
+          account_type pill, tier, CSM, mode/appetite, and 30d/90d/FY
+          period bar all live on the single compact header in
+          AccountProfileLayout (prototype line 2802-2814). The Home tab
+          now starts with content (red flag banner, priority card, KPIs)
+          rather than re-rendering chrome. */}
 
       {/* 27-May Row 66 — Red Flag notification.
           Renders ONLY when there are unresolved red flags on the

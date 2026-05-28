@@ -24,6 +24,8 @@ const PERIOD_KEY = "awb:account-period";
 interface SubNavItem {
   to: string;
   label: string;
+  col: string;
+  bg: string;
   show: (a: AccountDetail) => boolean;
 }
 
@@ -34,46 +36,44 @@ interface SubNavItem {
 // Contacts inside Account Kit → Pre-Sales (Client Contacts group), and
 // Value Def inside Account Kit → Solutioning. Back-compat redirects in
 // App.tsx keep the old `/contacts` + `/value-def` URLs working.
+// 28-May — Per-tab colour palette ported from prototype line 2785-2790
+// (`views` array in buildAcct). Each pill tints to its own colour when
+// active so the user has a strong colour-coded sense of "which area
+// am I in". Inactive pills are neutral white.
 const SUB_NAV: SubNavItem[] = [
-  { to: "overview",   label: "🏠 Home",    show: () => true },
-  // M17 — Pre-Sales / Brief / Solutioning / Sales Handoff / CS Onboarding
-  // are grouped under a single "Account Kit" tab. The sub-tab strip lives
-  // inside AccountKitLayout. Visibility = at least one inner sub is visible.
+  { to: "overview",   label: "🏠 Home",    col: "#4A00F8", bg: "#f3f0ff", show: () => true },
   {
     to: "account-kit",
     label: "📋 Account Kit",
+    col: "#EF9637",
+    bg: "#fff8eb",
     show: (a) =>
       a.can_view_pre_sales ||
       a.can_view_solutioning ||
       a.can_view_sales_handoff ||
       a.can_view_cs_onboarding,
   },
-  // M18 — Success Management group: VDD / Contract+Goals / Value Tracking
-  // / Checkpoints / Delivery+Renewal. Visible to anyone with CS-onboarding
-  // view rights (same gate as the downstream CSM workflow).
   {
     to: "success-management",
     label: "🎯 Success Management",
+    col: "#FD576B",
+    bg: "#fff0f2",
     show: (a) => a.can_view_cs_onboarding,
   },
-  // M26 — Growth & Pipeline. Three sub-tabs (Account Plan live; Signals
-  // & Activity + External Intelligence stubs until M27 / M28). Visibility
-  // gated on the same CS-onboarding view right as the rest of the funnel.
   {
     to: "growth-pipeline",
     label: "🚀 Growth & Pipeline",
+    col: "#40CC8F",
+    bg: "#f0fdf4",
     show: (a) => a.can_view_cs_onboarding,
   },
-  // M29 — Intelligence & Reports group: Intelligence (live) + Analytics
-  // (M30 stub) + Documents & Reports (M31 stub). Read-only platform-data
-  // surface; anyone with view access on the account can read.
   {
     to: "intel-reports",
     label: "📊 Intelligence & Reports",
+    col: "#35E1D4",
+    bg: "#f0fdfa",
     show: () => true,
   },
-  // Goals folded into Success Management → Contract & Goals (M19).
-  // Old /goals URL still works via the back-compat redirect in App.tsx.
 ];
 
 export default function AccountProfileLayout() {
@@ -185,13 +185,18 @@ export default function AccountProfileLayout() {
           <span className="text-text-secondary">{data.name}</span>
         </div>
 
-        {/* Header */}
-        <div className="px-6 py-4 flex items-start gap-4 flex-wrap">
-          <div className="w-12 h-12 rounded-ctl bg-beroe-blue/10 border border-beroe-blue/30 flex items-center justify-center text-sm font-extrabold text-beroe-blue flex-shrink-0">
-            {initials(data.name)}
-          </div>
+        {/* Compact Account Header — verbatim port of prototype line 2802-2814
+            (`beroe_awb_v20.html`):
+              [36×36 logo, coloured by health status]
+              [Name 15px bold] [account_type pill]
+              [industry · CSM · tier (11px muted)]
+              [period bar] [health score] [mode pill]
+            The duplicate name/subtitle/mode chip on the HomeTab header
+            strip is now stripped — single source of truth lives here. */}
+        <div className="px-6 py-3 flex items-center gap-3.5 flex-wrap">
+          <LogoBox name={data.name} healthScore={data.health_score} />
           <div className="flex-1 min-w-0 self-center">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <StarButton
                 pinned={fav.isFavorite(data.id)}
                 onToggle={() =>
@@ -199,33 +204,29 @@ export default function AccountProfileLayout() {
                 }
                 size="md"
               />
-              <h1 className="text-[18px] font-bold truncate" style={{ color: "#003B73" }}>{data.name}</h1>
+              <h1 className="text-[15px] font-bold truncate" style={{ color: "#0d1b2e" }}>{data.name}</h1>
+              {data.account_type && (
+                <span
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  style={{
+                    background: "#E8F8EF",
+                    color: "#40CC8F",
+                    border: "1px solid #40CC8F40",
+                  }}
+                >
+                  {data.account_type}
+                </span>
+              )}
               {!data.is_editable && (
                 <span className="text-[10px] text-text-muted">(read-only)</span>
               )}
             </div>
-            <div className="text-[11px] text-text-secondary mt-0.5">
-              {data.industry ?? "—"} · {data.country ?? "—"}
-              {data.annual_revenue_text && (
-                <> · <span className="font-semibold">{data.annual_revenue_text}</span></>
+            <div className="text-[11px] text-text-muted mt-0.5 truncate">
+              {data.industry ?? "—"}
+              {data.csm_full_name && (
+                <> · <span className="text-text-secondary">{data.csm_full_name}</span></>
               )}
-              {data.headquarters && <> · HQ {data.headquarters}</>}
-              {" · "}
-              <span className="font-semibold">{data.csm_full_name ?? "Unassigned"}</span>{" "}
-              <span className="text-text-muted">CSM</span>
-              {data.sf_link && (
-                <>
-                  {" · "}
-                  <a
-                    href={data.sf_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-beroe-blue hover:underline font-semibold"
-                  >
-                    Salesforce ↗
-                  </a>
-                </>
-              )}
+              {data.tier && <> · {data.tier}</>}
             </div>
           </div>
 
@@ -242,19 +243,32 @@ export default function AccountProfileLayout() {
           </div>
         </div>
 
-        {/* Sub-nav — mirrors prototype `.tab-bar` / `.tab-b` exactly */}
-        <div className="px-6 flex border-b-[1.5px] border-beroe-card-border overflow-x-auto -mb-px">
+        {/* 28-May — Coloured pill sub-nav verbatim from prototype line
+            2820 (the "3 view selector pills" block). Each tab tints to
+            its assigned colour when active; inactive pills are neutral. */}
+        <div className="px-6 pb-3 flex gap-2 overflow-x-auto">
           {SUB_NAV.filter((t) => t.show(data)).map((t) => (
             <NavLink
               key={t.to}
               to={t.to}
               className={({ isActive }) =>
                 cn(
-                  "px-[14px] py-[9px] text-[12px] font-medium whitespace-nowrap border-b-[2.5px] -mb-[1.5px] transition-colors duration-100",
-                  isActive
-                    ? "text-beroe-blue font-bold border-beroe-blue"
-                    : "text-text-muted border-transparent hover:text-beroe-blue",
+                  "flex-1 min-w-[140px] px-3 py-2.5 rounded-[10px] border-[1.5px] text-[13px] text-center whitespace-nowrap transition-colors duration-100",
+                  isActive ? "font-bold" : "font-medium",
                 )
+              }
+              style={({ isActive }) =>
+                isActive
+                  ? {
+                      borderColor: t.col + "40",
+                      background: t.bg,
+                      color: t.col,
+                    }
+                  : {
+                      borderColor: "var(--cb, #e4eaf6)",
+                      background: "#fff",
+                      color: "#64748b",
+                    }
               }
             >
               {t.label}
@@ -268,6 +282,36 @@ export default function AccountProfileLayout() {
         <Outlet context={{ account: data, period, setPeriod }} />
       </div>
     </AppShell>
+  );
+}
+
+// 28-May — Compact logo box (port of prototype line 2803). 36×36 square
+// with rounded corners, coloured by the current health-score band.
+function LogoBox({
+  name,
+  healthScore,
+}: {
+  name: string;
+  healthScore: number | null;
+}) {
+  const s = healthScore ?? 0;
+  const tone =
+    s >= 70
+      ? { col: "#40CC8F", bg: "#E8F8EF" }
+      : s >= 40
+        ? { col: "#EF9637", bg: "#FFF4E5" }
+        : { col: "#e63950", bg: "#FCEBED" };
+  return (
+    <div
+      className="w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-extrabold flex-shrink-0"
+      style={{
+        background: tone.bg,
+        border: `2px solid ${tone.col}`,
+        color: tone.col,
+      }}
+    >
+      {initials(name)}
+    </div>
   );
 }
 
