@@ -39,7 +39,12 @@ export default function PreSalesTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["account", account.id] });
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
-      navigate(`/accounts/${account.id}/solutioning`);
+      // After Row 73 the Solutioning section lives below Pre-Sales on
+      // the merged tab — scroll to its anchor instead of route-jumping.
+      document.getElementById("sol-section")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     },
   });
 
@@ -428,7 +433,12 @@ export default function PreSalesTab() {
           <button
             onClick={() => {
               if (account.handed_off_to_solutioning) {
-                navigate(`/accounts/${account.id}/solutioning`);
+                // Row 73 merged Pre-Sales + Solutioning into one tab —
+                // scroll to the Solutioning anchor instead of route-jumping.
+                document.getElementById("sol-section")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
               } else if (confirm("Hand this account over to Solutioning? This is recorded in the activity log.")) {
                 handoverMutation.mutate();
               }
