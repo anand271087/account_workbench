@@ -127,11 +127,21 @@ export const OUTCOME_LABELS: Record<Outcome, string> = {
   undecided: "Undecided",
 };
 
-export const OUTCOME_TONES: Record<Outcome, string> = {
-  renewed: "bg-green-50 text-green-700 border-green-300",
-  at_risk: "bg-amber-50 text-amber-700 border-amber-300",
-  not_renewed: "bg-red-50 text-red-700 border-red-300",
-  undecided: "bg-slate-50 text-slate-700 border-slate-300",
+/** Brand-palette colours per outcome (Beroe brand book Sept 2025).
+ *  Hex values so callers can use inline styles. Mapping:
+ *    renewed     → Risk Green #6EC457
+ *    at_risk     → Risk Amber #F0BC41
+ *    not_renewed → Risk Red   #CF4548
+ *    undecided   → brand grey #94a3b8
+ */
+export const OUTCOME_TONES: Record<
+  Outcome,
+  { bg: string; border: string; text: string }
+> = {
+  renewed:     { bg: "#6EC45715", border: "#6EC45740", text: "#1d6b35" },
+  at_risk:     { bg: "#F0BC4115", border: "#F0BC4140", text: "#854F0B" },
+  not_renewed: { bg: "#CF454810", border: "#CF454830", text: "#7F1D1D" },
+  undecided:   { bg: "#94a3b815", border: "#94a3b830", text: "#475569" },
 };
 
 export const READINESS_QUESTIONS: Array<{

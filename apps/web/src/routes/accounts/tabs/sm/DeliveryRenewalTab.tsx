@@ -1,14 +1,25 @@
 // M23 — Delivery & Renewal.
 //
-// Dual-track view:
-//   Track 1 (Renewal) — derived from M21 checkpoints; mini-summary tile.
-//   Track 2 (Expand)  — 4-column Kanban. Greyed when any open red flag.
-// Plus:
-//   * Red-flag panel  — raise + resolve.
-//   * Renewal Readiness — 3 yes/no/unknown questions with proof notes,
-//     score badge (n/3 yes).
-//   * Outcome selector — renewed / at_risk / not_renewed. Immutable once
-//     set; admin-only "Re-open" releases.
+// 28-May — port of prototype/beroe_awb_v20.html `bDeliveryRenewal`
+// (line 3484-3583), locked to the Beroe brand palette (Sept 2025).
+//
+// Layout (top → bottom):
+//   1. Aqua "Delivery & Renewal" heading + outcome lock pill (when set).
+//   2. Red-flag banner — only when any unresolved flag (prototype line
+//      3518-3525).
+//   3. Dual-track top row (prototype line 3527-3538):
+//        Track 1 — Renewal (Indigo accent, Risk Red when red-flagged)
+//        Track 2 — Expand (Risk Green accent, greyed when paused)
+//      Both render the prototype's stage-dot progress bar.
+//   4. Track 2 Kanban (4 cols — Value Proof · Expand Ask · New Scope ·
+//      Close). Greyed when paused.
+//   5. Red-flag panel — raise + resolve.
+//   6. Renewal Readiness — 3 questions with brand RAG (prototype line
+//      3540-3564).
+//   7. Final outcome — Risk Green / Risk Amber / Risk Red buttons.
+//   8. Sticky save bar with brand Risk-Amber dirty tint + Indigo Save.
+//   9. VDD summary card stays at the top under the heading (Aqua left
+//      border per prototype line 3567).
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,6 +47,14 @@ import {
   type RedFlag,
   type RedFlagType,
 } from "@/types/delivery_renewal";
+
+// Beroe brand palette anchors.
+const INDIGO = "#4A00F8";
+const MIDNIGHT = "#001137";
+const AQUA = "#35E1D4";
+const RISK_GREEN = "#6EC457";
+const RISK_AMBER = "#F0BC41";
+const RISK_RED = "#CF4548";
 
 export default function DeliveryRenewalTab() {
   const account = useAccountFromLayout();
@@ -130,46 +149,88 @@ export default function DeliveryRenewalTab() {
   const locked = form.outcome !== null;
   const editable = form.is_editable && !locked;
 
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <Card>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-              Success Management · M23
-            </div>
-            <h2 className="text-lg font-semibold text-text-primary">
-              Delivery & Renewal
-            </h2>
-            <p className="text-[12px] text-text-secondary mt-0.5">
-              Dual-track post-delivery view + 3-question Renewal Readiness +
-              final outcome.
-            </p>
-          </div>
-          {form.outcome && (
-            <span
-              className={cn(
-                "text-[11px] px-2 py-1 rounded-md border font-semibold",
-                OUTCOME_TONES[form.outcome],
-              )}
-            >
-              🔒 {OUTCOME_LABELS[form.outcome]}
-            </span>
-          )}
-        </div>
-      </Card>
+  // Track 1 → checkpoint stage-dot progress (prototype line 3531).
+  const renewalStages = ["Kickoff", "MBR", "QBR", "Renewal"] as const;
+  // Track 2 → expand pipeline stage-dot progress (prototype line 3536).
+  const expandStages = ["Value Proof", "Expand Ask", "New Scope", "Close"] as const;
+  const hasRedFlag = form.red_flags.some((f) => f.resolved_at === null);
 
-      {/* Row 55 (25-May) — VDD summary card embedded at the top of D&R.
-          Reads the value_delivery_document jsonb; deep-links to the editor. */}
+  return (
+    <div className="space-y-3.5">
+      {/* Aqua heading — matches other SM tabs (VDD, Contract & Goals,
+          Value Tracking, Checkpoints). */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div
+            className="text-[11px] font-bold uppercase"
+            style={{ color: AQUA, letterSpacing: "0.05em" }}
+          >
+            Delivery &amp; Renewal
+          </div>
+          <p className="text-[11px] text-text-muted mt-0.5">
+            Dual-track post-delivery view + 3-question Renewal Readiness +
+            final outcome.
+          </p>
+        </div>
+        {form.outcome && (
+          <span
+            className="text-[11px] px-2.5 py-1 rounded-md font-semibold whitespace-nowrap"
+            style={{
+              background: OUTCOME_TONES[form.outcome].bg,
+              border: `1px solid ${OUTCOME_TONES[form.outcome].border}`,
+              color: OUTCOME_TONES[form.outcome].text,
+            }}
+          >
+            🔒 {OUTCOME_LABELS[form.outcome]}
+          </span>
+        )}
+      </div>
+
+      {/* Red-flag banner — verbatim port of prototype line 3518-3525. */}
+      {hasRedFlag && (
+        <div
+          className="rounded-card p-3 flex items-start gap-2.5"
+          style={{
+            background: `${RISK_RED}10`,
+            border: `2px solid ${RISK_RED}`,
+          }}
+        >
+          <span className="text-[16px]">🚨</span>
+          <div className="flex-1">
+            <div
+              className="text-[13px] font-bold"
+              style={{ color: RISK_RED }}
+            >
+              Red Flag — Track 2 Paused
+            </div>
+            <div className="text-[11px]" style={{ color: "#7F1D1D" }}>
+              Resolve open red flag(s) before resuming the expand pipeline.
+              Fix Track 1 first.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VDD summary card — Aqua left border per prototype line 3567. */}
       <VddSummaryCard accountId={account.id} />
 
-      {/* Dual-track top row */}
-      <div className="grid grid-cols-12 gap-4">
-        <Track1Card track1={form.track1} className="col-span-5" />
-        <Track2Header
+      {/* Dual-track top row — prototype line 3527-3538. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Track1Card
+          track1={form.track1}
+          hasRedFlag={hasRedFlag}
+          stages={renewalStages as unknown as string[]}
+          checkpointSignedTypes={undefined}
+        />
+        <Track2Card
           paused={form.expand_paused}
-          className="col-span-7"
+          stages={expandStages as unknown as string[]}
+          firstStageDone={
+            (form.expand_value_proof ?? []).length > 0 ||
+            (form.expand_expand_ask ?? []).length > 0 ||
+            (form.expand_new_scope ?? []).length > 0 ||
+            (form.expand_close ?? []).length > 0
+          }
         />
       </div>
 
@@ -190,7 +251,14 @@ export default function DeliveryRenewalTab() {
           ))}
         </div>
         {form.expand_paused && (
-          <div className="mt-3 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          <div
+            className="mt-3 text-[11px] rounded-md px-3 py-2"
+            style={{
+              background: `${RISK_AMBER}15`,
+              border: `1px solid ${RISK_AMBER}40`,
+              color: "#854F0B",
+            }}
+          >
             Track 2 is paused — resolve all open red flags to resume the
             expand pipeline.
           </div>
@@ -211,7 +279,12 @@ export default function DeliveryRenewalTab() {
           {editable && !flagDraft && (
             <button
               onClick={() => setFlagDraft({ type: "missed_checkpoint", note: "" })}
-              className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border hover:bg-beroe-bg/60"
+              className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
+              style={{
+                background: "#fff",
+                border: `1px solid ${RISK_RED}40`,
+                color: RISK_RED,
+              }}
             >
               + Raise flag
             </button>
@@ -219,14 +292,20 @@ export default function DeliveryRenewalTab() {
         </div>
 
         {flagDraft && (
-          <div className="border border-amber-300 bg-amber-50/40 rounded-md p-3 mb-3 space-y-2">
+          <div
+            className="rounded-md p-3 mb-3 space-y-2"
+            style={{
+              background: `${RISK_RED}08`,
+              border: `1px solid ${RISK_RED}30`,
+            }}
+          >
             <div className="flex gap-2">
               <select
                 value={flagDraft.type}
                 onChange={(e) =>
                   setFlagDraft({ ...flagDraft, type: e.target.value as RedFlagType })
                 }
-                className="text-[12px] border border-beroe-card-border rounded-md px-2 py-1"
+                className="text-[12px] border border-beroe-card-border rounded-md px-2 py-1 focus:border-beroe-blue focus:outline-none"
               >
                 {FLAG_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -238,20 +317,26 @@ export default function DeliveryRenewalTab() {
                 value={flagDraft.note}
                 onChange={(e) => setFlagDraft({ ...flagDraft, note: e.target.value })}
                 placeholder="Why?"
-                className="flex-1 text-[12px] border border-beroe-card-border rounded-md px-2 py-1"
+                className="flex-1 text-[12px] border border-beroe-card-border rounded-md px-2 py-1 focus:border-beroe-blue focus:outline-none"
               />
             </div>
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setFlagDraft(null)}
-                className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border hover:bg-beroe-bg/60"
+                className="text-[11px] px-2.5 py-1 rounded-md"
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e4eaf6",
+                  color: MIDNIGHT,
+                }}
               >
                 Cancel
               </button>
               <button
                 onClick={() => addFlagMutation.mutate(flagDraft)}
                 disabled={addFlagMutation.isPending}
-                className="text-[11px] px-2.5 py-1 rounded-md bg-red-600 text-white font-semibold disabled:opacity-50"
+                className="text-[11px] px-2.5 py-1 rounded-md font-semibold text-white disabled:opacity-50"
+                style={{ background: RISK_RED }}
               >
                 Raise flag
               </button>
@@ -286,19 +371,25 @@ export default function DeliveryRenewalTab() {
         />
       </Card>
 
-      {/* Outcome */}
+      {/* Final outcome — prototype line 3559-3563 (✓ Renewed / ⚠ At Risk
+          / ✕ Not Renewed). Brand RAG. */}
       <Card>
-        <div className="text-[13px] font-semibold text-text-primary mb-2">
+        <div
+          className="text-[13px] font-bold mb-2"
+          style={{ color: MIDNIGHT }}
+        >
           Final outcome
         </div>
         {form.outcome ? (
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-3">
               <span
-                className={cn(
-                  "text-[12px] px-2.5 py-1 rounded-md border font-semibold",
-                  OUTCOME_TONES[form.outcome],
-                )}
+                className="text-[12px] px-2.5 py-1 rounded-md font-semibold"
+                style={{
+                  background: OUTCOME_TONES[form.outcome].bg,
+                  border: `1px solid ${OUTCOME_TONES[form.outcome].border}`,
+                  color: OUTCOME_TONES[form.outcome].text,
+                }}
               >
                 {OUTCOME_LABELS[form.outcome]}
               </span>
@@ -319,66 +410,85 @@ export default function DeliveryRenewalTab() {
                     reopenMutation.mutate();
                 }}
                 disabled={reopenMutation.isPending}
-                className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border hover:bg-beroe-bg/60"
+                className="text-[11px] px-2.5 py-1 rounded-md"
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e4eaf6",
+                  color: MIDNIGHT,
+                }}
               >
-                Re-open
+                🔓 Re-open
               </button>
             )}
           </div>
         ) : form.is_editable ? (
-          <div className="flex gap-2">
-            {(["renewed", "at_risk", "not_renewed"] as Outcome[]).map((o) => (
-              <button
-                key={o}
-                onClick={() => {
-                  if (
-                    confirm(
-                      `Set outcome to "${OUTCOME_LABELS[o]}"? This locks the document.`,
+          <div className="flex gap-2 flex-wrap">
+            {(["renewed", "at_risk", "not_renewed"] as Outcome[]).map((o) => {
+              const t = OUTCOME_TONES[o];
+              const icon =
+                o === "renewed" ? "✅" : o === "at_risk" ? "⚠️" : "❌";
+              return (
+                <button
+                  key={o}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Set outcome to "${OUTCOME_LABELS[o]}"? This locks the document.`,
+                      )
                     )
-                  )
-                    setOutcomeMutation.mutate(o);
-                }}
-                disabled={setOutcomeMutation.isPending}
-                className={cn(
-                  "text-[12px] px-3 py-1.5 rounded-md border font-semibold",
-                  OUTCOME_TONES[o],
-                  "hover:opacity-90",
-                )}
-              >
-                {OUTCOME_LABELS[o]}
-              </button>
-            ))}
+                      setOutcomeMutation.mutate(o);
+                  }}
+                  disabled={setOutcomeMutation.isPending}
+                  className="text-[12px] px-3 py-1.5 rounded-md font-semibold hover:opacity-90"
+                  style={{
+                    background: t.bg,
+                    border: `1px solid ${t.border}`,
+                    color: t.text,
+                  }}
+                >
+                  {icon} {OUTCOME_LABELS[o]}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="text-[12px] text-text-muted italic">
-            Your role can't set the outcome.
+            Your role can&apos;t set the outcome.
           </div>
         )}
       </Card>
 
-      {/* Save bar (Kanban + readiness are the editable-on-PATCH bits) */}
+      {/* Save bar — Risk Amber tint when dirty (brand). */}
       {form.is_editable && !locked && (
         <div
-          className={cn(
-            "sticky bottom-3 z-10 flex items-center justify-between gap-3 px-3 py-2 rounded-lg border shadow-sm",
-            dirty ? "bg-amber-50 border-amber-200" : "bg-white border-beroe-card-border",
-          )}
+          className="sticky bottom-3 z-10 flex items-center justify-between gap-3 px-3 py-2 rounded-lg shadow-sm"
+          style={
+            dirty
+              ? {
+                  background: `${RISK_AMBER}15`,
+                  border: `1px solid ${RISK_AMBER}40`,
+                }
+              : { background: "#fff", border: "1px solid #e4eaf6" }
+          }
         >
-          <div className="text-[12px] text-text-secondary">
+          <div className="text-[12px]">
             {err ? (
-              <span className="text-red-700">{err}</span>
+              <span style={{ color: RISK_RED }}>{err}</span>
             ) : dirty ? (
-              <span className="font-medium text-amber-800">Unsaved changes</span>
+              <span className="font-bold" style={{ color: "#854F0B" }}>
+                Unsaved changes
+              </span>
             ) : (
-              <span>All sections saved.</span>
+              <span className="text-text-muted">All sections saved.</span>
             )}
           </div>
           <button
             onClick={() => saveMutation.mutate(serializeForm(form))}
             disabled={!dirty || saveMutation.isPending}
-            className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60 disabled:opacity-50"
+            className="text-[12px] px-3 py-1.5 rounded-md font-semibold text-white disabled:opacity-50"
+            style={{ background: INDIGO }}
           >
-            Save changes
+            {saveMutation.isPending ? "Saving…" : "Save changes"}
           </button>
         </div>
       )}
@@ -408,115 +518,213 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Track 1 card — verbatim port of prototype line 3528-3532.
+ *  Border accent: Indigo when healthy, Risk Red when a red flag is open.
+ *  Renders the 4-stage progress dots (Kickoff → MBR → QBR → Renewal). */
 function Track1Card({
   track1,
-  className,
+  hasRedFlag,
+  stages,
+  checkpointSignedTypes,
 }: {
   track1: DeliveryRenewal["track1"];
-  className?: string;
+  hasRedFlag: boolean;
+  stages: string[];
+  checkpointSignedTypes: Set<string> | undefined;
 }) {
+  void checkpointSignedTypes; // reserved for future use — the back end
+  // could surface which exact stages are signed off; for now we drive
+  // dot completion from `signed_off_count` as a simple progress proxy.
+  const col = hasRedFlag ? RISK_RED : INDIGO;
   return (
     <div
-      className={cn(
-        "bg-white border border-beroe-card-border rounded-card p-4",
-        className,
-      )}
+      className="rounded-card p-3.5"
+      style={{
+        background: "#fff",
+        border: `1.5px solid ${col}`,
+      }}
     >
-      <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
-        Track 1 · Renewal cadence
+      <div
+        className="text-[13px] font-bold mb-1"
+        style={{ color: col }}
+      >
+        🛡 Track 1 — Renewal
       </div>
+      <div className="text-[10px] text-text-muted mb-2.5">
+        Deliver on initiatives. Prove ROI. Hold checkpoints.
+      </div>
+      <StageDots
+        stages={stages}
+        doneCount={track1.signed_off_count}
+        color={col}
+      />
       {track1.total === 0 ? (
-        <div className="text-[12px] text-text-muted italic">
-          No checkpoints scheduled yet — use the Checkpoints tab to auto-schedule.
+        <div className="text-[11px] text-text-muted italic mt-2">
+          No checkpoints scheduled — use the Checkpoints tab.
         </div>
       ) : (
-        <div className="space-y-1.5">
-          <div className="text-[12px] text-text-primary">
-            <span className="font-semibold">Next:</span>{" "}
-            {track1.next_type ? (
-              <>
-                {track1.next_type}
-                {track1.next_scheduled && (
-                  <>
-                    {" "}
-                    on {new Date(track1.next_scheduled).toLocaleDateString()}
-                  </>
-                )}
-                {typeof track1.next_days_until === "number" && (
-                  <span
-                    className={cn(
-                      "ml-1.5 text-[11px] px-1.5 py-0.5 rounded border",
-                      track1.next_days_until < 0
-                        ? "bg-red-50 text-red-700 border-red-200"
-                        : track1.next_days_until <= 7
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-slate-50 text-slate-700 border-slate-200",
-                    )}
-                  >
-                    {track1.next_days_until < 0
-                      ? `${Math.abs(track1.next_days_until)}d overdue`
-                      : `in ${track1.next_days_until}d`}
-                  </span>
-                )}
-              </>
-            ) : (
-              <span className="text-text-muted">no upcoming checkpoint</span>
-            )}
-          </div>
-          <div className="text-[11px] text-text-muted flex gap-3">
-            <span>
-              Signed off:{" "}
-              <span className="text-text-primary font-medium">
-                {track1.signed_off_count}/{track1.total}
-              </span>
+        <div className="text-[11px] text-text-muted mt-2 flex gap-3 flex-wrap">
+          <span>
+            Signed off:{" "}
+            <span className="font-semibold" style={{ color: MIDNIGHT }}>
+              {track1.signed_off_count}/{track1.total}
             </span>
-            {track1.overdue_count > 0 && (
-              <span className="text-red-700 font-medium">
-                Overdue: {track1.overdue_count}
+          </span>
+          {typeof track1.next_days_until === "number" &&
+            track1.next_type && (
+              <span>
+                Next: {track1.next_type}{" "}
+                <span
+                  className="px-1.5 py-px rounded text-[10px] font-semibold"
+                  style={{
+                    background:
+                      track1.next_days_until < 0
+                        ? `${RISK_RED}15`
+                        : track1.next_days_until <= 7
+                          ? `${RISK_AMBER}15`
+                          : "#EAF1F5",
+                    color:
+                      track1.next_days_until < 0
+                        ? RISK_RED
+                        : track1.next_days_until <= 7
+                          ? "#854F0B"
+                          : "#475569",
+                  }}
+                >
+                  {track1.next_days_until < 0
+                    ? `${Math.abs(track1.next_days_until)}d overdue`
+                    : `in ${track1.next_days_until}d`}
+                </span>
               </span>
             )}
-          </div>
+          {track1.overdue_count > 0 && (
+            <span className="font-semibold" style={{ color: RISK_RED }}>
+              Overdue: {track1.overdue_count}
+            </span>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function Track2Header({
+/** Track 2 card — verbatim port of prototype line 3533-3537.
+ *  Border accent: Risk Green when active, brand grey + opacity 0.5
+ *  when paused. */
+function Track2Card({
   paused,
-  className,
+  stages,
+  firstStageDone,
 }: {
   paused: boolean;
-  className?: string;
+  stages: string[];
+  firstStageDone: boolean;
 }) {
+  const col = paused ? "#94a3b8" : RISK_GREEN;
   return (
     <div
-      className={cn(
-        "bg-white border border-beroe-card-border rounded-card p-4",
-        className,
-      )}
+      className="rounded-card p-3.5"
+      style={{
+        background: "#fff",
+        border: `1.5px solid ${col}`,
+        opacity: paused ? 0.6 : 1,
+      }}
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
-            Track 2 · Expand pipeline
-          </div>
-          <div className="text-[12px] text-text-secondary">
-            Value Proof → Expand Ask → New Scope → Close
-          </div>
-        </div>
-        <span
-          className={cn(
-            "text-[11px] px-2 py-1 rounded-md border font-semibold",
-            paused
-              ? "bg-amber-50 text-amber-700 border-amber-300"
-              : "bg-green-50 text-green-700 border-green-300",
-          )}
-        >
-          {paused ? "⏸ Paused" : "▶ Active"}
-        </span>
+      <div
+        className="text-[13px] font-bold mb-1 flex items-center gap-2"
+        style={{ color: col }}
+      >
+        🚀 Track 2 — Expand
+        {paused && (
+          <span className="text-[10px] font-medium text-text-muted">
+            (paused)
+          </span>
+        )}
       </div>
+      <div className="text-[10px] text-text-muted mb-2.5">
+        New categories, users, scope. Runs parallel unless Track 1 red.
+      </div>
+      <StageDots
+        stages={stages}
+        doneCount={firstStageDone ? 1 : 0}
+        color={col}
+      />
     </div>
+  );
+}
+
+/** Stage progress dots — verbatim port of prototype's connected-dot
+ *  pattern (line 3531 / 3536). N dots evenly spaced, connector lines
+ *  between, filled in `color` up to `doneCount`. */
+function StageDots({
+  stages,
+  doneCount,
+  color,
+}: {
+  stages: string[];
+  doneCount: number;
+  color: string;
+}) {
+  return (
+    <div className="flex items-center gap-0">
+      {stages.map((st, i) => {
+        const done = i < doneCount;
+        return (
+          <Stage
+            key={st}
+            label={st}
+            done={done}
+            color={color}
+            connector={i > 0}
+            connectorActive={done}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function Stage({
+  label,
+  done,
+  color,
+  connector,
+  connectorActive,
+}: {
+  label: string;
+  done: boolean;
+  color: string;
+  connector: boolean;
+  connectorActive: boolean;
+}) {
+  return (
+    <>
+      {connector && (
+        <div
+          className="flex-1 h-0.5"
+          style={{ background: connectorActive ? color : "#e8eef8" }}
+        />
+      )}
+      <div className="flex flex-col items-center gap-1">
+        <div
+          className="rounded-full flex items-center justify-center text-[8px] font-bold text-white"
+          style={{
+            width: 14,
+            height: 14,
+            background: done ? color : "#e8eef8",
+            border: `2px solid ${done ? color : "#cbd5e1"}`,
+          }}
+        >
+          {done ? "✓" : ""}
+        </div>
+        <div
+          className="text-[8px] font-semibold whitespace-nowrap"
+          style={{ color: done ? color : "#94a3b8" }}
+        >
+          {label}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -644,26 +852,41 @@ function RedFlagList({
         return (
           <div
             key={f.id ?? Math.random()}
-            className={cn(
-              "flex items-start gap-3 p-2 rounded-md border text-[12px]",
+            className="flex items-start gap-3 p-2 rounded-md text-[12px]"
+            style={
               open
-                ? "bg-red-50/40 border-red-200"
-                : "bg-slate-50 border-slate-200",
-            )}
+                ? {
+                    background: `${RISK_RED}08`,
+                    border: `1px solid ${RISK_RED}30`,
+                  }
+                : {
+                    background: "#EAF1F580",
+                    border: "1px solid #e4eaf6",
+                  }
+            }
           >
             <div className="flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span
-                  className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider",
+                  className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase"
+                  style={
                     open
-                      ? "bg-red-100 text-red-700"
-                      : "bg-slate-200 text-slate-700",
-                  )}
+                      ? {
+                          background: `${RISK_RED}15`,
+                          color: RISK_RED,
+                        }
+                      : {
+                          background: "#94a3b820",
+                          color: "#475569",
+                        }
+                  }
                 >
                   {open ? "OPEN" : "RESOLVED"}
                 </span>
-                <span className="font-medium text-text-primary">
+                <span
+                  className="font-semibold"
+                  style={{ color: MIDNIGHT }}
+                >
                   {FLAG_LABELS[f.type]}
                 </span>
               </div>
@@ -682,9 +905,14 @@ function RedFlagList({
             {editable && open && f.id && (
               <button
                 onClick={() => onResolve(f.id!)}
-                className="text-[11px] px-2 py-0.5 rounded border border-beroe-card-border bg-white hover:bg-beroe-bg/60"
+                className="text-[11px] px-2.5 py-0.5 rounded-md font-semibold"
+                style={{
+                  background: "#fff",
+                  border: `1px solid ${RISK_GREEN}40`,
+                  color: RISK_GREEN,
+                }}
               >
-                Resolve
+                ✓ Resolve
               </button>
             )}
           </div>
@@ -695,18 +923,20 @@ function RedFlagList({
 }
 
 function ScoreBadge({ score }: { score: number }) {
-  const tone =
+  const t =
     score === 3
-      ? "bg-green-50 text-green-700 border-green-300"
+      ? { bg: `${RISK_GREEN}15`, border: `${RISK_GREEN}40`, color: "#1d6b35" }
       : score >= 1
-        ? "bg-amber-50 text-amber-700 border-amber-300"
-        : "bg-slate-50 text-slate-700 border-slate-300";
+        ? { bg: `${RISK_AMBER}15`, border: `${RISK_AMBER}40`, color: "#854F0B" }
+        : { bg: "#94a3b815", border: "#94a3b830", color: "#475569" };
   return (
     <span
-      className={cn(
-        "text-[11px] px-2 py-0.5 rounded-md border font-semibold",
-        tone,
-      )}
+      className="text-[11px] px-2 py-0.5 rounded-md font-bold"
+      style={{
+        background: t.bg,
+        border: `1px solid ${t.border}`,
+        color: t.color,
+      }}
     >
       {score}/3 yes
     </span>
@@ -729,41 +959,70 @@ function ReadinessGrid({
         return (
           <div
             key={q.key as string}
-            className="border border-beroe-card-border rounded-md p-2.5"
+            className="rounded-md p-2.5"
+            style={{
+              background: "#fff",
+              border: "1px solid #e4eaf6",
+            }}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[12px] font-semibold text-text-primary">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex-1 min-w-[200px]">
+                <div
+                  className="text-[12px] font-semibold"
+                  style={{ color: MIDNIGHT }}
+                >
                   {q.label}
                 </div>
                 <div className="text-[11px] text-text-muted">{q.hint}</div>
               </div>
-              <div className="flex gap-1">
-                {(["yes", "no", "unknown"] as ReadinessAnswerValue[]).map((opt) => (
-                  <button
-                    key={opt}
-                    disabled={!editable}
-                    onClick={() =>
-                      onChange({
-                        ...value,
-                        [q.key]: { ...a, answer: opt },
-                      })
-                    }
-                    className={cn(
-                      "text-[10px] px-2 py-0.5 rounded-md border uppercase tracking-wider font-semibold",
-                      a.answer === opt
-                        ? opt === "yes"
-                          ? "bg-green-50 text-green-700 border-green-300"
-                          : opt === "no"
-                            ? "bg-red-50 text-red-700 border-red-300"
-                            : "bg-slate-100 text-slate-700 border-slate-300"
-                        : "bg-white text-text-muted border-beroe-card-border",
-                      !editable && "cursor-default",
-                    )}
-                  >
-                    {opt}
-                  </button>
-                ))}
+              <div className="flex gap-1 flex-shrink-0">
+                {(["yes", "no", "unknown"] as ReadinessAnswerValue[]).map(
+                  (opt) => {
+                    const active = a.answer === opt;
+                    const tone =
+                      opt === "yes"
+                        ? {
+                            bg: `${RISK_GREEN}15`,
+                            border: `${RISK_GREEN}40`,
+                            color: "#1d6b35",
+                          }
+                        : opt === "no"
+                          ? {
+                              bg: `${RISK_RED}10`,
+                              border: `${RISK_RED}30`,
+                              color: "#7F1D1D",
+                            }
+                          : {
+                              bg: "#94a3b815",
+                              border: "#94a3b830",
+                              color: "#475569",
+                            };
+                    return (
+                      <button
+                        key={opt}
+                        disabled={!editable}
+                        onClick={() =>
+                          onChange({
+                            ...value,
+                            [q.key]: { ...a, answer: opt },
+                          })
+                        }
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-md uppercase font-bold",
+                          !editable && "cursor-default",
+                        )}
+                        style={{
+                          background: active ? tone.bg : "#fff",
+                          border: `1px solid ${active ? tone.border : "#e4eaf6"}`,
+                          color: active ? tone.color : "#94a3b8",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  },
+                )}
               </div>
             </div>
             <textarea
@@ -777,7 +1036,7 @@ function ReadinessGrid({
               }
               rows={2}
               placeholder="Proof note (dashboard link, sign-off ref, email subject…)"
-              className="w-full mt-2 text-[12px] border border-beroe-card-border rounded-md px-2 py-1 disabled:bg-beroe-bg/40"
+              className="w-full mt-2 text-[12px] border border-beroe-card-border rounded-md px-2 py-1 disabled:bg-beroe-bg/40 focus:border-beroe-blue focus:outline-none"
             />
           </div>
         );
@@ -819,17 +1078,30 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
   const impl = sum("implemented_musd");
   const fmt = (n: number) => `$${n.toFixed(2)}M`;
   return (
-    <Card>
+    <div
+      className="rounded-card p-4"
+      style={{
+        background: "#fff",
+        border: "1px solid #e4eaf6",
+        borderLeft: `3px solid ${AQUA}`,
+      }}
+    >
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div>
-          <div className="text-[13px] font-bold">📄 Value Delivery Document</div>
+          <div
+            className="text-[13px] font-bold"
+            style={{ color: MIDNIGHT }}
+          >
+            📄 Value Delivery Document
+          </div>
           <div className="text-[11px] text-text-muted mt-0.5">
             Evidence of delivered value for the renewal conversation.
           </div>
         </div>
         <a
           href={`/accounts/${accountId}/success-management/vdd`}
-          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+          className="text-[11px] font-semibold hover:underline"
+          style={{ color: INDIGO }}
         >
           → Open / edit VDD
         </a>
@@ -843,39 +1115,24 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
       ) : (
         <>
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-md border bg-slate-50 border-slate-200 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
-                Identified
-              </div>
-              <div className="text-[16px] font-extrabold text-slate-900">
-                {fmt(ident)}
-              </div>
-            </div>
-            <div className="rounded-md border bg-amber-50 border-amber-200 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-amber-800">
-                Committed
-              </div>
-              <div className="text-[16px] font-extrabold text-amber-900">
-                {fmt(comm)}
-              </div>
-            </div>
-            <div className="rounded-md border bg-emerald-50 border-emerald-200 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-800">
-                Implemented
-              </div>
-              <div className="text-[16px] font-extrabold text-emerald-900">
-                {fmt(impl)}
-              </div>
-            </div>
+            <VddBucket label="Identified" value={fmt(ident)} color={RISK_AMBER} />
+            <VddBucket label="Committed" value={fmt(comm)} color={INDIGO} />
+            <VddBucket label="Implemented" value={fmt(impl)} color={RISK_GREEN} />
           </div>
           <div className="mt-2 text-[11px] text-text-muted">
-            {rows.length} initiative{rows.length === 1 ? "" : "s"} · {" "}
+            {rows.length} initiative{rows.length === 1 ? "" : "s"} ·{" "}
             {(data?.client_strategic_priorities ?? []).length} priorit
-            {(data?.client_strategic_priorities ?? []).length === 1 ? "y" : "ies"}
+            {(data?.client_strategic_priorities ?? []).length === 1
+              ? "y"
+              : "ies"}
             {data?.locked_at && (
               <>
-                {" "}·{" "}
-                <span className="text-emerald-700 font-semibold">
+                {" "}
+                ·{" "}
+                <span
+                  className="font-semibold"
+                  style={{ color: RISK_GREEN }}
+                >
                   🔒 Locked {new Date(data.locked_at).toLocaleDateString()}
                 </span>
               </>
@@ -883,6 +1140,39 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
           </div>
         </>
       )}
-    </Card>
+    </div>
+  );
+}
+
+function VddBucket({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div
+      className="rounded-md px-3 py-2"
+      style={{
+        background: `${color}10`,
+        border: `1px solid ${color}30`,
+      }}
+    >
+      <div
+        className="text-[10px] font-bold uppercase"
+        style={{ color, letterSpacing: "0.05em" }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[16px] font-extrabold mt-0.5"
+        style={{ color }}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
