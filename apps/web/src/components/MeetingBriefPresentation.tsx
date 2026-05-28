@@ -8,10 +8,10 @@
 // Companion to MeetingBriefEditor — the BriefTab swaps between the two
 // via a small "Presentation / Edit" toggle.
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import {
   BRIEF_CALL_TYPE_LABELS,
   type MeetingBrief,
@@ -73,125 +73,148 @@ export function MeetingBriefPresentation({
       style={{ fontFamily: "DM Sans, system-ui, sans-serif" }}
     >
       {/* ============================================================
-          1. HEADER — Beroe brand + title + call-type chip + win condition
+          1. HEADER — verbatim port of prototype line 8817-8828.
+             "Beroe × ACCOUNT" inline + right-side call meta.
           ============================================================ */}
       <header
-        className="px-8 pt-7 pb-5"
+        className="px-8 pt-6 pb-3.5 flex items-start justify-between gap-4 flex-wrap"
         style={{ borderBottom: `2px solid ${MP}` }}
       >
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <span
-              className="text-white text-[15px] font-extrabold px-3 py-1 rounded-md"
-              style={{ background: MP }}
-            >
-              Beroe
-            </span>
-            <span className="text-text-muted text-[11px] uppercase tracking-wider font-bold">
-              Pre-Meeting Brief
-            </span>
-          </div>
-          <div className="text-right">
-            {data.call_type && (
-              <span
-                className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded"
-                style={{ background: MP + "15", color: MP }}
-              >
-                {BRIEF_CALL_TYPE_LABELS[data.call_type]}
-              </span>
+        <div className="flex items-center gap-2.5">
+          <span
+            className="text-white text-[15px] font-extrabold px-2.5 py-1 rounded-md"
+            style={{ background: MP }}
+          >
+            Beroe
+          </span>
+          <span className="text-[14px]" style={{ color: "#aaa" }}>
+            ×
+          </span>
+          <span
+            className="text-[15px] font-bold uppercase"
+            style={{ color: "#FD576B", letterSpacing: "0.5px" }}
+          >
+            {accountName}
+          </span>
+        </div>
+        <div className="text-right">
+          <div className="text-[11px]" style={{ color: "#888" }}>
+            {data.call_date
+              ? new Date(data.call_date).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })
+              : "Date TBD"}
+            {data.call_time && <> · {data.call_time}</>}
+            {data.call_duration_minutes && (
+              <> · {data.call_duration_minutes} min</>
             )}
-            <div className="text-[11px] text-text-muted mt-1">
-              {data.call_date
-                ? new Date(data.call_date).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })
-                : "Date TBD"}
-              {data.call_time && <> · {data.call_time}</>}
-              {data.call_duration_minutes && (
-                <> · {data.call_duration_minutes} min</>
-              )}
-              {data.call_platform && <> · {data.call_platform}</>}
-            </div>
+          </div>
+          <div
+            className="text-[11px] font-semibold mt-0.5"
+            style={{ color: MP }}
+          >
+            {data.call_type
+              ? BRIEF_CALL_TYPE_LABELS[data.call_type]
+              : "Brief"}
+            {data.call_platform && <> · {data.call_platform}</>}
           </div>
         </div>
-        <h1 className="text-[20px] font-bold mt-3 leading-tight">
-          {accountName}
-        </h1>
-        {data.win_condition && (
-          <div
-            className="mt-3 rounded-md px-3 py-2 text-[12px] leading-relaxed"
-            style={{ background: "#f4f3fe", borderLeft: `3px solid ${MP}`, color: "#333" }}
-          >
-            <span
-              className="text-[9px] font-bold uppercase tracking-wider block mb-1"
-              style={{ color: MP }}
-            >
-              Win condition
-            </span>
-            {data.win_condition}
-          </div>
-        )}
       </header>
 
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-8 py-5 space-y-5">
         {/* ============================================================
-            2. COMPANY SNAPSHOT — stat cards
+            2. WIN CONDITION — verbatim port of prototype line 8830-8833.
+               Violet gradient banner with 🎯 emoji.
+            ============================================================ */}
+        {data.win_condition && (
+          <div
+            className="rounded-lg px-5 py-3.5 text-[13px] font-semibold text-white leading-relaxed"
+            style={{
+              background: `linear-gradient(135deg, ${MP}, #7C6FD6)`,
+            }}
+          >
+            🎯 {data.win_condition}
+          </div>
+        )}
+        {/* ============================================================
+            3. COMPANY SNAPSHOT — verbatim port of prototype line 8835-8842.
+               Dark #0D1117 bar with vertical-divider columns.
             ============================================================ */}
         {data.company_snapshot.length > 0 && (
-          <Section title="Company Snapshot">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-              {data.company_snapshot.map((s, i) => (
+          <div
+            className="rounded-lg flex"
+            style={{ background: MN, padding: "16px 0" }}
+          >
+            {data.company_snapshot.map((s, i) => (
+              <div
+                key={i}
+                className="flex-1 text-center"
+                style={{
+                  padding: "0 12px",
+                  borderRight:
+                    i < data.company_snapshot.length - 1
+                      ? "1px solid rgba(255,255,255,0.15)"
+                      : "none",
+                }}
+              >
                 <div
-                  key={i}
-                  className="rounded-md border px-3 py-2.5"
-                  style={{ background: "#faf9ff", borderColor: "#e0deff" }}
+                  className="text-[17px] font-extrabold leading-tight text-white"
                 >
-                  <div
-                    className="text-[16px] font-extrabold leading-tight"
-                    style={{ color: MP }}
-                  >
-                    {s.num || "—"}
-                  </div>
-                  <div className="text-[10px] font-bold text-text-secondary uppercase tracking-wider mt-1 leading-tight">
-                    {s.label}
-                  </div>
-                  {s.sub && (
-                    <div className="text-[10px] text-text-muted italic mt-0.5 leading-tight">
-                      {s.sub}
-                    </div>
-                  )}
+                  {s.num || "—"}
                 </div>
-              ))}
-            </div>
-          </Section>
+                <div
+                  className="text-[10px] mt-0.5"
+                  style={{ color: "#8b8fa3" }}
+                >
+                  {s.label}
+                </div>
+                {s.sub && (
+                  <div className="text-[9px]" style={{ color: "#555c6e" }}>
+                    {s.sub}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
 
         {/* ============================================================
-            3. CALL TIMER — agenda
+            4. CALL TIMER — verbatim port of prototype line 8844-8851.
+               Horizontal pill bar with alternating #f4f3fe / white columns.
             ============================================================ */}
         {data.call_timer.length > 0 && (
-          <Section title="Agenda · Call Timer">
-            <ol className="border border-beroe-card-border rounded-md overflow-hidden">
-              {data.call_timer.map((t, i) => (
-                <li
-                  key={i}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 text-[12px]",
-                    i % 2 === 0 ? "bg-slate-50/40" : "bg-white",
-                  )}
-                >
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: MP }}
+          <Section title="Call Timer">
+            <div className="flex">
+              {data.call_timer.map((t, i) => {
+                const last = i === data.call_timer.length - 1;
+                return (
+                  <div
+                    key={i}
+                    className="flex-1 text-center"
+                    style={{
+                      padding: "6px 4px",
+                      background: i % 2 === 0 ? "#f4f3fe" : "#fff",
+                      borderTopLeftRadius: i === 0 ? 6 : 0,
+                      borderBottomLeftRadius: i === 0 ? 6 : 0,
+                      borderTopRightRadius: last ? 6 : 0,
+                      borderBottomRightRadius: last ? 6 : 0,
+                    }}
                   >
-                    {t.time}
-                  </span>
-                  <span className="flex-1 leading-snug">{t.label}</span>
-                </li>
-              ))}
-            </ol>
+                    <div
+                      className="text-[10px] font-bold"
+                      style={{ color: MP }}
+                    >
+                      {t.time}
+                    </div>
+                    <div className="text-[10px]" style={{ color: "#555" }}>
+                      {t.label}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </Section>
         )}
 
@@ -306,173 +329,237 @@ export function MeetingBriefPresentation({
         )}
 
         {/* ============================================================
-            5. MINEFIELDS
+            5. MINEFIELDS — verbatim port of prototype line 8873-8881.
+               2-column grid, high-severity first.
             ============================================================ */}
         {data.minefields.length > 0 && (
-          <Section title="Minefields — what NOT to do">
-            <ul className="space-y-1.5">
-              {data.minefields.map((m, i) => {
-                const sevCol = m.severity === "high" ? MR : MA;
-                return (
-                  <li
-                    key={i}
-                    className="rounded-md px-3 py-2 border-l-2"
-                    style={{
-                      background: m.severity === "high" ? "#fff5f5" : "#fefce8",
-                      borderLeftColor: sevCol,
-                    }}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span
-                        className="text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 flex-shrink-0"
-                        style={{
-                          background: sevCol + "20",
-                          color: sevCol,
-                        }}
+          <SectionRed title="Minefields">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {[...data.minefields]
+                .sort((a) => (a.severity === "high" ? -1 : 1))
+                .map((m, i) => {
+                  const isHigh = m.severity === "high";
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-r-lg px-3 py-2.5"
+                      style={{
+                        background: isHigh ? "#FCEBEB" : "#FFF8EB",
+                        border: `1px solid ${isHigh ? "#F7C1C1" : "#FAC775"}`,
+                        borderLeft: `3px solid ${isHigh ? MR : MA}`,
+                      }}
+                    >
+                      <div
+                        className="text-[10px] font-bold uppercase tracking-wider mb-1"
+                        style={{ color: isHigh ? "#A32D2D" : "#854F0B" }}
                       >
-                        {m.type ?? m.severity}
-                      </span>
-                      <div className="flex-1 text-[12px] leading-snug">
-                        <div className="font-semibold">{m.text}</div>
-                        {m.why && (
-                          <div className="text-[11px] text-text-muted italic mt-0.5">
-                            Why: {m.why}
-                          </div>
-                        )}
+                        {m.severity.toUpperCase()}
+                        {m.type && <> — {m.type}</>}
                       </div>
+                      <div
+                        className="text-[12px] leading-snug mb-1"
+                        style={{ color: isHigh ? "#501313" : "#633806" }}
+                      >
+                        {m.text}
+                      </div>
+                      {m.why && (
+                        <div
+                          className="text-[11px] pt-1 leading-snug"
+                          style={{
+                            color: isHigh ? "#791F1F" : "#854F0B",
+                            borderTop: `0.5px solid ${isHigh ? "#F09595" : "#FAC775"}`,
+                          }}
+                        >
+                          {m.why}
+                        </div>
+                      )}
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </Section>
+                  );
+                })}
+            </div>
+          </SectionRed>
         )}
 
         {/* ============================================================
-            6. OBJECTIVES
+            6. OBJECTIVES — verbatim port of prototype line 8883-8892.
+               Grid by count, first highlighted with violet bg + border.
+               Confidence shown as ●●●○○ dots.
             ============================================================ */}
         {data.objectives.length > 0 && (
           <Section title="Objectives">
-            <div className="space-y-2">
-              {data.objectives.map((o, i) => (
-                <div
-                  key={i}
-                  className="rounded-md border border-beroe-card-border px-3 py-2"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className="text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center text-white"
-                      style={{ background: MP }}
-                    >
-                      {o.rank}
-                    </span>
-                    <h4 className="text-[13px] font-bold leading-tight flex-1">
-                      {o.name}
-                    </h4>
-                  </div>
-                  {o.bullets.length > 0 && (
-                    <ul className="space-y-0.5 ml-7 mb-1">
-                      {o.bullets.map((b, j) => (
-                        <li
-                          key={j}
-                          className="text-[12px] text-text-secondary leading-snug pl-3 relative"
-                        >
-                          <span
-                            className="absolute left-0 text-[9px]"
-                            style={{ color: MP }}
-                          >
-                            ●
-                          </span>
-                          {b}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {o.beroe && (
+            <div
+              className="grid gap-3"
+              style={{
+                gridTemplateColumns: `repeat(${Math.min(data.objectives.length, 3)}, 1fr)`,
+              }}
+            >
+              {data.objectives.map((o, i) => {
+                const isPrimary = i === 0;
+                return (
+                  <div
+                    key={i}
+                    className="rounded-lg px-3.5 py-3"
+                    style={{
+                      border: `1px solid ${isPrimary ? MP : "#e8e8f0"}`,
+                      background: isPrimary ? "#f4f3fe" : "#fff",
+                    }}
+                  >
                     <div
-                      className="ml-7 text-[11px] rounded px-2 py-1.5 mt-1"
-                      style={{
-                        background: "#f0fdf4",
-                        color: MG,
-                        borderLeft: `2px solid ${MG}`,
-                      }}
+                      className="text-[10px] font-bold uppercase tracking-wider mb-1"
+                      style={{ color: isPrimary ? MP : "#888" }}
                     >
-                      <span className="font-bold uppercase tracking-wider text-[9px] block mb-0.5">
-                        Beroe play
+                      #{o.rank} Objective ·{" "}
+                      <span style={{ color: MP }}>
+                        {"●".repeat(o.confidence)}
                       </span>
-                      {o.beroe}
+                      <span style={{ color: "#ddd" }}>
+                        {"●".repeat(5 - o.confidence)}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
+                    <div className="text-[13px] font-bold leading-tight mb-1.5">
+                      {o.name}
+                    </div>
+                    {o.bullets.length > 0 && (
+                      <ul className="mb-1">
+                        {o.bullets.map((b, j) => (
+                          <li
+                            key={j}
+                            className="text-[11px] leading-snug pl-3 relative py-0.5"
+                            style={{ color: "#555" }}
+                          >
+                            <span
+                              className="absolute left-0 text-[9px]"
+                              style={{ color: MP }}
+                            >
+                              →
+                            </span>
+                            {b}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {o.beroe && (
+                      <div
+                        className="text-[10px] italic pt-2 mt-1 leading-snug"
+                        style={{
+                          color: MP,
+                          borderTop: "1px solid #e0deff",
+                        }}
+                      >
+                        {o.beroe}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Section>
         )}
 
         {/* ============================================================
-            7. DISCOVERY QUESTIONS
+            7. DISCOVERY QUESTIONS — verbatim port of prototype line
+               8894-8906. Tabbed by objective (objective names from
+               data.objectives, fallback to question.objective).
             ============================================================ */}
         {data.discovery_questions.length > 0 && (
           <Section title="Discovery Questions">
-            <div className="space-y-1.5">
-              {data.discovery_questions
-                .slice()
-                .sort((a, b) => a.rank - b.rank)
-                .map((q, i) => (
-                  <div
-                    key={i}
-                    className="rounded-md px-3 py-2 border border-beroe-card-border"
-                  >
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span
-                        className="text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5"
-                        style={{ background: MP + "15", color: MP }}
+            <ObjectiveTabs
+              objectiveNames={objectiveNamesFromBrief(data)}
+              renderTab={(on) => {
+                const qs = data.discovery_questions
+                  .filter((q) => q.objective === on)
+                  .sort((a, b) => a.rank - b.rank);
+                if (qs.length === 0) {
+                  return (
+                    <div className="text-[11px] italic text-text-muted">
+                      No questions tagged to this objective.
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-1.5">
+                    {qs.map((q, i) => (
+                      <div
+                        key={i}
+                        className="rounded-r-md px-3 py-2 flex gap-2.5 items-start"
+                        style={{
+                          background: "#fff",
+                          border: "1px solid #e8e8f0",
+                          borderLeft: `3px solid ${q.from_email ? MA : MP}`,
+                        }}
                       >
-                        #{q.rank}
-                      </span>
-                      {q.category && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 bg-slate-100 text-text-secondary">
-                          {q.category}
+                        <span
+                          className="text-[10px] font-bold"
+                          style={{
+                            color: q.from_email ? "#BA7517" : MP,
+                            minWidth: 18,
+                          }}
+                        >
+                          #{q.rank}
                         </span>
-                      )}
-                      <span className="text-[11px] text-text-muted">
-                        → {q.person || "open"}
-                      </span>
-                      <span className="text-[10px] text-text-muted ml-auto italic">
-                        {q.objective}
-                      </span>
-                    </div>
-                    <div className="text-[12px] leading-snug font-medium">
-                      {q.text}
-                    </div>
+                        <div className="flex-1">
+                          <div
+                            className="text-[10px] font-bold uppercase mb-0.5"
+                            style={{
+                              color: q.from_email ? "#BA7517" : MP,
+                            }}
+                          >
+                            {q.person || "open"}
+                            {q.from_email && (
+                              <span
+                                className="text-[9px] rounded px-1.5 py-0.5 ml-1 font-bold"
+                                style={{
+                                  background: "#FAEEDA",
+                                  color: "#854F0B",
+                                }}
+                              >
+                                from email
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            className="text-[12px] leading-snug"
+                            style={{ color: "#333" }}
+                          >
+                            {q.text}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-            </div>
+                );
+              }}
+            />
           </Section>
         )}
 
         {/* ============================================================
-            8. VALUE ANCHORS
+            8. VALUE ANCHORS — verbatim port of prototype line 8908-8917.
+               Tabbed by objective (only objectives that have anchors).
             ============================================================ */}
         {data.value_anchors.length > 0 && (
           <Section title="Value Anchors">
-            <div className="space-y-2">
-              {data.value_anchors.map((v, i) => (
-                <div
-                  key={i}
-                  className="rounded-md border border-beroe-card-border overflow-hidden"
-                >
-                  <div
-                    className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5"
-                    style={{ background: "#f4f3fe", color: MP }}
-                  >
-                    {v.objective}
-                  </div>
-                  <ul className="px-3 py-2 space-y-1">
-                    {v.points.map((p, j) => (
-                      <li
+            <ObjectiveTabs
+              objectiveNames={data.value_anchors.map((v) => v.objective)}
+              renderTab={(on) => {
+                const va = data.value_anchors.find((v) => v.objective === on);
+                if (!va || va.points.length === 0) {
+                  return (
+                    <div className="text-[11px] italic text-text-muted">
+                      No anchors captured yet.
+                    </div>
+                  );
+                }
+                return (
+                  <div>
+                    {va.points.map((p, j) => (
+                      <div
                         key={j}
-                        className="text-[12px] leading-snug pl-4 relative"
+                        className="text-[12px] leading-snug pl-4 relative py-1.5"
+                        style={{
+                          color: "#333",
+                          borderBottom: "0.5px solid #f0f0fa",
+                        }}
                       >
                         <span
                           className="absolute left-0 text-[9px]"
@@ -480,18 +567,21 @@ export function MeetingBriefPresentation({
                         >
                           ↗
                         </span>
-                        <span className="font-medium">{p.text}</span>
+                        {p.text}
                         {p.note && (
-                          <div className="text-[10px] text-text-muted italic mt-0.5">
+                          <div
+                            className="text-[10px] italic mt-0.5"
+                            style={{ color: "#888" }}
+                          >
                             {p.note}
                           </div>
                         )}
-                      </li>
+                      </div>
                     ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
+                  </div>
+                );
+              }}
+            />
           </Section>
         )}
 
@@ -683,86 +773,6 @@ export function MeetingBriefPresentation({
           </Section>
         )}
 
-        {/* ============================================================
-            12. CHEAT SHEET — never say + opening asks
-            ============================================================ */}
-        {(data.cheat_sheet_never_say.length > 0 ||
-          data.cheat_sheet_opening_asks.length > 0 ||
-          data.cheat_sheet_win_condition_short) && (
-          <Section title="Cheat Sheet">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {data.cheat_sheet_win_condition_short && (
-                <div
-                  className="md:col-span-2 rounded-md px-3 py-2.5"
-                  style={{ background: "#f4f3fe", borderLeft: `3px solid ${MP}` }}
-                >
-                  <div
-                    className="text-[9px] font-bold uppercase tracking-wider mb-1"
-                    style={{ color: MP }}
-                  >
-                    Win condition · short
-                  </div>
-                  <div className="text-[13px] font-semibold leading-snug">
-                    {data.cheat_sheet_win_condition_short}
-                  </div>
-                </div>
-              )}
-              {data.cheat_sheet_opening_asks.length > 0 && (
-                <div className="rounded-md border border-beroe-card-border px-3 py-2">
-                  <div
-                    className="text-[9px] font-bold uppercase tracking-wider mb-1"
-                    style={{ color: MG }}
-                  >
-                    Opening Asks
-                  </div>
-                  <ul className="space-y-0.5">
-                    {data.cheat_sheet_opening_asks.map((a, i) => (
-                      <li
-                        key={i}
-                        className="text-[12px] leading-snug pl-3 relative"
-                      >
-                        <span
-                          className="absolute left-0 text-[9px]"
-                          style={{ color: MG }}
-                        >
-                          ✓
-                        </span>
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {data.cheat_sheet_never_say.length > 0 && (
-                <div className="rounded-md border border-beroe-card-border px-3 py-2">
-                  <div
-                    className="text-[9px] font-bold uppercase tracking-wider mb-1"
-                    style={{ color: MR }}
-                  >
-                    Never Say
-                  </div>
-                  <ul className="space-y-0.5">
-                    {data.cheat_sheet_never_say.map((n, i) => (
-                      <li
-                        key={i}
-                        className="text-[12px] leading-snug pl-3 relative"
-                      >
-                        <span
-                          className="absolute left-0 text-[9px]"
-                          style={{ color: MR }}
-                        >
-                          ✕
-                        </span>
-                        {n}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </Section>
-        )}
-
         {/* Categories tab (M46 — procurement categories in scope). */}
         {data.categories.length > 0 && (
           <Section title="Categories in scope">
@@ -783,8 +793,186 @@ export function MeetingBriefPresentation({
             </div>
           </Section>
         )}
+
+        {/* ============================================================
+            12. CHEAT SHEET — verbatim port of prototype line 8964-8981.
+               Dark #0D1117 bar at the bottom with 3 columns:
+               Never Say (red) · Opening Asks (green) · Win Condition (white).
+            ============================================================ */}
+        {(data.cheat_sheet_never_say.length > 0 ||
+          data.cheat_sheet_opening_asks.length > 0 ||
+          data.cheat_sheet_win_condition_short ||
+          data.win_condition) && (
+          <div
+            className="rounded-lg px-5 py-4"
+            style={{ background: MN }}
+          >
+            <div
+              className="text-[10px] font-bold uppercase tracking-wider mb-3"
+              style={{ color: MP }}
+            >
+              Cheat Sheet
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <div
+                  className="text-[9px] font-bold uppercase tracking-wider mb-1.5"
+                  style={{ color: "#CF3030" }}
+                >
+                  ⛔ Never Say
+                </div>
+                {data.cheat_sheet_never_say.length > 0 ? (
+                  data.cheat_sheet_never_say.map((s, i) => (
+                    <div
+                      key={i}
+                      className="text-[11px] py-0.5"
+                      style={{ color: "#f87171" }}
+                    >
+                      • {s}
+                    </div>
+                  ))
+                ) : (
+                  <div
+                    className="text-[11px] italic"
+                    style={{ color: "#555c6e" }}
+                  >
+                    —
+                  </div>
+                )}
+              </div>
+              <div>
+                <div
+                  className="text-[9px] font-bold uppercase tracking-wider mb-1.5"
+                  style={{ color: "#40CC8F" }}
+                >
+                  💬 Opening Asks
+                </div>
+                {data.cheat_sheet_opening_asks.length > 0 ? (
+                  data.cheat_sheet_opening_asks.map((s, i) => (
+                    <div
+                      key={i}
+                      className="text-[11px] py-0.5"
+                      style={{ color: "#a5f3c8" }}
+                    >
+                      • {s}
+                    </div>
+                  ))
+                ) : (
+                  <div
+                    className="text-[11px] italic"
+                    style={{ color: "#555c6e" }}
+                  >
+                    —
+                  </div>
+                )}
+              </div>
+              <div>
+                <div
+                  className="text-[9px] font-bold uppercase tracking-wider mb-1.5"
+                  style={{ color: MP }}
+                >
+                  🎯 Win Condition
+                </div>
+                <div
+                  className="text-[12px] font-semibold text-white leading-snug"
+                >
+                  {data.cheat_sheet_win_condition_short ||
+                    data.win_condition ||
+                    "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </article>
+  );
+}
+
+/** Extract objective names in the order the brief defines them.
+ *  Fallback: any objective string referenced by discovery questions
+ *  but absent from `objectives` gets appended last. */
+function objectiveNamesFromBrief(b: MeetingBrief): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const o of b.objectives) {
+    if (!seen.has(o.name)) {
+      seen.add(o.name);
+      out.push(o.name);
+    }
+  }
+  for (const q of b.discovery_questions) {
+    if (q.objective && !seen.has(q.objective)) {
+      seen.add(q.objective);
+      out.push(q.objective);
+    }
+  }
+  return out;
+}
+
+/** Tabs-by-objective renderer — port of prototype's tab strip pattern
+ *  used by Discovery Questions + Value Anchors (line 8897-8898, 8911-8912).
+ *  Active tab: white bg + violet text + violet bottom-border.
+ *  Inactive: #f4f3fe bg + grey text + #e0deff bottom-border. */
+function ObjectiveTabs({
+  objectiveNames,
+  renderTab,
+}: {
+  objectiveNames: string[];
+  renderTab: (objectiveName: string) => React.ReactNode;
+}) {
+  const names = objectiveNames.filter(Boolean);
+  const [active, setActive] = useState(0);
+  if (names.length === 0) {
+    return (
+      <div className="text-[11px] italic text-text-muted">
+        No objectives defined.
+      </div>
+    );
+  }
+  const safeActive = Math.min(active, names.length - 1);
+  return (
+    <div>
+      <div
+        className="flex overflow-hidden"
+        style={{
+          border: "1px solid #e0deff",
+          borderBottom: "none",
+          borderRadius: "8px 8px 0 0",
+        }}
+      >
+        {names.map((on, i) => {
+          const isActive = i === safeActive;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setActive(i)}
+              className="flex-1 text-center text-[10px] font-bold uppercase cursor-pointer"
+              style={{
+                padding: "8px 10px",
+                background: isActive ? "#fff" : "#f4f3fe",
+                color: isActive ? MP : "#888",
+                borderBottom: `2px solid ${isActive ? MP : "#e0deff"}`,
+                letterSpacing: "0.06em",
+              }}
+            >
+              {on.length > 20 ? on.slice(0, 20) + "…" : on}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          border: "1px solid #e0deff",
+          borderTop: "none",
+          borderRadius: "0 0 8px 8px",
+          padding: "12px 14px",
+        }}
+      >
+        {renderTab(names[safeActive])}
+      </div>
+    </div>
   );
 }
 
@@ -799,12 +987,37 @@ function Section({
     <section>
       <div
         className="text-[10px] font-bold uppercase tracking-wider mb-2 flex items-center gap-2"
-        style={{ color: MP }}
+        style={{ color: MP, letterSpacing: "0.09em" }}
       >
         {title}
         <span
           className="flex-1 h-px"
           style={{ background: "#e0deff" }}
+        />
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Red variant — used by Minefields (prototype line 8874). */
+function SectionRed({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div
+        className="text-[10px] font-bold uppercase tracking-wider mb-2 flex items-center gap-2"
+        style={{ color: MR, letterSpacing: "0.09em" }}
+      >
+        {title}
+        <span
+          className="flex-1 h-px"
+          style={{ background: "#F7C1C1" }}
         />
       </div>
       {children}
