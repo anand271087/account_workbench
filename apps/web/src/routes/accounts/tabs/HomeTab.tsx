@@ -19,7 +19,7 @@
 
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -188,20 +188,13 @@ export default function HomeTab() {
           now starts with content (red flag banner, priority card, KPIs)
           rather than re-rendering chrome. */}
 
-      {/* 28-May — Escalate this account button (prototype line 4166).
-          Top-right, only visible to roles that can edit. */}
-      {account.is_editable && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => alert("Escalation modal — coming soon.")}
-            className="text-[11px] px-3 py-1 rounded-md border font-semibold hover:bg-red-50 transition-colors"
-            style={{ color: "#FD576B", borderColor: "#FD576B40" }}
-          >
-            🚩 Escalate this account
-          </button>
-        </div>
-      )}
+      {/* 28-May — Escalation section (prototype line 4149). Banner when
+          open escalations exist + Escalate button + history list. */}
+      <EscalationSection
+        accountId={aid}
+        accountName={account.name}
+        canEdit={account.is_editable}
+      />
 
       {/* 28-May — Churn Risk banner (prototype line 4626-4644). Renders
           only when computed risk is medium or high. Derives churn-score
@@ -1531,6 +1524,218 @@ function PulseTile({
       </div>
       <div className="text-[8px] font-bold uppercase tracking-wider mt-1 text-text-muted">
         {label}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 28-May — Escalation section (prototype line 4149)
+// ============================================================
+
+import { EscalationModal } from "@/components/EscalationModal";
+import type { EscalationListResponse } from "@/types/escalation";
+import { ESCALATION_TYPE_LABELS } from "@/types/escalation";
+
+function EscalationSection({
+  accountId,
+  accountName,
+  canEdit,
+}: {
+  accountId: string;
+  accountName: string;
+  canEdit: boolean;
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [resolveFor, setResolveFor] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const listKey = ["escalations", accountId];
+  const { data } = useQuery<EscalationListResponse>({
+    queryKey: listKey,
+    queryFn: () =>
+      api.get<EscalationListResponse>(
+        `/api/v1/accounts/${accountId}/escalations`,
+      ),
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      api.post(`/api/v1/escalations/${id}/resolve`, { resolved_note: note }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: listKey }),
+  });
+
+  const items = data?.items ?? [];
+  const open = items.filter((e) => e.status !== "resolved");
+  const canResolve = data?.can_resolve ?? false;
+
+  return (
+    <div className="space-y-2">
+      {/* Open-escalation banner */}
+      {open.length > 0 && (
+        <div className="bg-red-50 border-[1.5px] border-red-300 rounded-card px-4 py-2.5 flex items-center gap-3">
+          <span className="text-[18px]">🚨</span>
+          <div className="flex-1 text-[12px]" style={{ color: "#c42040" }}>
+            <b>Escalation open</b> — {ESCALATION_TYPE_LABELS[open[0].escalation_type]} ·
+            owner {open[0].owner} · raised{" "}
+            {new Date(open[0].raised_at).toLocaleDateString()}
+            {open[0].reason && (
+              <> · {open[0].reason.slice(0, 80)}{open[0].reason.length > 80 ? "…" : ""}</>
+            )}
+          </div>
+          {canResolve && (
+            <button
+              type="button"
+              onClick={() => setResolveFor(open[0].id)}
+              className="text-[11px] px-2.5 py-1 rounded-md border border-red-300 bg-white font-semibold text-red-700 hover:bg-red-50"
+            >
+              ✓ Resolve
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Escalate button (top-right, only when no open + role can edit) */}
+      {canEdit && open.length === 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="text-[11px] px-3 py-1 rounded-md border font-semibold hover:bg-red-50 transition-colors"
+            style={{ color: "#FD576B", borderColor: "#FD576B40" }}
+          >
+            🚩 Escalate this account
+          </button>
+        </div>
+      )}
+
+      {/* Resolved history — collapsible, only when there's history */}
+      {items.length > 0 && items.some((e) => e.status === "resolved") && (
+        <details className="bg-white border border-beroe-card-border rounded-card">
+          <summary className="px-3 py-2 cursor-pointer list-none flex items-center gap-2 text-[11px] text-text-muted hover:text-text-secondary">
+            <span>▸ Escalation history ({items.length})</span>
+          </summary>
+          <div className="px-3 pb-3">
+            {items.map((e) => {
+              const stCol =
+                e.status === "open"
+                  ? "#FD576B"
+                  : e.status === "in_progress"
+                    ? "#EF9637"
+                    : "#40CC8F";
+              const stLbl =
+                e.status === "open"
+                  ? "Open"
+                  : e.status === "in_progress"
+                    ? "In Progress"
+                    : "Resolved";
+              return (
+                <div
+                  key={e.id}
+                  className="flex items-start gap-2 py-2 border-b border-beroe-card-border/40 last:border-b-0"
+                >
+                  <span
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0"
+                    style={{
+                      background: stCol + "15",
+                      color: stCol,
+                      borderColor: stCol + "30",
+                    }}
+                  >
+                    {stLbl}
+                  </span>
+                  <div className="flex-1 text-[11px] text-text-secondary">
+                    <div>
+                      {ESCALATION_TYPE_LABELS[e.escalation_type]} · {e.owner} ·{" "}
+                      {new Date(e.raised_at).toLocaleDateString()}
+                    </div>
+                    <div className="text-[10px] text-text-muted mt-0.5">
+                      {e.reason.slice(0, 100)}
+                      {e.reason.length > 100 ? "…" : ""}
+                    </div>
+                    {e.resolved_note && (
+                      <div className="text-[10px] text-emerald-700 mt-0.5">
+                        Resolved: {e.resolved_note}
+                      </div>
+                    )}
+                  </div>
+                  {e.status !== "resolved" && canResolve && (
+                    <button
+                      type="button"
+                      onClick={() => setResolveFor(e.id)}
+                      className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border font-semibold flex-shrink-0"
+                    >
+                      Resolve
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+
+      {modalOpen && (
+        <EscalationModal
+          accountId={accountId}
+          accountName={accountName}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
+
+      {resolveFor && (
+        <ResolveEscalationPrompt
+          onCancel={() => setResolveFor(null)}
+          onConfirm={(note) => {
+            resolveMutation.mutate({ id: resolveFor, note });
+            setResolveFor(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ResolveEscalationPrompt({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: (note: string) => void;
+}) {
+  const [note, setNote] = useState("");
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div className="bg-white rounded-card w-full max-w-md p-5">
+        <div className="text-[14px] font-bold mb-2">Resolve escalation</div>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          placeholder="Resolution note (≥5 chars)…"
+          className="w-full text-[12px] border border-beroe-card-border rounded-md px-2.5 py-1.5 focus:outline-none focus:border-beroe-blue"
+        />
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-[12px] px-3 py-1.5 border border-beroe-card-border rounded-md font-semibold"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={note.trim().length < 5}
+            onClick={() => onConfirm(note.trim())}
+            className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white font-semibold disabled:opacity-50"
+          >
+            ✓ Resolve
+          </button>
+        </div>
       </div>
     </div>
   );

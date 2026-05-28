@@ -156,6 +156,13 @@ class Account(Base):
         JSONB, nullable=False, server_default=text("'{}'")
     )
 
+    # 28-May — Escalations. Array of {id, raised_at, raised_by_*, reason,
+    # escalation_type, owner, next_action, status, resolved_*}.
+    # Same single-jsonb pattern as M23 red_flags. Migration 0051.
+    escalations: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'")
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
