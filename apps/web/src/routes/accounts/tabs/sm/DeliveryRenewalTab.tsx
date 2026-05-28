@@ -1116,9 +1116,6 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
     exec_summary?: string | null;
     is_editable?: boolean;
   };
-  type SuccessContract = {
-    value_narrative?: string | null;
-  };
 
   const queryKey = ["vdd", accountId];
   const { data: vdd, isLoading } = useQuery<Vdd>({
@@ -1126,20 +1123,11 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
     queryFn: () =>
       api.get<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`),
   });
-  const { data: sc } = useQuery<SuccessContract>({
-    queryKey: ["success-contract", accountId],
-    queryFn: () =>
-      api.get<SuccessContract>(
-        `/api/v1/accounts/${accountId}/success-contract`,
-      ),
-  });
-
   const editable = !!vdd?.is_editable && !vdd?.locked_at;
   const priorities = vdd?.client_strategic_priorities ?? [];
   const metrics = vdd?.agreed_success_metrics ?? [];
   const approach = vdd?.beroes_approach ?? [];
   const valueDelivered = vdd?.value_delivered ?? [];
-  const valueNarrative = sc?.value_narrative ?? "";
 
   // Local textarea state for priorities — saved to the server when the
   // user blurs / Cmd+Enter. Resets whenever the server value changes.
@@ -1266,21 +1254,6 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
 
       {isLoading && (
         <div className="text-[12px] text-text-muted italic">Loading…</div>
-      )}
-
-      {/* Value narrative quote — prototype line 3575. */}
-      {!isLoading && valueNarrative && (
-        <div
-          className="text-[11px] italic rounded-md mb-2.5"
-          style={{
-            color: "#7a3800",
-            background: `${RISK_AMBER}15`,
-            padding: "8px 10px",
-            lineHeight: 1.5,
-          }}
-        >
-          &ldquo;{valueNarrative}&rdquo;
-        </div>
       )}
 
       {/* Four named sections — prototype line 3577-3579. */}
