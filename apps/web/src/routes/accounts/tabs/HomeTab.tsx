@@ -409,43 +409,39 @@ export default function HomeTab() {
         );
       })()}
 
-      {/* Two columns: This Week (left) + Top Signals (right).
-          27-May Row 70 — items now have tick-off checkboxes. State is
-          per-account in localStorage so progress survives tab swaps;
-          dynamic keys (auto-computed from signals/plays/metrics) just
-          stay completed until they fall off the list naturally. */}
+      {/* 28-May — Bottom blocks now mirror prototype layout exactly
+          (line 4778-4834 of beroe_awb_v20.html):
+            Block 3: Active Signals (full-width)
+            Block 4+5: This Week (left) + Pipeline (right)
+            Block 6: Recent Activity (full-width) */}
+
+      {/* Block 3 — Top Signals (full-width, prototype line 4778) */}
+      {topSignals.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="text-[13px] font-bold">🚨 Active Signals</div>
+            <Link
+              to={`/accounts/${aid}/growth-pipeline/signals`}
+              className="text-[11px] text-beroe-blue font-semibold hover:underline"
+            >
+              View all →
+            </Link>
+          </div>
+          <ul className="space-y-1.5 text-[12px]">
+            {topSignals.map((s) => (
+              <SignalRow key={s.id} sig={s} />
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Block 4+5 — This Week (left) + Pipeline (right). Prototype line 4793. */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <CardTitle>🗓 This Week</CardTitle>
           <ThisWeekList aid={aid} items={thisWeek} />
         </Card>
 
-        <Card>
-          <CardTitle>📡 Top Signals</CardTitle>
-          {topSignals.length === 0 ? (
-            <div className="text-[12px] text-text-muted text-center py-4">
-              No active signals. Raise one from Growth & Pipeline → Signals.
-            </div>
-          ) : (
-            <ul className="space-y-1.5 text-[12px]">
-              {topSignals.map((s) => (
-                <SignalRow key={s.id} sig={s} />
-              ))}
-            </ul>
-          )}
-          <Link
-            to={`/accounts/${aid}/growth-pipeline/signals`}
-            className="inline-block mt-2 text-[11px] text-beroe-blue font-semibold hover:underline"
-          >
-            → All signals & activity
-          </Link>
-        </Card>
-      </div>
-
-      {/* Two columns: Pipeline (left) + Recent Activity (right).
-          27-May Row 71 — section renamed from "🚀 Expansion Pipeline"
-          to "🎯 Pipeline" to match stakeholder vocabulary. */}
-      <div className="grid grid-cols-2 gap-3">
         <Card>
           <div className="flex items-center justify-between mb-2.5">
             <div className="text-[13px] font-bold">🎯 Pipeline</div>
@@ -472,35 +468,33 @@ export default function HomeTab() {
             → Full account plan
           </Link>
         </Card>
-
-        <Card>
-          <div className="flex items-center justify-between mb-2.5">
-            <div className="text-[13px] font-bold text-text-primary">
-              💬 Recent Activity
-            </div>
-            {/* 27-May Row 72 — "View All" link → Growth & Pipeline →
-                Account Plan (per stakeholder; activities live under
-                the Signals & Activity sub-tab there). */}
-            <Link
-              to={`/accounts/${aid}/growth-pipeline/signals`}
-              className="text-[11px] text-beroe-blue font-semibold hover:underline"
-            >
-              View All →
-            </Link>
-          </div>
-          {recentActs.length === 0 ? (
-            <div className="text-[12px] text-text-muted text-center py-4">
-              No activity logged yet.
-            </div>
-          ) : (
-            <ul className="space-y-2 text-[12px]">
-              {recentActs.map((a) => (
-                <ActivityRow key={a.id} act={a} />
-              ))}
-            </ul>
-          )}
-        </Card>
       </div>
+
+      {/* Block 6 — Recent Activity (full-width, prototype line 4820) */}
+      <Card>
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="text-[13px] font-bold text-text-primary">
+            💬 Recent Activity
+          </div>
+          <Link
+            to={`/accounts/${aid}/growth-pipeline/signals`}
+            className="text-[11px] text-beroe-blue font-semibold hover:underline"
+          >
+            View All →
+          </Link>
+        </div>
+        {recentActs.length === 0 ? (
+          <div className="text-[12px] text-text-muted text-center py-4">
+            No activity logged yet.
+          </div>
+        ) : (
+          <ul className="space-y-2 text-[12px]">
+            {recentActs.map((a) => (
+              <ActivityRow key={a.id} act={a} />
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {/* Health bar — overdue checkpoints + at-risk surface */}
       {(overdueCp > 0 || (dr && dr.expand_paused)) && (
