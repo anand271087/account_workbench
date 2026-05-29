@@ -216,15 +216,15 @@ export default function HomeTab() {
         );
         if (openRedFlags.length === 0) return null;
         return (
-          <div className="bg-red-50 border-2 border-red-300 rounded-card p-3.5 flex items-start gap-3">
+          <div className="bg-beroe-red/10 border-2 border-beroe-red/40 rounded-card p-3.5 flex items-start gap-3">
             <span className="text-[22px] flex-shrink-0">🚩</span>
             <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-bold text-red-700 mb-0.5">
+              <div className="text-[13px] font-bold text-beroe-red mb-0.5">
                 {openRedFlags.length === 1
                   ? "1 unresolved red flag"
                   : `${openRedFlags.length} unresolved red flags`}
               </div>
-              <ul className="text-[12px] text-red-700/90 space-y-0.5 list-disc pl-5">
+              <ul className="text-[12px] text-beroe-red/90 space-y-0.5 list-disc pl-5">
                 {openRedFlags.slice(0, 3).map((f) => (
                   <li key={f.id}>
                     <b>{f.type.replace(/_/g, " ")}</b>
@@ -239,7 +239,7 @@ export default function HomeTab() {
               </ul>
               <Link
                 to={`/accounts/${aid}/success-management/delivery-renewal`}
-                className="inline-block mt-2 text-[11px] text-red-700 font-bold hover:underline"
+                className="inline-block mt-2 text-[11px] text-beroe-red font-bold hover:underline"
               >
                 Resolve in Delivery & Renewal →
               </Link>
@@ -288,16 +288,16 @@ export default function HomeTab() {
             {/* 27-May Row 68 — Combined ACV + Health tile (blue).
                 Replaces two separate tiles; ACV value as main number,
                 Health score + product score on the sublines. */}
-            <div className="bg-blue-50 border-2 border-blue-300 rounded-card p-3 col-span-1 lg:col-span-1">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-blue-900/70 mb-1">
+            <div className="bg-beroe-blue/10 border-2 border-beroe-blue/40 rounded-card p-3 col-span-1 lg:col-span-1">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-blue/70 mb-1">
                 ACV & Health
               </div>
               <div className="flex items-baseline gap-3 mb-2">
                 <div>
-                  <div className="text-[20px] font-extrabold text-blue-900 leading-none">
+                  <div className="text-[20px] font-extrabold text-beroe-blue leading-none">
                     {formatACV(account.current_acv)}
                   </div>
-                  <div className="text-[9px] uppercase tracking-wider text-blue-900/70 mt-0.5">
+                  <div className="text-[9px] uppercase tracking-wider text-beroe-blue/70 mt-0.5">
                     Current ACV
                   </div>
                 </div>
@@ -306,32 +306,32 @@ export default function HomeTab() {
                     className="text-[20px] font-extrabold leading-none"
                     style={{
                       color:
-                        hs >= 70 ? "#40CC8F" : hs >= 40 ? "#EF9637" : "#e63950",
+                        hs >= 70 ? "#6EC457" : hs >= 40 ? "#F0BC41" : "#CF4548",
                     }}
                   >
                     {account.health_score ?? "—"}
                   </div>
-                  <div className="text-[9px] uppercase tracking-wider text-blue-900/70 mt-0.5">
+                  <div className="text-[9px] uppercase tracking-wider text-beroe-blue/70 mt-0.5">
                     Health
                   </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-1 text-[10px]">
                 <div className="bg-white/60 rounded px-1.5 py-1">
-                  <div className="text-blue-900/60 text-[8.5px]">Target</div>
-                  <div className="font-bold text-blue-900">
+                  <div className="text-beroe-blue/60 text-[8.5px]">Target</div>
+                  <div className="font-bold text-beroe-blue">
                     {account.target_acv ? formatACV(account.target_acv) : "—"}
                   </div>
                 </div>
                 <div className="bg-white/60 rounded px-1.5 py-1">
-                  <div className="text-blue-900/60 text-[8.5px]">Gap</div>
-                  <div className="font-bold text-blue-900">
+                  <div className="text-beroe-blue/60 text-[8.5px]">Gap</div>
+                  <div className="font-bold text-beroe-blue">
                     {gap > 0 ? formatACV(String(gap)) : "—"}
                   </div>
                 </div>
                 <div className="bg-white/60 rounded px-1.5 py-1">
-                  <div className="text-blue-900/60 text-[8.5px]">Product</div>
-                  <div className="font-bold text-blue-900">
+                  <div className="text-beroe-blue/60 text-[8.5px]">Product</div>
+                  <div className="font-bold text-beroe-blue">
                     {modules.length === 0 ? "—" : `${productScore}%`}
                   </div>
                 </div>
@@ -343,10 +343,10 @@ export default function HomeTab() {
               value={renewal.label}
               color={
                 renewal.tone === "danger"
-                  ? "#e63950"
+                  ? "#CF4548"
                   : renewal.tone === "warn"
-                    ? "#EF9637"
-                    : "#40CC8F"
+                    ? "#F0BC41"
+                    : "#6EC457"
               }
               sublines={[
                 {
@@ -368,7 +368,7 @@ export default function HomeTab() {
                 label="Risk %"
                 value={`${riskPct}%`}
                 color={
-                  riskPct >= 50 ? "#e63950" : riskPct >= 25 ? "#EF9637" : "#40CC8F"
+                  riskPct >= 50 ? "#CF4548" : riskPct >= 25 ? "#F0BC41" : "#6EC457"
                 }
                 sublines={[
                   {
@@ -391,7 +391,7 @@ export default function HomeTab() {
               <RichTile
                 label="Signals"
                 value={active.length === 0 ? "—" : `${active.length} open`}
-                color="#40CC8F"
+                color="#6EC457"
                 sublines={[
                   { k: "Critical", v: "0" },
                   { k: "Risk", v: "0" },
@@ -456,7 +456,7 @@ export default function HomeTab() {
           )}
           <Link
             to={`/accounts/${aid}/growth-pipeline/plan`}
-            className="inline-block mt-2 text-[11px] text-emerald-700 font-semibold hover:underline"
+            className="inline-block mt-2 text-[11px] text-beroe-green font-semibold hover:underline"
           >
             → Full account plan
           </Link>
@@ -491,13 +491,13 @@ export default function HomeTab() {
 
       {/* Health bar — overdue checkpoints + at-risk surface */}
       {(overdueCp > 0 || (dr && dr.expand_paused)) && (
-        <Card className="bg-amber-50 border-amber-200">
+        <Card className="bg-beroe-amber/15 border-beroe-amber/40">
           <div className="flex items-center gap-3">
             <span className="text-[20px]">⚠️</span>
             <div className="flex-1 text-[12px]">
               {overdueCp > 0 && (
                 <div>
-                  <b className="text-amber-800">{overdueCp}</b> overdue
+                  <b className="text-beroe-amber">{overdueCp}</b> overdue
                   checkpoint{overdueCp === 1 ? "" : "s"} — fix in{" "}
                   <Link
                     to={`/accounts/${aid}/success-management/checkpoints`}
@@ -548,7 +548,7 @@ function computePriorities(args: {
       text: "Complete account entry to start the CS workflow",
       cta: "Set up entry",
       to: "success-management/contract-goals",
-      col: "#FD576B",
+      col: "#CF4548",
     });
   }
 
@@ -569,7 +569,7 @@ function computePriorities(args: {
       text: `${overdue.type} overdue by ${days}d — schedule or escalate`,
       cta: "Fix checkpoint",
       to: "success-management/checkpoints",
-      col: "#FD576B",
+      col: "#CF4548",
     });
   }
 
@@ -580,7 +580,7 @@ function computePriorities(args: {
       text: `${held.type} held but not signed off — get client confirmation`,
       cta: "Complete sign-off",
       to: "success-management/checkpoints",
-      col: "#EF9637",
+      col: "#F0BC41",
     });
   }
 
@@ -590,7 +590,7 @@ function computePriorities(args: {
       text: "Track 1 red flag — address before expanding",
       cta: "View delivery",
       to: "success-management/delivery-renewal",
-      col: "#FD576B",
+      col: "#CF4548",
     });
   }
 
@@ -605,7 +605,7 @@ function computePriorities(args: {
       text: "No value logged on any metric — record the first reading",
       cta: "Log value",
       to: "success-management/value-tracking",
-      col: "#EF9637",
+      col: "#F0BC41",
     });
   }
 
@@ -615,7 +615,7 @@ function computePriorities(args: {
       text: "No checkpoints scheduled — set up the cadence",
       cta: "Schedule checkpoints",
       to: "success-management/checkpoints",
-      col: "#EF9637",
+      col: "#F0BC41",
     });
   }
 
@@ -957,12 +957,12 @@ function _AccountPulseCard({
           {metrics.slice(0, 8).map((m) => {
             const dot =
               m.status === "green"
-                ? "bg-emerald-500"
+                ? "bg-beroe-green/150"
                 : m.status === "amber"
-                  ? "bg-amber-500"
+                  ? "bg-beroe-amber/150"
                   : m.status === "red"
-                    ? "bg-red-500"
-                    : "bg-slate-300";
+                    ? "bg-beroe-red/100"
+                    : "bg-text-subtle";
             return (
               <li
                 key={m.id}
@@ -1001,14 +1001,14 @@ function PulseStat({
 }) {
   const toneCls =
     tone === "green"
-      ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+      ? "bg-beroe-green/15 text-beroe-green border-beroe-green/30"
       : tone === "amber"
-        ? "bg-amber-50 text-amber-900 border-amber-200"
+        ? "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40"
         : tone === "red"
-          ? "bg-red-50 text-red-900 border-red-200"
+          ? "bg-beroe-red/10 text-beroe-red border-beroe-red/30"
           : tone === "blue"
-            ? "bg-blue-50 text-blue-900 border-blue-200"
-            : "bg-slate-50 text-slate-900 border-slate-200";
+            ? "bg-beroe-blue/10 text-beroe-blue border-beroe-blue/30"
+            : "bg-beroe-bg text-text-primary border-beroe-card-border";
   return (
     <div className={cn("rounded-md border px-2.5 py-1.5", toneCls)}>
       <div className="text-[10px] uppercase tracking-wider font-bold opacity-75">
@@ -1069,7 +1069,7 @@ function AIAccountBriefCard({
             Generated{" "}
             {new Date(data.generated_at).toLocaleString()}
             {data.is_stub && (
-              <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wider font-semibold text-[9px]">
+              <span className="ml-2 px-1.5 py-0.5 rounded bg-beroe-amber/15 text-beroe-amber border border-beroe-amber/40 uppercase tracking-wider font-semibold text-[9px]">
                 Stub AI
               </span>
             )}
@@ -1157,10 +1157,10 @@ function ThisWeekList({ aid, items }: { aid: string; items: ThisWeekItem[] }) {
               className={cn(
                 "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider",
                 a.priority === "high"
-                  ? "bg-red-50 text-red-700"
+                  ? "bg-beroe-red/10 text-beroe-red"
                   : a.priority === "medium"
-                    ? "bg-amber-50 text-amber-700"
-                    : "bg-emerald-50 text-emerald-700",
+                    ? "bg-beroe-amber/15 text-beroe-amber"
+                    : "bg-beroe-green/15 text-beroe-green",
               )}
             >
               {a.priority}
@@ -1207,8 +1207,8 @@ function ChurnRiskBanner({
     score >= 60 ? "high" : score >= 35 ? "medium" : "low";
   if (level === "low") return null;
   const col = level === "high" ? "#CF3030" : "#B45309";
-  const bg = level === "high" ? "#FCEBEB" : "#FFF8EB";
-  const bc = level === "high" ? "#F7C1C1" : "#FAC775";
+  const bg = level === "high" ? "#CF454810" : "#F0BC4115";
+  const bc = level === "high" ? "#CF454830" : "#F0BC4140";
   const factors: string[] = [];
   if (healthScore !== null && healthScore < 60)
     factors.push(`Health declining — score ${healthScore}/100`);
@@ -1287,13 +1287,13 @@ function AcvHealthPulseRow({
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
   const gap = Math.max(0, target - current);
   const barCol =
-    pct >= 80 ? "#40CC8F" : pct >= 50 ? "#ffffff" : "#EF9637";
+    pct >= 80 ? "#6EC457" : pct >= 50 ? "#ffffff" : "#F0BC41";
   const plays = (apptQ.data?.breakdown?.projected_acv_usd
     ? parseFloat(apptQ.data.breakdown.projected_acv_usd) - current
     : 0);
   const pipeline = plays > 0 ? plays : 0;
   const hs = account.health_score ?? 0;
-  const healthCol = hs >= 70 ? "#40CC8F" : hs >= 40 ? "#EF9637" : "#e63950";
+  const healthCol = hs >= 70 ? "#6EC457" : hs >= 40 ? "#F0BC41" : "#CF4548";
   const productPct = Math.min(
     100,
     Math.round(
@@ -1346,7 +1346,7 @@ function AcvHealthPulseRow({
               {gap > 0 ? (
                 <span style={{ color: "#fbbf24" }}>▲ {formatACV(String(gap))} gap</span>
               ) : (
-                <span style={{ color: "#40CC8F" }}>✓ Target achieved</span>
+                <span style={{ color: "#6EC457" }}>✓ Target achieved</span>
               )}
               {pipeline > 0 && (
                 <span style={{ color: "rgba(255,255,255,.6)" }}>
@@ -1429,7 +1429,7 @@ function PulseCard({
         </span>
         <Link
           to={`/accounts/${aid}/success-management/value-tracking`}
-          className="text-[10px] px-2 py-0.5 rounded border border-emerald-300 text-emerald-700 font-semibold hover:bg-emerald-50"
+          className="text-[10px] px-2 py-0.5 rounded border border-beroe-green/40 text-beroe-green font-semibold hover:bg-beroe-green/15"
         >
           Value Tracking →
         </Link>
@@ -1438,12 +1438,12 @@ function PulseCard({
         <PulseTile
           value={modules.length === 0 ? "—" : `${adoption}%`}
           label="ADOPTION"
-          color="#40CC8F"
+          color="#6EC457"
         />
         <PulseTile
           value={modules.length === 0 ? "—" : `${modules.length}/${TOTAL_BEROE_MODULES}`}
           label="MODULES"
-          color="#EF9637"
+          color="#F0BC41"
         />
         <PulseTile
           value={subscribers ?? "—"}
@@ -1460,11 +1460,11 @@ function PulseCard({
           {visibleMetrics.map((m) => {
             const stCol =
               m.status === "green"
-                ? "#40CC8F"
+                ? "#6EC457"
                 : m.status === "amber"
-                  ? "#EF9637"
+                  ? "#F0BC41"
                   : m.status === "red"
-                    ? "#FD576B"
+                    ? "#CF4548"
                     : "#94a3b8";
             const tgt = parseFloat(String(m.target_value || "0").replace(/[^0-9.]/g, ""));
             const cur = parseFloat(String(m.current_value || "0").replace(/[^0-9.]/g, ""));
@@ -1492,7 +1492,7 @@ function PulseCard({
                   </span>
                 </div>
                 {m.metric_type === "quantitative" && tgt > 0 && (
-                  <div className="h-1 rounded bg-slate-100 overflow-hidden">
+                  <div className="h-1 rounded bg-beroe-bg overflow-hidden">
                     <div
                       className="h-full rounded"
                       style={{ width: `${pctMet}%`, background: stCol }}
@@ -1572,9 +1572,9 @@ function EscalationSection({
     <div className="space-y-2">
       {/* Open-escalation banner */}
       {open.length > 0 && (
-        <div className="bg-red-50 border-[1.5px] border-red-300 rounded-card px-4 py-2.5 flex items-center gap-3">
+        <div className="bg-beroe-red/10 border-[1.5px] border-beroe-red/40 rounded-card px-4 py-2.5 flex items-center gap-3">
           <span className="text-[18px]">🚨</span>
-          <div className="flex-1 text-[12px]" style={{ color: "#c42040" }}>
+          <div className="flex-1 text-[12px]" style={{ color: "#CF4548" }}>
             <b>Escalation open</b> — {ESCALATION_TYPE_LABELS[open[0].escalation_type]} ·
             owner {open[0].owner} · raised{" "}
             {new Date(open[0].raised_at).toLocaleDateString()}
@@ -1586,7 +1586,7 @@ function EscalationSection({
             <button
               type="button"
               onClick={() => setResolveFor(open[0].id)}
-              className="text-[11px] px-2.5 py-1 rounded-md border border-red-300 bg-white font-semibold text-red-700 hover:bg-red-50"
+              className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-red/40 bg-white font-semibold text-beroe-red hover:bg-beroe-red/10"
             >
               ✓ Resolve
             </button>
@@ -1600,8 +1600,8 @@ function EscalationSection({
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="text-[11px] px-3 py-1 rounded-md border font-semibold hover:bg-red-50 transition-colors"
-            style={{ color: "#FD576B", borderColor: "#FD576B40" }}
+            className="text-[11px] px-3 py-1 rounded-md border font-semibold hover:bg-beroe-red/10 transition-colors"
+            style={{ color: "#CF4548", borderColor: "#CF454840" }}
           >
             🚩 Escalate this account
           </button>
@@ -1618,10 +1618,10 @@ function EscalationSection({
             {items.map((e) => {
               const stCol =
                 e.status === "open"
-                  ? "#FD576B"
+                  ? "#CF4548"
                   : e.status === "in_progress"
-                    ? "#EF9637"
-                    : "#40CC8F";
+                    ? "#F0BC41"
+                    : "#6EC457";
               const stLbl =
                 e.status === "open"
                   ? "Open"
@@ -1653,7 +1653,7 @@ function EscalationSection({
                       {e.reason.length > 100 ? "…" : ""}
                     </div>
                     {e.resolved_note && (
-                      <div className="text-[10px] text-emerald-700 mt-0.5">
+                      <div className="text-[10px] text-beroe-green mt-0.5">
                         Resolved: {e.resolved_note}
                       </div>
                     )}
@@ -1731,7 +1731,7 @@ function ResolveEscalationPrompt({
             type="button"
             disabled={note.trim().length < 5}
             onClick={() => onConfirm(note.trim())}
-            className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white font-semibold disabled:opacity-50"
+            className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold disabled:opacity-50"
           >
             ✓ Resolve
           </button>

@@ -176,7 +176,7 @@ export default function AccountListPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search name, slug, country, industry, CSM email, primary contact…"
-            className="flex-1 min-w-[320px] px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:border-beroe-blue"
+            className="flex-1 min-w-[320px] px-3 py-2 rounded-lg border border-beroe-card-border text-sm bg-white focus:outline-none focus:border-beroe-blue"
           />
           <Select value={industry} onChange={(v) => setParam("industry", v)} label="Industry" options={facets.industries} />
           <Select value={tier} onChange={(v) => setParam("tier", v)} label="Tier" options={facets.tiers} />
@@ -192,7 +192,7 @@ export default function AccountListPage() {
           )}
           <button
             onClick={() => downloadCsv(params)}
-            className="ml-auto text-xs px-3 py-2 rounded-lg border border-slate-200 text-text-secondary hover:bg-slate-50"
+            className="ml-auto text-xs px-3 py-2 rounded-lg border border-beroe-card-border text-text-secondary hover:bg-beroe-bg"
             title="Export the current filtered list as CSV"
           >
             ⬇ Export CSV
@@ -323,7 +323,7 @@ export default function AccountListPage() {
                     setParam("page_size", e.target.value);
                     setParam("page", "1");
                   }}
-                  className="px-2 py-1 rounded-md border border-slate-200 text-sm bg-white"
+                  className="px-2 py-1 rounded-md border border-beroe-card-border text-sm bg-white"
                 >
                   {[25, 50, 100].map((n) => (
                     <option key={n} value={n}>{n}</option>
@@ -335,14 +335,14 @@ export default function AccountListPage() {
               <button
                 onClick={() => setParam("page", String(Math.max(1, page - 1)))}
                 disabled={page <= 1}
-                className="px-3 py-1.5 rounded-md border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-md border border-beroe-card-border disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 ← Prev
               </button>
               <button
                 onClick={() => setParam("page", String(page + 1))}
                 disabled={page * pageSize >= data.total}
-                className="px-3 py-1.5 rounded-md border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 rounded-md border border-beroe-card-border disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next →
               </button>
@@ -441,7 +441,7 @@ function Row({
   const health = healthBucket(item.health_score);
   return (
     <tr
-      className="border-t border-beroe-card-border/60 hover:bg-slate-50 cursor-pointer"
+      className="border-t border-beroe-card-border/60 hover:bg-beroe-bg cursor-pointer"
       onClick={onOpen}
     >
       {selectable && (
@@ -531,7 +531,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value || null)}
-      className="px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white text-text-secondary focus:outline-none focus:border-beroe-blue"
+      className="px-3 py-2 rounded-lg border border-beroe-card-border text-sm bg-white text-text-secondary focus:outline-none focus:border-beroe-blue"
     >
       <option value="">{label} (all)</option>
       {options.map((o) => (
@@ -547,15 +547,15 @@ function Select({
 function RollupBadges({ item }: { item: AccountListItem }) {
   const align =
     item.alignment_status === "green"
-      ? { dot: "bg-green-500", title: `${item.goal_count} goal(s) aligned` }
+      ? { dot: "bg-beroe-green/150", title: `${item.goal_count} goal(s) aligned` }
       : item.alignment_status === "amber"
         ? {
-            dot: "bg-amber-500",
+            dot: "bg-beroe-amber/150",
             title: `${item.goal_count} goal(s) — partial alignment`,
           }
         : item.alignment_status === "red"
           ? {
-              dot: "bg-red-500",
+              dot: "bg-beroe-red/100",
               title: `${item.goal_count} goal(s) — not started`,
             }
           : null;
@@ -564,10 +564,10 @@ function RollupBadges({ item }: { item: AccountListItem }) {
         const d = item.next_checkpoint_days_until;
         const tone =
           d !== null && d < 0
-            ? "bg-red-50 text-red-700 border-red-200"
+            ? "bg-beroe-red/10 text-beroe-red border-beroe-red/30"
             : d !== null && d <= 7
-              ? "bg-amber-50 text-amber-700 border-amber-200"
-              : "bg-slate-50 text-slate-700 border-slate-200";
+              ? "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40"
+              : "bg-beroe-bg text-text-secondary border-beroe-card-border";
         const label =
           d !== null && d < 0
             ? `${item.next_checkpoint_type} ${Math.abs(d)}d overdue`
@@ -578,10 +578,10 @@ function RollupBadges({ item }: { item: AccountListItem }) {
       })()
     : null;
   const outcomeTone: Record<string, string> = {
-    renewed: "bg-green-50 text-green-700 border-green-200",
-    at_risk: "bg-amber-50 text-amber-700 border-amber-200",
-    not_renewed: "bg-red-50 text-red-700 border-red-200",
-    undecided: "bg-slate-50 text-slate-700 border-slate-200",
+    renewed: "bg-beroe-green/15 text-beroe-green border-beroe-green/30",
+    at_risk: "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40",
+    not_renewed: "bg-beroe-red/10 text-beroe-red border-beroe-red/30",
+    undecided: "bg-beroe-bg text-text-secondary border-beroe-card-border",
   };
   const outcomeLabel: Record<string, string> = {
     renewed: "Renewed",
@@ -642,10 +642,10 @@ function RenewalAlertsBanner({
     .sort((a, b) => (a.days_to_renewal ?? 0) - (b.days_to_renewal ?? 0));
   if (targets.length === 0) return null;
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 mb-3 flex items-start gap-3">
-      <span className="text-amber-700 font-bold">⏰</span>
+    <div className="bg-beroe-amber/15 border border-beroe-amber/40 rounded-card px-4 py-2.5 mb-3 flex items-start gap-3">
+      <span className="text-beroe-amber font-bold">⏰</span>
       <div className="flex-1 text-[12px]">
-        <div className="font-semibold text-amber-800">
+        <div className="font-semibold text-beroe-amber">
           {targets.length} renewal{targets.length === 1 ? "" : "s"} within 60 days
         </div>
         <div className="mt-1 flex flex-wrap gap-1.5">
@@ -653,10 +653,10 @@ function RenewalAlertsBanner({
             const d = t.days_to_renewal ?? 0;
             const tone =
               d <= 7
-                ? "bg-red-100 text-red-700 border-red-200"
+                ? "bg-beroe-red/15 text-beroe-red border-beroe-red/30"
                 : d <= 30
-                  ? "bg-amber-100 text-amber-800 border-amber-300"
-                  : "bg-white text-amber-700 border-amber-200";
+                  ? "bg-beroe-amber/20 text-beroe-amber border-beroe-amber/50"
+                  : "bg-white text-beroe-amber border-beroe-amber/40";
             return (
               <button
                 key={t.id}
@@ -672,7 +672,7 @@ function RenewalAlertsBanner({
             );
           })}
           {targets.length > 10 && (
-            <span className="text-[11px] text-amber-700">
+            <span className="text-[11px] text-beroe-amber">
               + {targets.length - 10} more
             </span>
           )}
@@ -690,10 +690,10 @@ function Pill({
   children: React.ReactNode;
 }) {
   const cls = {
-    ok: "bg-green-50 text-green-700 border-green-200",
-    warn: "bg-amber-50 text-amber-700 border-amber-200",
-    danger: "bg-red-50 text-red-700 border-red-200",
-    muted: "bg-slate-50 text-slate-500 border-slate-200",
+    ok: "bg-beroe-green/15 text-beroe-green border-beroe-green/30",
+    warn: "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40",
+    danger: "bg-beroe-red/10 text-beroe-red border-beroe-red/30",
+    muted: "bg-beroe-bg text-text-muted border-beroe-card-border",
   }[tone];
   return (
     <span className={cn("inline-block px-2.5 py-0.5 rounded-full border text-[11px] font-semibold", cls)}>
@@ -710,7 +710,7 @@ function SkeletonRows() {
           key={i}
           className="h-14 border-t border-beroe-card-border/60 first:border-t-0 px-4 flex items-center"
         >
-          <div className="h-5 w-48 bg-slate-100 rounded animate-pulse" />
+          <div className="h-5 w-48 bg-beroe-bg rounded animate-pulse" />
         </div>
       ))}
     </div>
@@ -735,7 +735,7 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-3 text-sm text-red-800">
+    <div className="bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-4 py-3 mb-3 text-sm text-beroe-red">
       <b>Error</b> — {message}
     </div>
   );
@@ -772,7 +772,7 @@ function RenewalSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value || null)}
-      className="px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white text-text-secondary focus:outline-none focus:border-beroe-blue"
+      className="px-3 py-2 rounded-lg border border-beroe-card-border text-sm bg-white text-text-secondary focus:outline-none focus:border-beroe-blue"
       title="Filter by renewal window"
     >
       <option value="">Renewal window (all)</option>
@@ -873,7 +873,7 @@ function BulkReassignModal({
           <select
             value={target}
             onChange={(e) => setTarget(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue"
+            className="w-full px-3 py-2 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue"
           >
             <option value="">— Select target —</option>
             {users.map((u) => (
@@ -884,14 +884,14 @@ function BulkReassignModal({
           </select>
         )}
         {error && (
-          <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="mt-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary"
+            className="px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary"
           >
             Cancel
           </button>
@@ -1070,7 +1070,7 @@ function CreateAccountModal({
             {users === null ? (
               <div className="text-xs text-text-muted">Loading users…</div>
             ) : csmCandidates.length === 0 ? (
-              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <div className="text-xs text-beroe-amber bg-beroe-amber/15 border border-beroe-amber/40 rounded-lg px-3 py-2">
                 No CSM users exist yet. Invite a CSM from the Admin → Users page first.
               </div>
             ) : (
@@ -1210,7 +1210,7 @@ function CreateAccountModal({
         </div>
 
         {error && (
-          <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="mt-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
@@ -1218,7 +1218,7 @@ function CreateAccountModal({
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary"
+            className="px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary"
           >
             Cancel
           </button>
@@ -1247,4 +1247,4 @@ function ModalField({ label, full, children }: { label: string; full?: boolean; 
 }
 
 const modalInputCls =
-  "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue";
+  "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue";

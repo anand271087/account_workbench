@@ -159,7 +159,7 @@ export default function PreSalesTab() {
     return <div className="text-sm text-text-muted">Loading engagement info…</div>;
   }
   if (isError) {
-    return <div className="text-sm text-red-700">Failed to load engagement info.</div>;
+    return <div className="text-sm text-beroe-red">Failed to load engagement info.</div>;
   }
 
   const wordCount = countWords(form.engagement_objective ?? "");
@@ -198,8 +198,8 @@ export default function PreSalesTab() {
           className={cn(
             "rounded-card border px-4 py-3 flex items-center gap-3",
             account.gate_unlocked
-              ? "bg-amber-50 border-amber-200"
-              : "bg-emerald-50 border-emerald-200",
+              ? "bg-beroe-amber/15 border-beroe-amber/40"
+              : "bg-beroe-green/15 border-beroe-green/30",
           )}
         >
           <span className="text-[18px]">
@@ -208,7 +208,7 @@ export default function PreSalesTab() {
           <div className="flex-1 text-[12px]">
             {account.gate_unlocked ? (
               <>
-                <b className="text-amber-900">Signing unlocked</b> — Sales is
+                <b className="text-beroe-amber">Signing unlocked</b> — Sales is
                 re-confirming contract details. Engagement edits made here may
                 be revisited after re-confirmation.
               </>
@@ -216,7 +216,7 @@ export default function PreSalesTab() {
               // 27-May Row 78 — verbiage change to make the locked
               // state explicit ("section is locked", not just "signed").
               <>
-                <b className="text-emerald-800">This section is locked</b>
+                <b className="text-beroe-green">This section is locked</b>
                 {" "}— the account has been signed
                 {account.gate_signed_date && (
                   <span className="text-text-secondary">
@@ -253,7 +253,7 @@ export default function PreSalesTab() {
           /brief route is kept for deep-links but the primary entry
           point is here next to the MoM upload area. */}
       <details className="group bg-white rounded-card border border-beroe-card-border overflow-hidden">
-        <summary className="px-5 py-3 cursor-pointer list-none flex items-center gap-2 hover:bg-slate-50 transition-colors">
+        <summary className="px-5 py-3 cursor-pointer list-none flex items-center gap-2 hover:bg-beroe-bg transition-colors">
           <span className="text-sm font-bold text-text-primary">
             🗓 Pre-Meeting Brief
           </span>
@@ -265,7 +265,7 @@ export default function PreSalesTab() {
             <span className="hidden group-open:inline">▴ Collapse</span>
           </span>
         </summary>
-        <div className="border-t border-beroe-card-border p-4 bg-slate-50/50">
+        <div className="border-t border-beroe-card-border p-4 bg-beroe-bg/50">
           <PreMeetingBriefInline accountId={account.id} />
         </div>
       </details>
@@ -378,15 +378,15 @@ export default function PreSalesTab() {
             disabled={!form.is_editable}
             placeholder="What does success look like? Include the outcome, the metric, and the timeframe…"
             className={cn(
-              "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-              !form.is_editable && "bg-slate-50 text-text-secondary cursor-not-allowed",
+              "w-full px-3 py-2 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+              !form.is_editable && "bg-beroe-bg text-text-secondary cursor-not-allowed",
             )}
           />
           <div className="flex items-center gap-2 mt-2 text-xs">
             <span
               className={cn(
                 "font-semibold",
-                wordCount < MIN_OBJECTIVE_WORDS ? "text-amber-700" : "text-green-700",
+                wordCount < MIN_OBJECTIVE_WORDS ? "text-beroe-amber" : "text-beroe-green",
               )}
             >
               {wordCount} word{wordCount === 1 ? "" : "s"}
@@ -406,7 +406,7 @@ export default function PreSalesTab() {
           </div>
 
           {aiError && (
-            <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="mt-2 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
               {aiError}
             </div>
           )}
@@ -416,10 +416,10 @@ export default function PreSalesTab() {
               className={cn(
                 "mt-2 rounded-lg px-3 py-2 text-xs border",
                 aiResult.score >= 4
-                  ? "bg-green-50 border-green-200 text-green-800"
+                  ? "bg-beroe-green/15 border-beroe-green/30 text-beroe-green"
                   : aiResult.score === 3
-                    ? "bg-blue-50 border-blue-200 text-blue-800"
-                    : "bg-amber-50 border-amber-200 text-amber-800",
+                    ? "bg-beroe-blue/10 border-beroe-blue/30 text-beroe-blue"
+                    : "bg-beroe-amber/15 border-beroe-amber/40 text-beroe-amber",
               )}
             >
               <div className="font-bold">
@@ -578,9 +578,9 @@ export default function PreSalesTab() {
           accounts still surface the milestone. Renders only when the
           handover has actually happened. */}
       {account.handed_off_to_solutioning && account.handed_off_at && (
-        <div className="lg:col-span-3 bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 flex items-center gap-2.5">
+        <div className="lg:col-span-3 bg-beroe-amber/15 border border-beroe-amber/40 rounded-card px-4 py-2.5 flex items-center gap-2.5">
           <span className="text-[16px]">📤</span>
-          <div className="text-[12px] text-amber-900">
+          <div className="text-[12px] text-beroe-amber">
             <b>Handed off to Solutioning · </b>
             {new Date(account.handed_off_at).toLocaleDateString("en-GB", {
               day: "numeric",
@@ -597,20 +597,20 @@ export default function PreSalesTab() {
           className={cn(
             "lg:col-span-3 sticky bottom-0 -mx-6 px-6 py-3 flex items-center gap-3 border-t z-30 transition-colors",
             dirty
-              ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+              ? "bg-beroe-amber/15 border-beroe-amber/50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
               : "bg-white border-beroe-card-border",
           )}
         >
           {savingError && (
-            <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+            <span className="text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-1">
               {savingError}
             </span>
           )}
           {!savingError && dirty && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-xs text-beroe-amber font-bold">
+              <span className="inline-block w-2 h-2 rounded-full bg-beroe-amber/150 animate-pulse" />
               Unsaved changes
-              <span className="text-amber-700/70 font-normal ml-1">
+              <span className="text-beroe-amber/70 font-normal ml-1">
                 · Cmd / Ctrl + S to save
               </span>
             </span>
@@ -621,7 +621,7 @@ export default function PreSalesTab() {
           <button
             onClick={() => setForm(data!)}
             disabled={!dirty || saveMutation.isPending}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary disabled:opacity-50 bg-white"
           >
             Discard
           </button>
@@ -843,12 +843,12 @@ function CategoryPicker({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={`🔍 Search ${all.length.toLocaleString()} categories…`}
-              className="flex-1 px-2 py-1.5 text-[12px] rounded-md border border-slate-200 focus:outline-none focus:border-beroe-blue"
+              className="flex-1 px-2 py-1.5 text-[12px] rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
             />
             <select
               value={domainFilter}
               onChange={(e) => setDomainFilter(e.target.value)}
-              className="text-[12px] rounded-md border border-slate-200 px-2 py-1.5 focus:outline-none focus:border-beroe-blue bg-white sm:max-w-[200px]"
+              className="text-[12px] rounded-md border border-beroe-card-border px-2 py-1.5 focus:outline-none focus:border-beroe-blue bg-white sm:max-w-[200px]"
             >
               <option value="">All domains ({domains.length})</option>
               {domains.map((d) => (
@@ -859,7 +859,7 @@ function CategoryPicker({
 
           {/* Hint when nothing is being filtered yet */}
           {!search && !domainFilter && (
-            <div className="text-[11px] text-text-muted mb-2 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5">
+            <div className="text-[11px] text-text-muted mb-2 bg-beroe-bg border border-beroe-card-border rounded-md px-2 py-1.5">
               💡 Type to search ({all.length.toLocaleString()} categories) or pick
               a domain to narrow down. Showing first {RENDER_CAP} alphabetically.
             </div>
@@ -883,8 +883,8 @@ function CategoryPicker({
                 className={cn(
                   "text-xs px-2 py-0.5 rounded-full border",
                   c.approved
-                    ? "border-slate-200 text-text-secondary hover:bg-slate-50"
-                    : "border-amber-200 text-amber-800 bg-amber-50",
+                    ? "border-beroe-card-border text-text-secondary hover:bg-beroe-bg"
+                    : "border-beroe-amber/40 text-beroe-amber bg-beroe-amber/15",
                 )}
                 title={
                   c.approved
@@ -913,7 +913,7 @@ function CategoryPicker({
               value={proposeText}
               onChange={(e) => setProposeText(e.target.value)}
               placeholder="Don't see it? Propose a new category…"
-              className="flex-1 px-2 py-1 text-xs rounded-md border border-slate-200 focus:outline-none focus:border-beroe-blue"
+              className="flex-1 px-2 py-1 text-xs rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
             />
             <button
               onClick={() => proposeText.trim() && proposeMutation.mutate(proposeText.trim())}
@@ -924,7 +924,7 @@ function CategoryPicker({
             </button>
           </div>
           {proposeError && (
-            <div className="mt-1 text-xs text-red-700">{proposeError}</div>
+            <div className="mt-1 text-xs text-beroe-red">{proposeError}</div>
           )}
           <div className="mt-1 text-[10px] text-text-muted">
             New categories appear as <i>pending</i> until an admin approves them.
@@ -968,7 +968,7 @@ function GeographyPicker({
               <button
                 key={g.id}
                 onClick={() => onChange([...selected, g.name])}
-                className="text-xs px-2 py-0.5 rounded-full border border-slate-200 text-text-secondary hover:bg-slate-50"
+                className="text-xs px-2 py-0.5 rounded-full border border-beroe-card-border text-text-secondary hover:bg-beroe-bg"
               >
                 {g.name}
               </button>
@@ -1000,8 +1000,8 @@ function Pill({ children, onRemove }: { children: React.ReactNode; onRemove?: ()
 
 function inputCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
@@ -1117,7 +1117,7 @@ function BeroeUserPicker({
         ))}
       </select>
       {isError && (
-        <div className="text-[10px] text-red-700 mt-0.5">
+        <div className="text-[10px] text-beroe-red mt-0.5">
           Could not load Beroe users — paste an @beroe-inc.com email manually if needed.
         </div>
       )}
@@ -1195,7 +1195,7 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
   }
   if (isError) {
     return (
-      <div className="bg-red-50 rounded-card border border-red-200 px-5 py-3 text-[12px] text-red-700">
+      <div className="bg-beroe-red/10 rounded-card border border-beroe-red/30 px-5 py-3 text-[12px] text-beroe-red">
         Failed to load contacts. Try refreshing the page.
       </div>
     );
@@ -1229,7 +1229,7 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
             <span>{FUNCTION_LABELS[c.function] ?? c.function}</span>
           )}
           {c.decision_power && (
-            <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 font-semibold">
+            <span className="px-1.5 py-0.5 rounded bg-beroe-purple/10 text-beroe-purple border border-beroe-purple/30 font-semibold">
               {DECISION_LABELS[c.decision_power] ?? c.decision_power}
             </span>
           )}
@@ -1251,7 +1251,7 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
       "rounded-md border px-3 py-2",
       count > 0
         ? "bg-white border-beroe-card-border"
-        : "bg-slate-50 border-beroe-card-border/60",
+        : "bg-beroe-bg border-beroe-card-border/60",
     );
 
   return (
@@ -1276,7 +1276,7 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className={sectionStyle(spoc.length)}>
-          <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-700 mb-1.5">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-green mb-1.5">
             ⭐ SPOC ({spoc.length})
           </div>
           {spoc.length === 0 ? (
@@ -1289,7 +1289,7 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
         </div>
 
         <div className={sectionStyle(sponsor.length)}>
-          <div className="text-[10px] uppercase tracking-wider font-bold text-violet-700 mb-1.5">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-purple mb-1.5">
             👤 Executive Sponsor ({sponsor.length})
           </div>
           {sponsor.length === 0 ? (
@@ -1302,7 +1302,7 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
         </div>
 
         <div className={sectionStyle(power.length)}>
-          <div className="text-[10px] uppercase tracking-wider font-bold text-amber-700 mb-1.5">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-amber mb-1.5">
             ⚡ Power Users ({power.length})
           </div>
           {power.length === 0 ? (

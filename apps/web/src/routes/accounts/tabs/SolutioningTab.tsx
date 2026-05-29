@@ -160,7 +160,7 @@ export default function SolutioningTab() {
     return <div className="text-sm text-text-muted">Loading solutioning…</div>;
   }
   if (isError) {
-    return <div className="text-sm text-red-700">Failed to load solutioning data.</div>;
+    return <div className="text-sm text-beroe-red">Failed to load solutioning data.</div>;
   }
 
   const aiExtracted = !!form.ai_extracted_at;
@@ -177,9 +177,9 @@ export default function SolutioningTab() {
           surfaced on Pre-Sales when handover happens). Renders only
           when the upstream handover has actually occurred. */}
       {account.handed_off_to_solutioning && account.handed_off_at && (
-        <div className="bg-amber-50 border border-amber-200 rounded-card px-4 py-2.5 flex items-center gap-2.5">
+        <div className="bg-beroe-amber/15 border border-beroe-amber/40 rounded-card px-4 py-2.5 flex items-center gap-2.5">
           <span className="text-[18px]">📥</span>
-          <div className="text-[12px] text-amber-900">
+          <div className="text-[12px] text-beroe-amber">
             <b>Received from Pre-Sales · </b>
             {new Date(account.handed_off_at).toLocaleDateString("en-GB", {
               day: "numeric",
@@ -209,7 +209,7 @@ export default function SolutioningTab() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
         {isLocked && (
-          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-xs text-green-900 flex items-center gap-2">
+          <div className="rounded-xl border border-beroe-green/30 bg-beroe-green/15 px-4 py-3 text-xs text-beroe-green flex items-center gap-2">
             <span className="text-base">🔒</span>
             <div className="flex-1">
               <div className="font-bold">Locked for Sales Hand-off</div>
@@ -225,8 +225,8 @@ export default function SolutioningTab() {
           <div className={cn(
             "rounded-xl border p-3 text-xs",
             form.ai_edited
-              ? "bg-violet-50 border-violet-200 text-violet-800"
-              : "bg-cyan-50 border-cyan-200 text-cyan-800",
+              ? "bg-beroe-purple/10 border-beroe-purple/30 text-beroe-purple"
+              : "bg-beroe-teal/10 border-beroe-teal/30 text-beroe-teal",
           )}>
             <span className="font-bold">
               {form.ai_edited ? "AI-assisted" : "AI-generated"}
@@ -326,7 +326,7 @@ export default function SolutioningTab() {
                   }
                 }}
                 placeholder="Add a theme + Enter (e.g. cost reduction)"
-                className="flex-1 px-2 py-1 text-xs rounded-md border border-slate-200 focus:outline-none focus:border-beroe-blue"
+                className="flex-1 px-2 py-1 text-xs rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
               />
               <button
                 onClick={() => {
@@ -364,7 +364,7 @@ export default function SolutioningTab() {
         <Section title="Sales Hand-off">
           {isLocked ? (
             <>
-              <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-900 mb-3">
+              <div className="rounded-lg border border-beroe-green/30 bg-beroe-green/15 px-3 py-2 text-xs text-beroe-green mb-3">
                 <div className="font-bold flex items-center gap-1">🔒 Locked</div>
                 {form.locked_at && (
                   <div className="text-[11px] mt-0.5">
@@ -384,7 +384,7 @@ export default function SolutioningTab() {
                     }
                   }}
                   disabled={unlockMutation.isPending}
-                  className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs font-semibold disabled:opacity-50"
+                  className="w-full px-3 py-1.5 rounded-lg border border-beroe-amber/50 bg-beroe-amber/15 text-beroe-amber text-xs font-semibold disabled:opacity-50"
                 >
                   {unlockMutation.isPending ? "Unlocking…" : "Unlock to edit & re-pass"}
                 </button>
@@ -428,13 +428,13 @@ export default function SolutioningTab() {
             </>
           )}
           {lockError && (
-            <div className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2 py-1">
+            <div className="mt-2 text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-2 py-1">
               {lockError}
             </div>
           )}
         </Section>
 
-        <div className="bg-slate-50 rounded-card border border-beroe-card-border p-4 text-xs text-text-muted">
+        <div className="bg-beroe-bg rounded-card border border-beroe-card-border p-4 text-xs text-text-muted">
           <div className="font-bold text-text-secondary mb-1">How this works</div>
           When you upload a VPD on the Documents tab, Claude reads it and proposes
           values for the fields above. Review and edit anything that's off — saving
@@ -448,20 +448,20 @@ export default function SolutioningTab() {
           className={cn(
             "lg:col-span-3 sticky bottom-0 -mx-6 px-6 py-3 flex items-center gap-3 border-t z-30 transition-colors",
             dirty
-              ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+              ? "bg-beroe-amber/15 border-beroe-amber/50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
               : "bg-white border-beroe-card-border",
           )}
         >
           {savingError && (
-            <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+            <span className="text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-1">
               {savingError}
             </span>
           )}
           {!savingError && dirty && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-xs text-beroe-amber font-bold">
+              <span className="inline-block w-2 h-2 rounded-full bg-beroe-amber/150 animate-pulse" />
               Unsaved changes
-              <span className="text-amber-700/70 font-normal ml-1">
+              <span className="text-beroe-amber/70 font-normal ml-1">
                 · Cmd / Ctrl + S to save
               </span>
             </span>
@@ -470,7 +470,7 @@ export default function SolutioningTab() {
           <button
             onClick={() => data && setForm(data)}
             disabled={!dirty || saveMutation.isPending}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary disabled:opacity-50 bg-white"
           >
             Discard
           </button>
@@ -543,8 +543,8 @@ function Pill({ children, onRemove }: { children: React.ReactNode; onRemove?: ()
 
 function inputCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
@@ -654,13 +654,13 @@ function VpdMetricsAutofillButton({ accountId }: { accountId: string }) {
           type="button"
           onClick={onClick}
           disabled={loading}
-          className="text-[12px] px-3 py-1.5 rounded-md border border-violet-300 bg-violet-50 text-violet-800 font-semibold hover:bg-violet-100 disabled:opacity-50"
+          className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-purple/40 bg-beroe-purple/10 text-beroe-purple font-semibold hover:bg-beroe-purple/15 disabled:opacity-50"
         >
           {loading ? "Extracting…" : "Autofill Success Metrics →"}
         </button>
       </div>
       {err && (
-        <div className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+        <div className="mt-2 text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded px-2 py-1">
           {err}
         </div>
       )}
