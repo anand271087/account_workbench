@@ -92,7 +92,7 @@ export default function UsersPage() {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white text-text-secondary focus:outline-none focus:border-beroe-blue"
+            className="px-3 py-2 rounded-lg border border-beroe-card-border text-sm bg-white text-text-secondary focus:outline-none focus:border-beroe-blue"
           >
             <option value="">All roles</option>
             {ALL_ROLES.map((r) => (
@@ -110,7 +110,7 @@ export default function UsersPage() {
         </div>
 
         {isError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-3 text-sm text-red-800">
+          <div className="bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-4 py-3 mb-3 text-sm text-beroe-red">
             <b>Error</b> — {(error as Error)?.message}
           </div>
         )}
@@ -139,7 +139,7 @@ export default function UsersPage() {
                       </td>
                       <td className="px-4 py-3 text-text-secondary text-xs">{u.email}</td>
                       <td className="px-4 py-3">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-text-secondary font-semibold">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-beroe-bg text-text-secondary font-semibold">
                           {ROLE_LABELS[u.role]}
                         </span>
                       </td>
@@ -170,7 +170,7 @@ export default function UsersPage() {
                                 if (confirm(`Deactivate ${u.full_name || u.email}? They will lose access immediately.`))
                                   deactivateMutation.mutate(u.id);
                               }}
-                              className="text-xs text-red-700 hover:underline font-semibold"
+                              className="text-xs text-beroe-red hover:underline font-semibold"
                             >
                               Deactivate
                             </button>
@@ -216,9 +216,9 @@ export default function UsersPage() {
 
 function StatusPill({ status }: { status: UserStatus }) {
   const tone =
-    status === "active" ? "bg-green-100 text-green-800"
-      : status === "pending" ? "bg-amber-100 text-amber-800"
-        : "bg-slate-100 text-text-muted";
+    status === "active" ? "bg-beroe-green/20 text-beroe-green"
+      : status === "pending" ? "bg-beroe-amber/20 text-beroe-amber"
+        : "bg-beroe-bg text-text-muted";
   const label = status === "active" ? "Active" : status === "pending" ? "Invited" : "Deactivated";
   return <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full", tone)}>{label}</span>;
 }
@@ -275,8 +275,8 @@ function UserModal({
           onChange={(e) => setEmail(e.target.value)}
           disabled={mode === "edit"}
           className={cn(
-            "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue mb-3",
-            mode === "edit" && "bg-slate-50 text-text-secondary",
+            "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue mb-3",
+            mode === "edit" && "bg-beroe-bg text-text-secondary",
           )}
           placeholder="alice@beroe-inc.com"
         />
@@ -288,7 +288,7 @@ function UserModal({
           type="text"
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
-          className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue mb-3"
+          className="w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue mb-3"
         />
 
         <label className="block text-[11px] uppercase tracking-wider text-text-muted font-bold mb-1">
@@ -297,7 +297,7 @@ function UserModal({
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as RoleKey)}
-          className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue"
+          className="w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue"
         >
           {ALL_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
         </select>
@@ -309,7 +309,7 @@ function UserModal({
         )}
 
         {error && (
-          <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="mt-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
@@ -317,7 +317,7 @@ function UserModal({
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary"
+            className="px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary"
           >
             Cancel
           </button>

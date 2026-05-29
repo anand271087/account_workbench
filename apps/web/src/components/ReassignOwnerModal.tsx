@@ -78,7 +78,7 @@ export function ReassignOwnerModal({ account, onClose }: Props) {
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
           disabled={isLoading || mutation.isPending}
-          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-beroe-blue disabled:opacity-60"
+          className="w-full px-3 py-2 border border-beroe-card-border rounded-lg text-sm bg-white focus:outline-none focus:border-beroe-blue disabled:opacity-60"
         >
           <option value="">— Select —</option>
           {candidates.map((u) => (
@@ -89,7 +89,7 @@ export function ReassignOwnerModal({ account, onClose }: Props) {
         </select>
 
         {error && (
-          <p className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <p className="mt-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {error}
           </p>
         )}
@@ -97,7 +97,7 @@ export function ReassignOwnerModal({ account, onClose }: Props) {
         <div className="flex gap-2 mt-5 justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg border border-slate-200 text-sm text-text-secondary hover:bg-slate-50"
+            className="px-4 py-1.5 rounded-lg border border-beroe-card-border text-sm text-text-secondary hover:bg-beroe-bg"
           >
             Cancel
           </button>

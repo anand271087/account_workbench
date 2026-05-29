@@ -149,7 +149,7 @@ export function EscalationModal({ accountId, accountName, onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {openItems.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 text-[11px] text-red-700">
+            <div className="bg-beroe-red/10 border border-beroe-red/30 rounded-md px-3 py-2 text-[11px] text-beroe-red">
               <b>⚠ {openItems.length} open escalation(s) already on this account.</b>{" "}
               Adding another will appear alongside them in the history.
             </div>
@@ -231,13 +231,13 @@ export function EscalationModal({ accountId, accountName, onClose }: Props) {
           </div>
 
           {err && (
-            <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+            <div className="text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded px-2 py-1">
               {err}
             </div>
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-beroe-card-border bg-slate-50/40 flex items-center justify-end gap-2">
+        <div className="px-5 py-3 border-t border-beroe-card-border bg-beroe-bg/40 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -252,7 +252,7 @@ export function EscalationModal({ accountId, accountName, onClose }: Props) {
             className={cn(
               "text-[12px] px-3 py-1.5 rounded-md font-semibold text-white disabled:opacity-50",
             )}
-            style={{ background: "#FD576B" }}
+            style={{ background: "#CF4548" }}
           >
             {createMutation.isPending ? "Raising…" : "🚨 Raise Escalation"}
           </button>

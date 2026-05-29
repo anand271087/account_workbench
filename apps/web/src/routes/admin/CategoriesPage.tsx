@@ -49,7 +49,7 @@ export default function CategoriesPage() {
         </div>
 
         {isError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-3 text-sm text-red-800">
+          <div className="bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-4 py-3 mb-3 text-sm text-beroe-red">
             <b>Error</b> — {(error as Error)?.message}
           </div>
         )}
@@ -61,13 +61,13 @@ export default function CategoriesPage() {
                 className="bg-white rounded-card border border-beroe-card-border overflow-hidden"
               >
                 <div className="px-5 py-3 border-b border-beroe-card-border h-11 flex items-center">
-                  <div className="h-4 w-32 bg-slate-100 rounded animate-pulse" />
+                  <div className="h-4 w-32 bg-beroe-bg rounded animate-pulse" />
                 </div>
                 <div className="p-5 space-y-2">
                   {[0, 1, 2, 3].map((j) => (
                     <div
                       key={j}
-                      className="h-5 bg-slate-50 rounded animate-pulse"
+                      className="h-5 bg-beroe-bg rounded animate-pulse"
                       style={{ width: `${60 + (j * 7) % 30}%` }}
                     />
                   ))}
@@ -85,7 +85,7 @@ export default function CategoriesPage() {
                 <h2 className="text-sm font-bold text-text-primary">
                   Pending review
                 </h2>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-beroe-amber/20 text-beroe-amber font-bold">
                   {pending.length}
                 </span>
               </div>
@@ -103,7 +103,7 @@ export default function CategoriesPage() {
                       <button
                         onClick={() => setRejecting(c)}
                         disabled={rejectMutation.isPending}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-700 font-semibold hover:bg-red-50 disabled:opacity-50"
+                        className="text-xs px-3 py-1.5 rounded-lg border border-beroe-red/30 text-beroe-red font-semibold hover:bg-beroe-red/10 disabled:opacity-50"
                       >
                         Reject
                       </button>
@@ -124,7 +124,7 @@ export default function CategoriesPage() {
             <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
               <div className="px-5 py-3 border-b border-beroe-card-border flex items-center justify-between">
                 <h2 className="text-sm font-bold text-text-primary">Approved</h2>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-bold">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-beroe-green/20 text-beroe-green font-bold">
                   {approved.length}
                 </span>
               </div>
@@ -139,7 +139,7 @@ export default function CategoriesPage() {
                       key={c.id}
                       className="px-5 py-2.5 text-sm text-text-primary flex items-center gap-2"
                     >
-                      <span className={cn("inline-block w-1.5 h-1.5 rounded-full bg-green-500")} />
+                      <span className={cn("inline-block w-1.5 h-1.5 rounded-full bg-beroe-green")} />
                       {c.name}
                     </li>
                   ))}
@@ -254,7 +254,7 @@ function RejectCategoryModal({
         </div>
 
         {error && (
-          <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="mt-2 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
@@ -269,7 +269,7 @@ function RejectCategoryModal({
           <button
             onClick={submit}
             disabled={isPending || reason.trim().length < 5}
-            className="px-4 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold disabled:opacity-50 hover:bg-red-700"
+            className="px-4 py-1.5 rounded-lg bg-beroe-red text-white text-sm font-semibold disabled:opacity-50 hover:bg-beroe-red"
           >
             {isPending ? "Rejecting…" : "Reject category"}
           </button>

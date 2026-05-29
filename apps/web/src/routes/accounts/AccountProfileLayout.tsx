@@ -140,7 +140,7 @@ export default function AccountProfileLayout() {
     return (
       <AppShell>
         <div className="px-6 py-8">
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-md text-center mx-auto">
+          <div className="bg-white border border-beroe-card-border rounded-2xl p-8 max-w-md text-center mx-auto">
             <div className="text-3xl mb-2">{status === 404 ? "🔎" : "⚠️"}</div>
             <h1 className="text-lg font-bold text-text-primary mb-1">
               {status === 404 ? "Account not found" : "Could not load account"}
@@ -325,7 +325,7 @@ function PeriodBar({
   onChange: (p: AccountPeriod) => void;
 }) {
   return (
-    <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5">
+    <div className="flex gap-0.5 bg-beroe-bg rounded-md p-0.5">
       {PERIODS.map((p) => (
         <button
           key={p}
@@ -419,17 +419,17 @@ export function Stat({
   alert?: boolean;
 }) {
   const cardCls = alert
-    ? "border-red-300 bg-red-50/70"
+    ? "border-beroe-red/40 bg-beroe-red/10/70"
     : tone === "warn"
-      ? "border-amber-300 bg-amber-50/60"
+      ? "border-beroe-amber/50 bg-beroe-amber/15/60"
       : tone === "ok"
-        ? "border-green-200 bg-green-50/40"
+        ? "border-beroe-green/30 bg-beroe-green/15/40"
         : "border-beroe-card-border bg-white";
 
   const valueTone = {
-    ok: "text-green-700",
-    warn: "text-amber-700",
-    danger: "text-red-700",
+    ok: "text-beroe-green",
+    warn: "text-beroe-amber",
+    danger: "text-beroe-red",
     muted: "text-text-primary",
   }[tone ?? "muted"];
 
@@ -445,7 +445,7 @@ export function Stat({
       </div>
       <div className="flex items-center gap-1.5 mt-1">
         {alert && (
-          <span aria-hidden className="text-red-600 text-sm leading-none">⚠</span>
+          <span aria-hidden className="text-beroe-red text-sm leading-none">⚠</span>
         )}
         <span className={cn("text-[13px] font-bold leading-tight", valueTone)}>
           {value}

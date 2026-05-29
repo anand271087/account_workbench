@@ -34,7 +34,7 @@ export default function LeadershipPage() {
   if (error || !data) {
     return (
       <AppShell title="Leadership view">
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded-card p-4 text-sm">
+        <div className="bg-beroe-red/10 border border-beroe-red/30 text-beroe-red rounded-card p-4 text-sm">
           Couldn't load the leadership portfolio.
         </div>
       </AppShell>
@@ -85,10 +85,10 @@ function RenewalCard({
   counts: LeadershipPortfolio["renewals"];
 }) {
   const segments: { label: string; value: number; tone: string }[] = [
-    { label: "Renewed", value: counts.renewed, tone: "bg-emerald-500" },
-    { label: "At risk", value: counts.at_risk, tone: "bg-amber-500" },
-    { label: "Not renewed", value: counts.not_renewed, tone: "bg-red-500" },
-    { label: "Undecided", value: counts.undecided, tone: "bg-slate-300" },
+    { label: "Renewed", value: counts.renewed, tone: "bg-beroe-green/150" },
+    { label: "At risk", value: counts.at_risk, tone: "bg-beroe-amber/150" },
+    { label: "Not renewed", value: counts.not_renewed, tone: "bg-beroe-red/100" },
+    { label: "Undecided", value: counts.undecided, tone: "bg-text-subtle" },
   ];
   return (
     <Card title="Renewal outcomes" subtitle={`${counts.total} accounts`}>
@@ -106,7 +106,7 @@ function RenewalCard({
                   </span>
                 </span>
               </div>
-              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-beroe-bg rounded-full overflow-hidden">
                 <div
                   className={cn("h-full transition-all", s.tone)}
                   style={{ width: `${pct}%` }}
@@ -173,7 +173,7 @@ function OverdueCheckpointsCard({
               >
                 {a.account_name}
               </Link>
-              <span className="text-[11px] text-red-700 font-bold">
+              <span className="text-[11px] text-beroe-red font-bold">
                 {a.overdue_count} overdue
               </span>
               {a.oldest_scheduled_date && (
@@ -218,7 +218,7 @@ function RedFlagsCard({
                 >
                   {f.account_name}
                 </Link>
-                <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-beroe-red/10 text-beroe-red border border-beroe-red/30">
                   {f.type.replace(/_/g, " ")}
                 </span>
                 {f.raised_at && (
@@ -277,10 +277,10 @@ function Stat({
 }) {
   const cls =
     tone === "green"
-      ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+      ? "bg-beroe-green/15 border-beroe-green/30 text-beroe-green"
       : tone === "amber"
-        ? "bg-amber-50 border-amber-200 text-amber-900"
-        : "bg-slate-50 border-slate-200 text-slate-900";
+        ? "bg-beroe-amber/15 border-beroe-amber/40 text-beroe-amber"
+        : "bg-beroe-bg border-beroe-card-border text-text-primary";
   return (
     <div className={cn("rounded-lg border px-3 py-2", cls)}>
       <div className="text-[10px] uppercase tracking-wider font-bold opacity-80">

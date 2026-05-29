@@ -48,11 +48,11 @@ export const CATEGORY_LABELS: Record<CSGoalCategory, string> = {
 };
 
 export const CATEGORY_TONES: Record<CSGoalCategory, string> = {
-  cost_savings: "bg-green-50 text-green-700 border-green-200",
-  base_rationalization: "bg-blue-50 text-blue-700 border-blue-200",
-  risk_mitigation: "bg-amber-50 text-amber-700 border-amber-200",
-  adoption: "bg-purple-50 text-purple-700 border-purple-200",
-  other: "bg-slate-50 text-slate-700 border-slate-200",
+  cost_savings: "bg-beroe-green/15 text-beroe-green border-beroe-green/30",
+  base_rationalization: "bg-beroe-blue/10 text-beroe-blue border-beroe-blue/30",
+  risk_mitigation: "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40",
+  adoption: "bg-beroe-purple/10 text-beroe-purple border-beroe-purple/30",
+  other: "bg-beroe-bg text-text-secondary border-beroe-card-border",
 };
 
 export const CATEGORIES: CSGoalCategory[] = [
@@ -64,7 +64,7 @@ export const CATEGORIES: CSGoalCategory[] = [
 ];
 
 export const CONFIDENCE_TONES: Record<"high" | "medium" | "low", string> = {
-  high: "bg-green-50 text-green-700 border-green-200",
-  medium: "bg-amber-50 text-amber-700 border-amber-200",
-  low: "bg-slate-50 text-slate-700 border-slate-200",
+  high: "bg-beroe-green/15 text-beroe-green border-beroe-green/30",
+  medium: "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40",
+  low: "bg-beroe-bg text-text-secondary border-beroe-card-border",
 };

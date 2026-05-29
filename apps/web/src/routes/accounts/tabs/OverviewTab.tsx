@@ -127,10 +127,10 @@ export default function OverviewTab() {
               label="active contacts"
             />
             <div className="flex gap-2 mt-2 text-[11px]">
-              <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-beroe-blue/15 text-beroe-blue font-bold">
                 {contacts.data?.items.filter((c) => c.is_spoc && !c.deleted_at).length ?? 0} SPOC
               </span>
-              <span className="px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-beroe-purple/15 text-beroe-purple font-bold">
                 {contacts.data?.items.filter((c) => c.is_sponsor && !c.deleted_at).length ?? 0} Sponsor
               </span>
             </div>
@@ -143,11 +143,11 @@ export default function OverviewTab() {
           >
             <BigStat value={docs.data?.items.length ?? 0} label="uploaded" />
             <div className="flex gap-2 mt-2 text-[11px] flex-wrap">
-              <span className="px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-beroe-green/20 text-beroe-green font-bold">
                 {docs.data?.items.filter((d) => d.ai_status === "complete").length ?? 0} ready
               </span>
               {(docs.data?.items.filter((d) => d.ai_status === "pending" || d.ai_status === "processing").length ?? 0) > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold animate-pulse">
+                <span className="px-1.5 py-0.5 rounded-full bg-beroe-amber/20 text-beroe-amber font-bold animate-pulse">
                   {docs.data!.items.filter((d) => d.ai_status === "pending" || d.ai_status === "processing").length} processing
                 </span>
               )}
@@ -169,7 +169,7 @@ export default function OverviewTab() {
           >
             {account.handed_off_to_solutioning ? (
               <>
-                <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 font-bold mb-1">
+                <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-beroe-purple/15 text-beroe-purple font-bold mb-1">
                   Handed off
                 </span>
                 <div className="text-[11px] text-text-muted">
@@ -191,7 +191,7 @@ export default function OverviewTab() {
               </>
             ) : (
               <>
-                <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-text-secondary font-bold mb-1">
+                <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-beroe-bg text-text-secondary font-bold mb-1">
                   Pre-handover
                 </span>
                 <div className="text-[11px] text-text-muted leading-snug">
@@ -255,7 +255,7 @@ export default function OverviewTab() {
         <Card title="Recent activity" badge="last 5">
           {activity.isLoading && <div className="text-sm text-text-muted">Loading…</div>}
           {activity.isError && (
-            <div className="text-sm text-red-700">Could not load activity.</div>
+            <div className="text-sm text-beroe-red">Could not load activity.</div>
           )}
           {activity.data && activity.data.items.length === 0 && (
             <div className="text-sm text-text-muted">No recent activity.</div>
@@ -349,9 +349,9 @@ function MiniStat({
   tone?: "ok" | "warn" | "danger" | "muted";
 }) {
   const valueCls = {
-    ok: "text-green-700",
-    warn: "text-amber-700",
-    danger: "text-red-700",
+    ok: "text-beroe-green",
+    warn: "text-beroe-amber",
+    danger: "text-beroe-red",
     muted: "text-text-primary",
   }[tone ?? "muted"];
   return (
@@ -388,7 +388,7 @@ function KvCol({ label, value, sub }: { label: string; value: string; sub?: stri
 }
 
 function SkLine() {
-  return <div className="h-3 bg-slate-100 rounded animate-pulse w-2/3" />;
+  return <div className="h-3 bg-beroe-bg rounded animate-pulse w-2/3" />;
 }
 
 function maturityTone(level: string | null | undefined): "ok" | "warn" | "muted" {
@@ -425,7 +425,7 @@ function Lifecycle({
       <div className="flex items-center justify-between text-[11px] text-text-muted mb-1.5">
         <span>{new Date(start).toLocaleDateString()}</span>
         {renewal && (
-          <span className={cn("font-semibold", dtr !== null && dtr < 0 ? "text-red-700" : "text-text-secondary")}>
+          <span className={cn("font-semibold", dtr !== null && dtr < 0 ? "text-beroe-red" : "text-text-secondary")}>
             Renewal {new Date(renewal).toLocaleDateString()}
             {dtr !== null && (
               <> · {Math.abs(dtr)}d {dtr < 0 ? "overdue" : "to go"}</>

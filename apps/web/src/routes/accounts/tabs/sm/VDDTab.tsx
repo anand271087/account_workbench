@@ -156,15 +156,15 @@ export default function VDDTab() {
           </div>
           <div className="flex flex-col items-end gap-1.5">
             {locked ? (
-              <span className="text-[11px] px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 font-semibold">
+              <span className="text-[11px] px-2 py-1 rounded-md bg-beroe-green/15 text-beroe-green border border-beroe-green/30 font-semibold">
                 🔒 Locked
               </span>
             ) : form.auto_drafted ? (
-              <span className="text-[11px] px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="text-[11px] px-2 py-1 rounded-md bg-beroe-amber/15 text-beroe-amber border border-beroe-amber/40">
                 Pre-filled from Goals + Metrics
               </span>
             ) : (
-              <span className="text-[11px] px-2 py-1 rounded-md bg-slate-50 text-slate-700 border border-slate-200">
+              <span className="text-[11px] px-2 py-1 rounded-md bg-beroe-bg text-text-secondary border border-beroe-card-border">
                 Draft
               </span>
             )}
@@ -210,7 +210,7 @@ export default function VDDTab() {
                   );
                 }
               }}
-              className="text-[11px] px-2 py-1 rounded-md border border-beroe-card-border text-text-secondary hover:bg-slate-50"
+              className="text-[11px] px-2 py-1 rounded-md border border-beroe-card-border text-text-secondary hover:bg-beroe-bg"
               title="Download VDD as standalone HTML — PPT export lands in v1.1"
             >
               ⬇ Download VDD
@@ -335,17 +335,17 @@ export default function VDDTab() {
           className={cn(
             "sticky bottom-3 z-10 flex items-center justify-between gap-3 px-3 py-2 rounded-lg border shadow-sm",
             dirty
-              ? "bg-amber-50 border-amber-200"
+              ? "bg-beroe-amber/15 border-beroe-amber/40"
               : "bg-white border-beroe-card-border",
           )}
         >
           <div className="text-[12px] text-text-secondary">
             {err ? (
-              <span className="text-red-700">{err}</span>
+              <span className="text-beroe-red">{err}</span>
             ) : locked ? (
               <span>Document is locked. Unlock to edit.</span>
             ) : dirty ? (
-              <span className="font-medium text-amber-800">Unsaved changes</span>
+              <span className="font-medium text-beroe-amber">Unsaved changes</span>
             ) : (
               <span>All sections saved.</span>
             )}
@@ -374,7 +374,7 @@ export default function VDDTab() {
                   onClick={onLock}
                   disabled={!allFour || lockMutation.isPending}
                   title={!allFour ? "All 4 sections must have ≥1 item to lock" : ""}
-                  className="text-[12px] px-3 py-1.5 rounded-md bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-50"
+                  className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold hover:bg-beroe-green disabled:opacity-50"
                 >
                   🔒 Lock VDD
                 </button>
@@ -639,7 +639,7 @@ function PriorityList({
           {editable && (
             <button
               onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="text-[11px] text-text-muted hover:text-red-700 px-1.5"
+              className="text-[11px] text-text-muted hover:text-beroe-red px-1.5"
             >
               ✕
             </button>
@@ -727,7 +727,7 @@ function MetricsList({
           {editable && (
             <button
               onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="col-span-1 text-text-muted hover:text-red-700"
+              className="col-span-1 text-text-muted hover:text-beroe-red"
             >
               ✕
             </button>
@@ -811,7 +811,7 @@ function ApproachList({
             {editable && (
               <button
                 onClick={() => onChange(items.filter((_, j) => j !== i))}
-                className="text-text-muted hover:text-red-700 px-1"
+                className="text-text-muted hover:text-beroe-red px-1"
               >
                 ✕
               </button>
@@ -933,7 +933,7 @@ function ValueDeliveredList({
           {editable && (
             <button
               onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="col-span-1 text-text-muted hover:text-red-700"
+              className="col-span-1 text-text-muted hover:text-beroe-red"
             >
               ✕
             </button>

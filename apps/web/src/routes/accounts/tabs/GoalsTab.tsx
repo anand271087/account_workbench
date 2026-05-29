@@ -196,7 +196,7 @@ function GoalCard({
     >
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-beroe-bg text-left transition-colors"
       >
         <span className="text-[14px] flex-shrink-0">{meta.icon}</span>
         <AlignmentDot status={goal.alignment_status} />
@@ -305,9 +305,9 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
   const isDeleted = !!goal.deleted_at;
 
   return (
-    <div className="border-t border-beroe-card-border bg-slate-50/30 px-4 py-4 space-y-4">
+    <div className="border-t border-beroe-card-border bg-beroe-bg/30 px-4 py-4 space-y-4">
       {isDeleted && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+        <div className="rounded-lg border border-beroe-red/30 bg-beroe-red/10 px-3 py-2 text-xs text-beroe-red">
           Deleted{" "}
           {goal.deleted_at &&
             `on ${new Date(goal.deleted_at).toLocaleDateString()}`}
@@ -520,7 +520,7 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
           <button
             onClick={() => setForm(goal)}
             disabled={!dirty || save.isPending}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary disabled:opacity-50 bg-white"
           >
             Discard
           </button>
@@ -566,7 +566,7 @@ function PhaseEditor({
   const missing = !complete ? validatePhaseForCompletion(completeKey, category, phase) : null;
   return (
     <details className="bg-white rounded-card border border-beroe-card-border" open>
-      <summary className="px-4 py-3 cursor-pointer text-sm font-bold text-text-primary hover:bg-slate-50 flex items-center gap-2">
+      <summary className="px-4 py-3 cursor-pointer text-sm font-bold text-text-primary hover:bg-beroe-bg flex items-center gap-2">
         <span className={cn(complete && "line-through text-text-muted")}>
           {label}
         </span>
@@ -985,12 +985,12 @@ function InitiativeList({
       {items.map((it, i) => (
         <div
           key={i}
-          className="rounded-lg border border-slate-200 bg-slate-50/30 p-3 relative"
+          className="rounded-lg border border-beroe-card-border bg-beroe-bg/30 p-3 relative"
         >
           {editable && (
             <button
               onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="absolute top-2 right-2 text-text-muted hover:text-red-700 text-xs"
+              className="absolute top-2 right-2 text-text-muted hover:text-beroe-red text-xs"
               aria-label="Remove initiative"
             >
               ✕
@@ -1177,14 +1177,14 @@ function HistoryFeed({ entries }: { entries: HistoryAction[] }) {
   if (entries.length === 0) return null;
   return (
     <details className="bg-white rounded-card border border-beroe-card-border">
-      <summary className="px-4 py-3 cursor-pointer text-sm font-bold text-text-primary hover:bg-slate-50">
+      <summary className="px-4 py-3 cursor-pointer text-sm font-bold text-text-primary hover:bg-beroe-bg">
         History ({entries.length})
       </summary>
       <ul className="px-4 pb-4 space-y-1.5">
         {[...entries].reverse().map((h, i) => (
           <li
             key={i}
-            className="text-xs text-text-secondary border-l-2 border-slate-200 pl-2.5"
+            className="text-xs text-text-secondary border-l-2 border-beroe-card-border pl-2.5"
           >
             <span className="text-text-muted">
               {new Date(h.at).toLocaleString()}
@@ -1257,14 +1257,14 @@ function AddGoalModal({
           </select>
         </Field>
         {error && (
-          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary bg-white"
+            className="px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary bg-white"
           >
             Cancel
           </button>
@@ -1331,15 +1331,15 @@ function Field({
 
 function inputCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
 function textareaCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-2 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 

@@ -45,8 +45,8 @@ export default function IntelReportsLayout() {
               cn(
                 "flex-1 min-w-[160px] px-3 py-2 rounded-lg border-[1.5px] text-[12px] text-center transition-colors duration-100",
                 isActive
-                  ? "border-cyan-500/40 bg-cyan-500/5 text-cyan-700 font-bold"
-                  : "border-beroe-card-border bg-white text-text-secondary font-medium hover:border-cyan-500/30 hover:text-cyan-700",
+                  ? "border-beroe-teal/40 bg-beroe-teal/5 text-beroe-teal font-bold"
+                  : "border-beroe-card-border bg-white text-text-secondary font-medium hover:border-beroe-teal/30 hover:text-beroe-teal",
               )
             }
             end

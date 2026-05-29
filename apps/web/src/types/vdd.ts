@@ -62,9 +62,9 @@ export const LEVER_LABELS: Record<SavingsLever, string> = {
   adoption: "Adoption",
 };
 export const LEVER_TONES: Record<SavingsLever, string> = {
-  cost: "bg-green-50 text-green-700 border-green-200",
-  risk: "bg-amber-50 text-amber-700 border-amber-200",
-  adoption: "bg-blue-50 text-blue-700 border-blue-200",
+  cost: "bg-beroe-green/15 text-beroe-green border-beroe-green/30",
+  risk: "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40",
+  adoption: "bg-beroe-blue/10 text-beroe-blue border-beroe-blue/30",
 };
 
 export const STAGES: InitiativeStage[] = [
