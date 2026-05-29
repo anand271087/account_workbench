@@ -223,9 +223,11 @@ export default function AccountProfileLayout() {
             </div>
             <div className="text-[11px] text-text-muted mt-0.5 truncate">
               {data.industry ?? "—"}
-              {data.csm_full_name && (
+              {data.csm_full_name ? (
                 <> · <span className="text-text-secondary">{data.csm_full_name}</span></>
-              )}
+              ) : data.co_full_name ? (
+                <> · <span className="text-text-secondary">{data.co_full_name} <span className="text-text-muted">(Sales)</span></span></>
+              ) : null}
               {data.tier && <> · {data.tier}</>}
             </div>
           </div>

@@ -71,6 +71,8 @@ interface Priority {
 export default function HomeTab() {
   const account = useAccountFromLayout();
   const aid = account.id;
+  // 27-May Row 66 — Escalate button inside red-flag box (bug 27-06).
+  const [redFlagEscalateOpen, setRedFlagEscalateOpen] = useState(false);
 
   // Fetch everything in parallel. Each query is independent so failures
   // degrade the corresponding section, not the whole page.
@@ -237,16 +239,32 @@ export default function HomeTab() {
                   </li>
                 )}
               </ul>
-              <Link
-                to={`/accounts/${aid}/success-management/delivery-renewal`}
-                className="inline-block mt-2 text-[11px] text-beroe-red font-bold hover:underline"
-              >
-                Resolve in Delivery & Renewal →
-              </Link>
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                <Link
+                  to={`/accounts/${aid}/success-management/delivery-renewal`}
+                  className="text-[11px] text-beroe-red font-bold hover:underline"
+                >
+                  Resolve in Delivery & Renewal →
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setRedFlagEscalateOpen(true)}
+                  className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-red/40 bg-white font-bold text-beroe-red hover:bg-beroe-red/10"
+                >
+                  🚩 Escalate this Account
+                </button>
+              </div>
             </div>
           </div>
         );
       })()}
+      {redFlagEscalateOpen && (
+        <EscalationModal
+          accountId={aid}
+          accountName={account.name}
+          onClose={() => setRedFlagEscalateOpen(false)}
+        />
+      )}
 
       {/* Priority Action Card */}
       {activePriority && <PriorityCard priority={activePriority} aid={aid} />}
