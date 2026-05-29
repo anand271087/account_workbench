@@ -342,32 +342,10 @@ export default function SalesHandoffTab() {
               className={inputCls(editable)}
             />
           </Field>
-          <Field label="First checkpoint">
-            <input
-              type="date"
-              value={form.sh_first_checkpoint ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, sh_first_checkpoint: e.target.value || null })
-              }
-              disabled={!editable}
-              className={inputCls(editable)}
-            />
-          </Field>
+          {/* 28-May bug 28-08 — First checkpoint field removed. */}
         </div>
 
-        <Field label="Commercial context">
-          <textarea
-            rows={3}
-            maxLength={4000}
-            value={form.sh_commercial_context ?? ""}
-            placeholder="Pricing nuances, discounts, special terms."
-            onChange={(e) =>
-              setForm({ ...form, sh_commercial_context: e.target.value || null })
-            }
-            disabled={!editable}
-            className={textareaCls(editable)}
-          />
-        </Field>
+        {/* 28-May bug 28-08 — Commercial context field removed. */}
 
         <Field label="Watch-outs & risks">
           <textarea
@@ -383,19 +361,7 @@ export default function SalesHandoffTab() {
           />
         </Field>
 
-        <Field label="Handoff document">
-          <input
-            type="text"
-            maxLength={400}
-            value={form.handoff_file_name ?? ""}
-            placeholder="Filename of the signed handoff doc (upload via Documents)"
-            onChange={(e) =>
-              setForm({ ...form, handoff_file_name: e.target.value || null })
-            }
-            disabled={!editable}
-            className={inputCls(editable)}
-          />
-        </Field>
+        {/* 28-May bug 28-08 — Handoff document filename field removed. */}
 
         </Section>
 

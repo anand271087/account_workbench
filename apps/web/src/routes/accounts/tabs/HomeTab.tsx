@@ -34,7 +34,6 @@ import {
   type PlayListResponse,
 } from "@/types/play";
 import {
-  SIG_CONF,
   ACT_CONF,
   type Activity,
   type ActivityListResponse,
@@ -136,21 +135,7 @@ export default function HomeTab() {
     [signals, plays, account.days_to_renewal, mets],
   );
 
-  const topSignals = useMemo(
-    () =>
-      [...signals.filter((s) => s.status === "active" && !s.hidden)]
-        .sort((a, b) => {
-          const ord: Record<string, number> = {
-            critical: 0,
-            high: 1,
-            medium: 2,
-            low: 3,
-          };
-          return (ord[a.impact] ?? 4) - (ord[b.impact] ?? 4);
-        })
-        .slice(0, 3),
-    [signals],
-  );
+  // 28-May bug 28-04 — Top Signals removed from Home; topSignals memo gone.
 
   const expandPlays = plays
     .filter((p) => !p.hidden && p.prob >= 60 && p.modes.includes("expand"))
@@ -426,25 +411,9 @@ export default function HomeTab() {
             Block 4+5: This Week (left) + Pipeline (right)
             Block 6: Recent Activity (full-width) */}
 
-      {/* Block 3 — Top Signals (full-width, prototype line 4778) */}
-      {topSignals.length > 0 && (
-        <Card>
-          <div className="flex items-center justify-between mb-2.5">
-            <div className="text-[13px] font-bold">🚨 Active Signals</div>
-            <Link
-              to={`/accounts/${aid}/growth-pipeline/signals`}
-              className="text-[11px] text-beroe-blue font-semibold hover:underline"
-            >
-              View all →
-            </Link>
-          </div>
-          <ul className="space-y-1.5 text-[12px]">
-            {topSignals.map((s) => (
-              <SignalRow key={s.id} sig={s} />
-            ))}
-          </ul>
-        </Card>
-      )}
+      {/* 28-May bug 28-04 — Top Signals (Active Signals) block removed
+          from Home per stakeholder feedback. Signals still live on
+          Growth & Pipeline → Signals & Activity. */}
 
       {/* Block 4+5 — This Week (left) + Pipeline (right). Prototype line 4793. */}
       <div className="grid grid-cols-2 gap-3">
@@ -507,24 +476,15 @@ export default function HomeTab() {
         )}
       </Card>
 
-      {/* Health bar — overdue checkpoints + at-risk surface */}
-      {(overdueCp > 0 || (dr && dr.expand_paused)) && (
+      {/* Health bar — Track 2 paused surface only.
+          28-May bug 28-04 — overdue checkpoint summary removed from Home
+          per stakeholder feedback. Overdue counts still live on the
+          Success Management → Checkpoints page. */}
+      {dr && dr.expand_paused && (
         <Card className="bg-beroe-amber/15 border-beroe-amber/40">
           <div className="flex items-center gap-3">
             <span className="text-[20px]">⚠️</span>
             <div className="flex-1 text-[12px]">
-              {overdueCp > 0 && (
-                <div>
-                  <b className="text-beroe-amber">{overdueCp}</b> overdue
-                  checkpoint{overdueCp === 1 ? "" : "s"} — fix in{" "}
-                  <Link
-                    to={`/accounts/${aid}/success-management/checkpoints`}
-                    className="text-beroe-blue hover:underline font-semibold"
-                  >
-                    Checkpoints
-                  </Link>
-                </div>
-              )}
               {dr?.expand_paused && (
                 <div className="mt-0.5">
                   Track 2 (Expand) is paused — resolve open red flags in{" "}
@@ -763,35 +723,7 @@ function computeThisWeek(args: {
 // Sub-components
 // ============================================================
 
-function SignalRow({ sig }: { sig: SoftSignal }) {
-  const conf = SIG_CONF[sig.type];
-  return (
-    <li className="flex items-start gap-2 py-1 border-b border-beroe-card-border/60 last:border-b-0">
-      <span
-        className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
-        style={{ background: conf.dot }}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="font-semibold">{sig.signal}</span>
-          <span
-            className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-            style={{ background: conf.bg, color: conf.col }}
-          >
-            {conf.label}
-          </span>
-          <span className="text-[10px] text-text-muted">{sig.impact}</span>
-        </div>
-        {sig.description && (
-          <div className="text-[11px] text-text-muted leading-snug mt-0.5">
-            {sig.description.slice(0, 90)}
-            {sig.description.length > 90 ? "…" : ""}
-          </div>
-        )}
-      </div>
-    </li>
-  );
-}
+// 28-May bug 28-04 — SignalRow removed (Top Signals block deleted from Home).
 
 function PlayRow({ play }: { play: Play }) {
   const col = stageColor(play.prob);

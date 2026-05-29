@@ -345,21 +345,10 @@ export default function SolutioningTab() {
       </div>
 
       <div className="space-y-4">
-        <Section title="Estimated value">
-          <Field label="Million USD">
-            <input
-              type="number"
-              step="0.1"
-              min={0}
-              value={form.estimated_value_musd ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, estimated_value_musd: e.target.value === "" ? null : e.target.value })
-              }
-              disabled={!form.is_editable}
-              className={inputCls(form.is_editable)}
-            />
-          </Field>
-        </Section>
+        {/* 28-May bug 28-07 — "Estimated value" section removed per
+            stakeholder feedback. The estimated_value_musd field stays
+            on the schema for upstream AI extraction but is no longer
+            surfaced in the Solutioning UI. */}
 
         <Section title="Sales Hand-off">
           {isLocked ? (
@@ -434,13 +423,8 @@ export default function SolutioningTab() {
           )}
         </Section>
 
-        <div className="bg-beroe-bg rounded-card border border-beroe-card-border p-4 text-xs text-text-muted">
-          <div className="font-bold text-text-secondary mb-1">How this works</div>
-          When you upload a VPD on the Documents tab, Claude reads it and proposes
-          values for the fields above. Review and edit anything that's off — saving
-          flips the badge to "AI-assisted." Re-uploading a VPD won't overwrite
-          fields you've edited.
-        </div>
+        {/* 28-May bug 28-07 — "How this works" explainer card removed
+            per stakeholder feedback. */}
       </div>
 
       {form.is_editable && (

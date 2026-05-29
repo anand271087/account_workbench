@@ -72,18 +72,8 @@ export default function VDDTab() {
     onError: (e: ApiError) => setErr(e.message),
   });
 
-  const lockMutation = useMutation({
-    mutationFn: () =>
-      api.post<Vdd>(
-        `/api/v1/accounts/${account.id}/value-delivery-document/lock`,
-      ),
-    onSuccess: (saved) => {
-      qc.setQueryData(queryKey, saved);
-      setForm(saved);
-      setErr(null);
-    },
-    onError: (e: ApiError) => setErr(e.message),
-  });
+  // 28-May bug 28-19 — lockMutation removed with Lock VDD button.
+  // Backend POST /value-delivery-document/lock still exists.
 
   const unlockMutation = useMutation({
     mutationFn: () =>
@@ -126,16 +116,7 @@ export default function VDDTab() {
   const totals = attributionTotals(form.value_delivered);
 
   const onSave = () => saveMutation.mutate(serializeForm(form));
-  const onLock = () => {
-    if (dirty) saveMutation.mutate(serializeForm(form), { onSuccess: () => lockMutation.mutate() });
-    else lockMutation.mutate();
-  };
-
-  const allFour =
-    form.client_strategic_priorities.length > 0 &&
-    form.agreed_success_metrics.length > 0 &&
-    form.beroes_approach.length > 0 &&
-    form.value_delivered.length > 0;
+  // 28-May bug 28-19 — onLock + allFour gating removed with the Lock VDD button.
 
   return (
     <div className="space-y-4">
@@ -143,9 +124,7 @@ export default function VDDTab() {
       <Card>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-              Success Management · M22
-            </div>
+            {/* 28-May bug 28-19 — "Success Management · M22" chip removed. */}
             <h2 className="text-lg font-semibold text-text-primary">
               Value Delivery Document
             </h2>
@@ -310,24 +289,12 @@ export default function VDDTab() {
         />
       </Card>
 
-      {/* Exec summary */}
-      <Card>
-        <SectionHeader title="Exec summary" hint="One-paragraph wrap-up for the renewal conversation" />
-        <textarea
-          disabled={!editable}
-          value={form.exec_summary ?? ""}
-          onChange={(e) => setForm({ ...form, exec_summary: e.target.value })}
-          rows={4}
-          maxLength={4000}
-          placeholder="On track / at risk. Where we are vs the target, and what's next…"
-          className="w-full text-[13px] border border-beroe-card-border rounded-md px-3 py-2 disabled:bg-beroe-bg/40 disabled:text-text-muted"
-        />
-      </Card>
+      {/* 28-May bug 28-19 — Exec summary card removed. exec_summary
+          field remains on the schema for backwards compatibility and
+          may be re-surfaced on the Delivery & Renewal VDD view. */}
 
-      {/* R26 — VDD audit trail. Reads from the account-wide activity feed
-          and filters to value_delivery_document changes (the SQLAlchemy
-          before_flush listener auto-captures every PATCH as one audit row). */}
-      <VDDAuditTrail accountId={account.id} />
+      {/* 28-May bug 28-19 — VDD Change history card removed. The audit
+          log still captures every PATCH; surface only on Activity view. */}
 
       {/* Sticky action bar */}
       {form.is_editable && (
@@ -362,23 +329,17 @@ export default function VDDTab() {
                 </button>
               )
             ) : (
-              <>
-                <button
-                  onClick={onSave}
-                  disabled={!dirty || saveMutation.isPending}
-                  className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60 disabled:opacity-50"
-                >
-                  Save changes
-                </button>
-                <button
-                  onClick={onLock}
-                  disabled={!allFour || lockMutation.isPending}
-                  title={!allFour ? "All 4 sections must have ≥1 item to lock" : ""}
-                  className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold hover:bg-beroe-green disabled:opacity-50"
-                >
-                  🔒 Lock VDD
-                </button>
-              </>
+              <button
+                onClick={onSave}
+                disabled={!dirty || saveMutation.isPending}
+                className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60 disabled:opacity-50"
+              >
+                Save changes
+              </button>
+              /* 28-May bug 28-19 — Lock VDD button removed. The backend
+                 endpoint (POST /value-delivery-document/lock) remains
+                 functional for direct API use; only the UI affordance
+                 is suppressed per stakeholder feedback. */
             )}
           </div>
         </div>
@@ -387,72 +348,8 @@ export default function VDDTab() {
   );
 }
 
-// ============================================================
-// R26 — VDD audit trail
-// ============================================================
-
-function VDDAuditTrail({ accountId }: { accountId: string }) {
-  type ActivityItem = {
-    id: string;
-    field_name: string | null;
-    action: string;
-    changed_at: string;
-    changed_by_full_name: string | null;
-  };
-  const { data } = useQuery<{ items: ActivityItem[] }>({
-    queryKey: ["vdd-audit", accountId],
-    queryFn: () =>
-      api.get<{ items: ActivityItem[] }>(
-        `/api/v1/accounts/${accountId}/activity?page=1&page_size=50`,
-      ),
-  });
-  const vddItems = (data?.items ?? []).filter(
-    (it) =>
-      it.field_name === "value_delivery_document" ||
-      it.field_name === "vdd_locked_at" ||
-      it.field_name === "vdd_locked_by",
-  );
-  return (
-    <Card>
-      <SectionHeader
-        title="Change history"
-        hint="Every save, lock, and unlock recorded with who + when."
-      />
-      {vddItems.length === 0 ? (
-        <div className="text-[12px] text-text-muted italic">
-          No changes recorded yet.
-        </div>
-      ) : (
-        <ul className="space-y-1.5">
-          {vddItems.slice(0, 20).map((it) => (
-            <li
-              key={it.id}
-              className="text-[12px] text-text-secondary flex items-center gap-2 border-b border-beroe-card-border/60 pb-1.5 last:border-b-0 last:pb-0"
-            >
-              <span className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
-                {it.action}
-              </span>
-              <span className="font-semibold text-text-primary">
-                {labelForVddField(it.field_name)}
-              </span>
-              <span className="ml-auto text-text-muted">
-                {it.changed_by_full_name ?? "—"} ·{" "}
-                {new Date(it.changed_at).toLocaleString()}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
-function labelForVddField(field: string | null): string {
-  if (field === "value_delivery_document") return "VDD content saved";
-  if (field === "vdd_locked_at") return "VDD locked";
-  if (field === "vdd_locked_by") return "VDD locked-by changed";
-  return field ?? "change";
-}
+// 28-May bug 28-19 — VDDAuditTrail (Change history) component removed.
+// The audit log persistence remains intact server-side.
 
 /** Lever-framework tile — Lever 1 (Cost) / 2 (Risk) / 3 (Adoption).
  *  Brand palette only:
