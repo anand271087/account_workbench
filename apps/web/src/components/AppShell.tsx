@@ -45,13 +45,16 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           this the aside grows to match the longer main content and the
           footer slides off-screen on long account lists. */}
       <aside className="w-[224px] bg-beroe-navy border-r border-beroe-navy-4 flex flex-col flex-shrink-0 sticky top-0 h-screen self-start">
-        <div className="px-4 py-3 border-b border-beroe-navy-4 flex items-center gap-2">
-          <div className="w-7 h-7 bg-gradient-to-br from-beroe-blue to-[#3800CC] rounded-md flex items-center justify-center font-extrabold text-[11px] text-white">
-            B
-          </div>
-          <div>
-            <div className="text-white text-[13px] font-extrabold tracking-wider">BEROE</div>
-            <div className="text-[10px] text-[#9bb0c8]">Account Work Bench</div>
+        {/* Brand lockup — white Beroe wordmark per brand book page 9
+            (white inverted variant on Midnight background). */}
+        <div className="px-4 py-3 border-b border-beroe-navy-4">
+          <img
+            src="/beroe-wordmark-white.svg"
+            alt="Beroe"
+            className="h-7 w-auto block"
+          />
+          <div className="text-[10px] text-text-muted mt-1 tracking-wide">
+            Account Work Bench
           </div>
         </div>
         <nav className="flex-1 px-2 pt-3 pb-2 overflow-y-auto">

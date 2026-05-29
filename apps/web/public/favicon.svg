@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" aria-label="Beroe">
+  <!--
+    Beroe Squircle "O" mark — approximation per brand book page 10
+    ("constructed from two identical shapes rotated at 45 degrees").
+    Solid Indigo #4A00F8 on transparent background. Replace with the
+    official master artwork from Brand when available.
+  -->
+  <path
+    fill="#4A00F8"
+    d="M50 6
+       C72 6 94 28 94 50
+       C94 72 72 94 50 94
+       C28 94 6 72 6 50
+       C6 28 28 6 50 6 Z
+       M50 20
+       C34 20 20 34 20 50
+       C20 66 34 80 50 80
+       C66 80 80 66 80 50
+       C80 34 66 20 50 20 Z"
+  />
+</svg>

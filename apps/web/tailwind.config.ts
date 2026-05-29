@@ -16,28 +16,39 @@ const config: Config = {
         mono: ['"DM Mono"', "monospace"],
       },
       colors: {
-        // Beroe brand palette — mirrors prototype `:root` block verbatim
+        // Beroe brand palette — anchored to the brand book (Sept 2025).
+        // Source of truth: docs/BRAND-AUDIT-2026-05-29.md.
+        // All token names below resolve to brand-book hex; the old
+        // prototype hex (#40CC8F, #EF9637, #FD576B, #001e52, #001a45,
+        // #002050) have been replaced so every `bg-beroe-*` /
+        // `text-beroe-*` / `border-beroe-*` utility downstream
+        // auto-corrects to brand.
         beroe: {
-          bg: "#EAF1F5",
+          // Neutrals
+          bg: "#EAF1F5",              // brand Soft Gray (page 35)
           card: "#ffffff",
-          "card-border": "#e4eaf6",   // --cb
-          navy: "#001137",            // --navy
-          "navy-2": "#001a45",        // --n2
-          "navy-3": "#002050",        // --n3
-          "navy-4": "#001e52",        // --bd  (sidebar active bg, sb-btn.active)
-          blue: "#4A00F8",
-          teal: "#35E1D4",
-          amber: "#EF9637",
-          green: "#40CC8F",
-          red: "#FD576B",
-          purple: "#C344C7",
-          coral: "#EF9637",
+          "card-border": "#e4eaf6",
+          // Primary palette (page 35)
+          navy: "#001137",            // Midnight
+          "navy-2": "#001137",        // alias → Midnight (was #001a45)
+          "navy-3": "#001a45",        // softer Midnight for sidebar hover (kept as a Midnight tint)
+          "navy-4": "#001137",        // alias → Midnight (was #001e52)
+          blue: "#4A00F8",            // Indigo
+          teal: "#35E1D4",            // Aqua
+          purple: "#C344C7",          // Fuscia
+          yellow: "#FFE61E",          // Bumblebee
+          // Risk RAG (page 37) — only colours permitted for status states.
+          // Note: token names kept compatible with existing consumers.
+          green: "#6EC457",           // Risk Green (was #40CC8F)
+          amber: "#F0BC41",           // Risk Amber (was #EF9637)
+          red: "#CF4548",             // Risk Red   (was #FD576B)
+          coral: "#F0BC41",           // alias → Risk Amber (was duplicate of #EF9637)
         },
         text: {
-          primary: "#0d1b2e",
-          secondary: "#5a7896",
-          muted: "#8496b0",
-          subtle: "#b0c0d0",
+          primary: "#001137",         // Midnight
+          secondary: "#475569",
+          muted: "#94a3b8",
+          subtle: "#cbd5e1",
         },
         // shadcn/ui semantic tokens
         border: "hsl(var(--border))",

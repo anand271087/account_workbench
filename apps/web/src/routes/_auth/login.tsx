@@ -102,29 +102,49 @@ export default function LoginPage() {
     }
   }
 
+  // Brand palette anchors (Beroe brand book Sept 2025).
+  const MIDNIGHT = "#001137";
+  const INDIGO = "#4A00F8";
+  const RISK_RED = "#CF4548";
+  const RISK_GREEN = "#6EC457";
+  // Two Midnight tints for the inner panel + input fills (kept on-brand
+  // by deriving from Midnight, not by introducing new hex values).
+  const MIDNIGHT_PANEL = "#001a45"; // brand-defined `--n2` (Midnight tint)
+  const MIDNIGHT_INPUT = "#000a20"; // darker Midnight tint
   return (
-    <div className="min-h-screen flex items-center justify-center bg-beroe-navy px-4">
-      <div className="w-full max-w-md bg-[#000d28] border border-beroe-navy-3 rounded-2xl p-8 shadow-2xl">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-9 h-9 rounded-lg bg-beroe-blue text-white flex items-center justify-center font-bold">
-            B
-          </div>
-          <div>
-            <div className="text-white text-sm font-bold tracking-widest">BEROE</div>
-            <div className="text-[#2a4a6b] text-[11px]">Account Work Bench</div>
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: MIDNIGHT }}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-8 shadow-2xl"
+        style={{ background: MIDNIGHT_PANEL, border: "1px solid #001a45" }}
+      >
+        {/* Brand lockup — white Beroe wordmark (brand book page 9). */}
+        <div className="mb-6">
+          <img
+            src="/beroe-wordmark-white.svg"
+            alt="Beroe"
+            className="h-7 w-auto block"
+          />
+          <div className="text-text-muted text-[11px] mt-1 tracking-wide">
+            Account Work Bench
           </div>
         </div>
 
         <h1 className="text-white text-lg font-semibold mb-1">
           {resetMode ? "Reset password" : "Sign in"}
         </h1>
-        <p className="text-[#5a7896] text-xs mb-5">
+        <p className="text-text-muted text-xs mb-5">
           {resetMode
             ? "Enter your Beroe email — we'll send a 30-minute reset link."
             : "Use your Beroe email. 5 failed attempts locks the account for 15 minutes."}
         </p>
 
-        <form onSubmit={resetMode ? onSendReset : onSubmit} className="space-y-3">
+        <form
+          onSubmit={resetMode ? onSendReset : onSubmit}
+          className="space-y-3"
+        >
           <input
             type="email"
             autoComplete="email"
@@ -133,10 +153,13 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="email@beroe-inc.com"
             className={cn(
-              "w-full px-3 py-2.5 rounded-lg text-sm",
-              "bg-[#000a20] border border-beroe-navy-3 text-[#c8ddf0]",
+              "w-full px-3 py-2.5 rounded-lg text-sm text-white",
               "focus:outline-none focus:border-beroe-blue",
             )}
+            style={{
+              background: MIDNIGHT_INPUT,
+              border: "1px solid #001a45",
+            }}
           />
           {!resetMode && (
             <input
@@ -147,30 +170,43 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
               className={cn(
-                "w-full px-3 py-2.5 rounded-lg text-sm",
-                "bg-[#000a20] border border-beroe-navy-3 text-[#c8ddf0]",
+                "w-full px-3 py-2.5 rounded-lg text-sm text-white",
                 "focus:outline-none focus:border-beroe-blue",
               )}
+              style={{
+                background: MIDNIGHT_INPUT,
+                border: "1px solid #001a45",
+              }}
             />
           )}
           <button
             type="submit"
             disabled={submitting}
-            className={cn(
-              "w-full py-2.5 rounded-lg text-sm font-bold text-white",
-              "bg-gradient-to-br from-[#4A00F8] to-[#3800CC]",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            className="w-full py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: INDIGO }}
           >
-            {submitting ? "Working…" : resetMode ? "Send reset link" : "Sign in →"}
+            {submitting
+              ? "Working…"
+              : resetMode
+                ? "Send reset link"
+                : "Sign in →"}
           </button>
           {error && (
-            <p role="alert" className="text-[#ff7080] text-xs text-center" data-testid="login-error">
+            <p
+              role="alert"
+              className="text-xs text-center"
+              style={{ color: RISK_RED }}
+              data-testid="login-error"
+            >
               {error}
             </p>
           )}
           {resetMessage && (
-            <p role="status" className="text-[#7ad29a] text-xs text-center">
+            <p
+              role="status"
+              className="text-xs text-center"
+              style={{ color: RISK_GREEN }}
+            >
               {resetMessage}
             </p>
           )}
@@ -181,13 +217,13 @@ export default function LoginPage() {
               setError(null);
               setResetMessage(null);
             }}
-            className="block mx-auto text-[11px] text-[#5a7896] hover:text-[#c8ddf0]"
+            className="block mx-auto text-[11px] text-text-muted hover:text-white transition-colors"
           >
             {resetMode ? "← Back to sign in" : "Forgot password?"}
           </button>
         </form>
 
-        <p className="text-[#1e3a6c] text-[10px] text-center mt-5">
+        <p className="text-[10px] text-center mt-5 text-text-subtle">
           Beroe SSO support arrives in Phase 2.
         </p>
       </div>

@@ -67,6 +67,12 @@ export interface Appetite {
 }
 
 // Mirrors prototype PLAY_MODES.
+// Per-mode brand palette (Beroe brand book Sept 2025). The previous
+// prototype hex (#FD576B / #EF9637 / #35E1D4) have been substituted
+// for the brand RAG triad:
+//   rescue → Risk Red   #CF4548
+//   retain → Risk Amber #F0BC41
+//   expand → Aqua       #35E1D4 (kept — already on brand)
 export const MODE_CONF: Record<
   PlayMode,
   { label: string; icon: string; col: string; bg: string; desc: string }
@@ -74,22 +80,22 @@ export const MODE_CONF: Record<
   rescue: {
     label: "Rescue",
     icon: "🚨",
-    col: "#FD576B",
-    bg: "#fff0f2",
+    col: "#CF4548",
+    bg: "#CF454810",
     desc: "Stop churn, recover relationship, secure renewal",
   },
   retain: {
     label: "Retain",
     icon: "🛡️",
-    col: "#EF9637",
-    bg: "#fff8eb",
+    col: "#F0BC41",
+    bg: "#F0BC4115",
     desc: "Protect current ACV, drive adoption, deepen relationship, build toward growth",
   },
   expand: {
     label: "Expand",
     icon: "🚀",
     col: "#35E1D4",
-    bg: "#f0fdfa",
+    bg: "#35E1D415",
     desc: "ACV growth through upsell and cross-sell",
   },
 };
@@ -118,11 +124,16 @@ export function stageName(prob: number): string {
   return closest.label;
 }
 
+/** Sales-stage colour mapping — brand RAG triad + Indigo for mid-tier.
+ *  prob ≥80 → Risk Green   #6EC457 (near-close)
+ *  prob ≥60 → Indigo        #4A00F8 (budget approved, in flight)
+ *  prob ≥30 → Risk Amber    #F0BC41 (evaluation / selected)
+ *  else    → Risk Red       #CF4548 (early / unqualified) */
 export function stageColor(prob: number): string {
-  if (prob >= 80) return "#40CC8F";
+  if (prob >= 80) return "#6EC457";
   if (prob >= 60) return "#4A00F8";
-  if (prob >= 30) return "#EF9637";
-  return "#FD576B";
+  if (prob >= 30) return "#F0BC41";
+  return "#CF4548";
 }
 
 export function fmtK(usd: string | number | null | undefined): string {

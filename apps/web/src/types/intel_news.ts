@@ -82,18 +82,20 @@ export const CATEGORY_LABELS: Record<IntelCategory, string> = {
   m_and_a: "M&A, Divestments & Restructuring",
 };
 
-// Mirrors the prototype's catCol palette.
+// Category-relevance palette — brand-locked. The 10 categories pull
+// from the brand book's primary + risk triad + chart-sequence accent
+// shades. No off-palette hex.
 export const CATEGORY_COLOR: Record<IntelCategory, string> = {
-  financial_performance: "#e63950",
-  supply_chain: "#FD576B",
-  supplier_strategy: "#4A00F8",
-  expansion_capex: "#2fb87a",
-  regulatory_compliance: "#a830b0",
-  sustainability_esg: "#40CC8F",
-  digital_transformation: "#35E1D4",
-  risk_geopolitical: "#e63950",
-  product_innovation: "#EF9637",
-  m_and_a: "#C344C7",
+  financial_performance: "#CF4548", // Risk Red
+  supply_chain:          "#CF4548", // Risk Red (supply disruption = risk)
+  supplier_strategy:     "#4A00F8", // Indigo
+  expansion_capex:       "#6EC457", // Risk Green (positive growth signal)
+  regulatory_compliance: "#854184", // chart-sequence muted purple
+  sustainability_esg:    "#6EC457", // Risk Green
+  digital_transformation:"#35E1D4", // Aqua
+  risk_geopolitical:     "#CF4548", // Risk Red
+  product_innovation:    "#F0BC41", // Risk Amber (caution + opportunity)
+  m_and_a:               "#C344C7", // Fuscia
 };
 
 export const RELEVANCE_LABELS: Record<SignalRelevance, string> = {

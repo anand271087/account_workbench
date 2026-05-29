@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 80" aria-label="beroe">
+  <!--
+    Beroe wordmark — white variant for dark backgrounds (sidebar on
+    Midnight). Squircle "O" + "beroe" both rendered in white per
+    brand book page 9 (white inverted lockup). Replace with the
+    official master artwork from Brand when available.
+  -->
+  <g transform="translate(8 12)">
+    <path
+      fill="#ffffff"
+      d="M28 0
+         C44 0 56 12 56 28
+         C56 44 44 56 28 56
+         C12 56 0 44 0 28
+         C0 12 12 0 28 0 Z
+         M28 8
+         C17 8 8 17 8 28
+         C8 39 17 48 28 48
+         C39 48 48 39 48 28
+         C48 17 39 8 28 8 Z"
+    />
+  </g>
+  <text
+    x="80"
+    y="56"
+    fill="#ffffff"
+    font-family="'DM Sans', system-ui, sans-serif"
+    font-size="52"
+    font-weight="500"
+    letter-spacing="-0.5"
+  >beroe</text>
+</svg>

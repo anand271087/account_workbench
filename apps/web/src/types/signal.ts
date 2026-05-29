@@ -91,16 +91,18 @@ export interface ActivityCreate {
   occurred_at?: string | null;
 }
 
-// Mirrors prototype SIG.
+// Soft-signal palette — locked to Beroe brand book (Sept 2025).
+// Mapping: risk → Risk Amber · positive → Risk Green · expansion →
+// Fuscia · neutral → brand mid-grey · critical → Risk Red.
 export const SIG_CONF: Record<
   SignalType,
   { label: string; col: string; bg: string; dot: string }
 > = {
-  risk:      { label: "Risk",      col: "#FD576B", bg: "#fff0e5", dot: "#FD576B" },
-  positive:  { label: "Positive",  col: "#2fb87a", bg: "#d4f5e5", dot: "#2fb87a" },
-  expansion: { label: "Expansion", col: "#a830b0", bg: "#f5e0f6", dot: "#a830b0" },
-  neutral:   { label: "Neutral",   col: "#64748b", bg: "#f1f5f9", dot: "#94a3b8" },
-  critical:  { label: "Critical",  col: "#e63950", bg: "#ffe0e5", dot: "#e63950" },
+  risk:      { label: "Risk",      col: "#F0BC41", bg: "#F0BC4115", dot: "#F0BC41" },
+  positive:  { label: "Positive",  col: "#6EC457", bg: "#6EC45715", dot: "#6EC457" },
+  expansion: { label: "Expansion", col: "#C344C7", bg: "#C344C715", dot: "#C344C7" },
+  neutral:   { label: "Neutral",   col: "#475569", bg: "#EAF1F5",   dot: "#94a3b8" },
+  critical:  { label: "Critical",  col: "#CF4548", bg: "#CF454810", dot: "#CF4548" },
 };
 
 export const IMPACT_LABELS: Record<SignalImpact, string> = {
@@ -110,18 +112,19 @@ export const IMPACT_LABELS: Record<SignalImpact, string> = {
   low: "Low",
 };
 
-// Mirrors prototype ACT.
+// Activity-type palette — brand-locked. CSM Call / QBR / Research stay
+// in the brand RAG/secondary triad; escalations are Risk Red.
 export const ACT_CONF: Record<
   ActivityType,
   { label: string; col: string; bg: string; ic: string }
 > = {
-  csm_call:   { label: "CSM Call",    col: "#2fb87a", bg: "#d4f5e5", ic: "📞" },
-  exec_visit: { label: "Exec Visit",  col: "#4A00F8", bg: "#ede6ff", ic: "🤝" },
-  product:    { label: "Product",     col: "#a830b0", bg: "#f5e0f6", ic: "⚡" },
-  research:   { label: "Research",    col: "#d88520", bg: "#fef0c0", ic: "📚" },
-  qbr:        { label: "QBR",         col: "#d88520", bg: "#fef0c0", ic: "📊" },
-  internal:   { label: "Internal",    col: "#64748b", bg: "#f1f5f9", ic: "📝" },
-  escalation: { label: "Escalation",  col: "#e63950", bg: "#ffe0e5", ic: "🚨" },
+  csm_call:   { label: "CSM Call",   col: "#6EC457", bg: "#6EC45715", ic: "📞" },
+  exec_visit: { label: "Exec Visit", col: "#4A00F8", bg: "#4A00F810", ic: "🤝" },
+  product:    { label: "Product",    col: "#C344C7", bg: "#C344C715", ic: "⚡" },
+  research:   { label: "Research",   col: "#35E1D4", bg: "#35E1D415", ic: "📚" },
+  qbr:        { label: "QBR",        col: "#F0BC41", bg: "#F0BC4115", ic: "📊" },
+  internal:   { label: "Internal",   col: "#475569", bg: "#EAF1F5",   ic: "📝" },
+  escalation: { label: "Escalation", col: "#CF4548", bg: "#CF454810", ic: "🚨" },
 };
 
 export const SIGNAL_TYPES: SignalType[] = [

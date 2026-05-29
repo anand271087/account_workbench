@@ -167,18 +167,23 @@ export const HEAT_ICON: Record<CatHeat, string> = {
   cold: "❄",
 };
 
+// Category-heat palette — brand-locked. Hot uses Risk Red (high
+// engagement = hot/critical), warm uses Risk Amber, whitespace stays
+// brand mid-grey, cold uses Soft Gray.
 export const HEAT_COLOR: Record<CatHeat, string> = {
-  hot: "#FD576B",
-  warm: "#EF9637",
+  hot: "#CF4548",
+  warm: "#F0BC41",
   whitespace: "#94a3b8",
-  cold: "#e2e8f0",
+  cold: "#EAF1F5",
 };
 
+// Supplier-risk palette — brand RAG triad. high + med_high collapse
+// to two shades of Risk Red; med = Risk Amber; low = Risk Green.
 export const RISK_COLOR: Record<SupplierRisk, string> = {
-  high: "#e63950",
-  med_high: "#FD576B",
-  med: "#EF9637",
-  low: "#40CC8F",
+  high: "#CF4548",
+  med_high: "#CF454880",
+  med: "#F0BC41",
+  low: "#6EC457",
 };
 
 export const RISK_LABEL: Record<SupplierRisk, string> = {

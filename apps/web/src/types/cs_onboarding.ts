@@ -43,14 +43,14 @@ export const STAKEHOLDER_ROLES = [
     key: "champion",
     label: "Day-to-day Champion",
     desc: "Client SPOC. Uses Beroe regularly. Validates value at checkpoints.",
-    col: "#40CC8F",
+    col: "#6EC457",
     icon: "⭐",
   },
   {
     key: "category",
     label: "Category Manager",
     desc: "Implements initiatives. Confirms savings realised. Key voice at QBR.",
-    col: "#EF9637",
+    col: "#F0BC41",
     icon: "📊",
   },
 ] as const;
