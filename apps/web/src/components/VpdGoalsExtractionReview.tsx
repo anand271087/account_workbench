@@ -135,7 +135,7 @@ export function VpdGoalsExtractionReview({
               )}
             </div>
             {result.is_stub && (
-              <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wider font-semibold">
+              <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-beroe-amber/15 text-beroe-amber border border-beroe-amber/40 uppercase tracking-wider font-semibold">
                 Stub AI
               </span>
             )}
@@ -171,10 +171,10 @@ export function VpdGoalsExtractionReview({
           <div className="text-[12px] text-text-secondary">
             {summary.sel} selected
             {summary.done > 0 && (
-              <> · <span className="text-green-700">{summary.done} created</span></>
+              <> · <span className="text-beroe-green">{summary.done} created</span></>
             )}
             {summary.failed > 0 && (
-              <> · <span className="text-red-700">{summary.failed} failed</span></>
+              <> · <span className="text-beroe-red">{summary.failed} failed</span></>
             )}
           </div>
           <div className="flex gap-2">
@@ -212,11 +212,11 @@ function GoalRow({
       className={cn(
         "border rounded-md p-3 transition-colors",
         row._status === "done"
-          ? "border-green-300 bg-green-50/40"
+          ? "border-beroe-green/40 bg-beroe-green/15/40"
           : row._status === "failed"
-            ? "border-red-300 bg-red-50/40"
+            ? "border-beroe-red/40 bg-beroe-red/10/40"
             : row._status === "skipped"
-              ? "border-slate-300 bg-slate-50"
+              ? "border-beroe-card-border bg-beroe-bg"
               : "border-beroe-card-border bg-white",
       )}
     >
@@ -249,22 +249,22 @@ function GoalRow({
                 </span>
               )}
               {row._status === "done" && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200 font-semibold uppercase tracking-wider">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-beroe-green/20 text-beroe-green border border-beroe-green/30 font-semibold uppercase tracking-wider">
                   ✓ Created
                 </span>
               )}
               {row._status === "skipped" && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 border border-slate-300 font-semibold uppercase tracking-wider">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-beroe-bg text-text-secondary border border-beroe-card-border font-semibold uppercase tracking-wider">
                   Skipped
                 </span>
               )}
               {row._status === "failed" && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200 font-semibold uppercase tracking-wider">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-beroe-red/15 text-beroe-red border border-beroe-red/30 font-semibold uppercase tracking-wider">
                   Failed
                 </span>
               )}
               {row._status === "running" && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-semibold uppercase tracking-wider">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-beroe-blue/15 text-beroe-blue border border-beroe-blue/30 font-semibold uppercase tracking-wider">
                   …
                 </span>
               )}
@@ -336,7 +336,7 @@ function GoalRow({
               className={cn(
                 "text-[11px]",
                 row._status === "failed"
-                  ? "text-red-700"
+                  ? "text-beroe-red"
                   : "text-text-muted",
               )}
             >

@@ -36,9 +36,9 @@ interface Props {
 }
 
 const CONFIDENCE_TONES: Record<string, string> = {
-  high: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  medium: "bg-amber-100 text-amber-800 border-amber-200",
-  low: "bg-slate-100 text-slate-700 border-slate-200",
+  high: "bg-beroe-green/20 text-beroe-green border-beroe-green/30",
+  medium: "bg-beroe-amber/20 text-beroe-amber border-beroe-amber/40",
+  low: "bg-beroe-bg text-text-secondary border-beroe-card-border",
 };
 
 export function VpdMetricsExtractionReview({
@@ -112,7 +112,7 @@ export function VpdMetricsExtractionReview({
             <div className="text-[14px] font-bold text-text-primary">
               Autofill Success Metrics from VPD
               {result.is_stub && (
-                <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-beroe-amber/15 text-beroe-amber border border-beroe-amber/40">
                   Stub AI
                 </span>
               )}
@@ -144,11 +144,11 @@ export function VpdMetricsExtractionReview({
                   className={cn(
                     "border rounded-md p-3",
                     r._status === "done"
-                      ? "border-emerald-200 bg-emerald-50/40"
+                      ? "border-beroe-green/30 bg-beroe-green/15/40"
                       : r._status === "failed"
-                        ? "border-red-200 bg-red-50/40"
+                        ? "border-beroe-red/30 bg-beroe-red/10/40"
                         : r._status === "skipped"
-                          ? "border-slate-200 bg-slate-50/40"
+                          ? "border-beroe-card-border bg-beroe-bg/40"
                           : "border-beroe-card-border",
                   )}
                 >
@@ -244,12 +244,12 @@ export function VpdMetricsExtractionReview({
                           className={cn(
                             "text-[10px] font-bold uppercase tracking-wider",
                             r._status === "done"
-                              ? "text-emerald-700"
+                              ? "text-beroe-green"
                               : r._status === "failed"
-                                ? "text-red-700"
+                                ? "text-beroe-red"
                                 : r._status === "skipped"
-                                  ? "text-slate-600"
-                                  : "text-blue-700",
+                                  ? "text-text-muted"
+                                  : "text-beroe-blue",
                           )}
                         >
                           {r._status}
@@ -264,19 +264,19 @@ export function VpdMetricsExtractionReview({
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-beroe-card-border bg-slate-50/40 flex items-center justify-between gap-3 flex-wrap">
+        <div className="px-5 py-3 border-t border-beroe-card-border bg-beroe-bg/40 flex items-center justify-between gap-3 flex-wrap">
           <div className="text-[11px] text-text-muted">
             <b className="text-text-primary">{summary.sel}</b> selected
             {summary.done > 0 && (
               <>
                 {" · "}
-                <span className="text-emerald-700">{summary.done} created</span>
+                <span className="text-beroe-green">{summary.done} created</span>
               </>
             )}
             {summary.failed > 0 && (
               <>
                 {" · "}
-                <span className="text-red-700">{summary.failed} failed</span>
+                <span className="text-beroe-red">{summary.failed} failed</span>
               </>
             )}
           </div>

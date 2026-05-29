@@ -137,7 +137,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
   }
   if (isError) {
     return (
-      <div className="text-sm text-red-700">
+      <div className="text-sm text-beroe-red">
         Failed to load the meeting brief.
       </div>
     );
@@ -297,12 +297,12 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
           sections that currently have no content get suggestions, so an
           existing brief is never clobbered. */}
       {editable && (
-        <div className="bg-violet-50 border border-violet-200 rounded-card px-4 py-3 flex items-center gap-3 flex-wrap">
+        <div className="bg-beroe-purple/10 border border-beroe-purple/30 rounded-card px-4 py-3 flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-[200px]">
-            <div className="text-[13px] font-bold text-violet-900">
+            <div className="text-[13px] font-bold text-beroe-purple">
               ✨ Generate full brief with AI
             </div>
-            <div className="text-[11px] text-violet-800/80">
+            <div className="text-[11px] text-beroe-purple/80">
               Fills empty sections (snapshot · attendees · objectives ·
               discovery · minefields · value anchors · closing scenarios ·
               cheat sheet) in one click. Existing entries stay untouched.
@@ -343,7 +343,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
                 await aiSuggest(s);
               }
             }}
-            className="text-[12px] px-3 py-1.5 rounded-md bg-violet-600 text-white font-semibold hover:bg-violet-700"
+            className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-purple text-white font-semibold hover:bg-beroe-purple"
           >
             ✨ Generate full brief
           </button>
@@ -1270,20 +1270,20 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
           className={cn(
             "sticky bottom-0 -mx-6 px-6 py-3 flex items-center gap-3 border-t z-30 transition-colors",
             dirty
-              ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+              ? "bg-beroe-amber/15 border-beroe-amber/50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
               : "bg-white border-beroe-card-border",
           )}
         >
           {savingError && (
-            <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+            <span className="text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-1">
               {savingError}
             </span>
           )}
           {!savingError && dirty && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-xs text-beroe-amber font-bold">
+              <span className="inline-block w-2 h-2 rounded-full bg-beroe-amber/150 animate-pulse" />
               Unsaved changes
-              <span className="text-amber-700/70 font-normal ml-1">
+              <span className="text-beroe-amber/70 font-normal ml-1">
                 · Cmd / Ctrl + S to save
               </span>
             </span>
@@ -1302,7 +1302,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
               }
             }}
             disabled={resetMutation.isPending}
-            className="px-3 py-1.5 rounded-lg text-xs border border-red-200 text-red-700 disabled:opacity-50 bg-white"
+            className="px-3 py-1.5 rounded-lg text-xs border border-beroe-red/30 text-beroe-red disabled:opacity-50 bg-white"
             title="Clear the entire brief and start over"
           >
             Reset brief
@@ -1310,7 +1310,7 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
           <button
             onClick={() => data && setForm(data)}
             disabled={!dirty || saveMutation.isPending}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary disabled:opacity-50 bg-white"
           >
             Discard
           </button>
@@ -1369,7 +1369,7 @@ function BriefSection({
   // by-toggle bug behind Row 49.
   return (
     <section className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
-      <header className="px-4 py-3 border-b border-beroe-card-border/60 bg-slate-50/40 flex items-center gap-2 flex-wrap">
+      <header className="px-4 py-3 border-b border-beroe-card-border/60 bg-beroe-bg/40 flex items-center gap-2 flex-wrap">
         <h3 className="text-sm font-bold text-text-primary">{title}</h3>
         {subtitle && (
           <span className="text-[11px] font-normal text-text-muted">
@@ -1418,12 +1418,12 @@ function ItemList<T>({
       {items.map((item, i) => (
         <div
           key={i}
-          className="rounded-lg border border-slate-200 bg-slate-50/40 p-3 relative"
+          className="rounded-lg border border-beroe-card-border bg-beroe-bg/40 p-3 relative"
         >
           {editable && (
             <button
               onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="absolute top-2 right-2 text-text-muted hover:text-red-700 text-xs"
+              className="absolute top-2 right-2 text-text-muted hover:text-beroe-red text-xs"
               title="Remove"
               aria-label="Remove item"
             >
@@ -1481,13 +1481,13 @@ function StringListField({
           {items.map((s, i) => (
             <li
               key={`${i}-${s}`}
-              className="flex items-start gap-2 text-sm text-text-primary bg-white rounded-md border border-slate-200 px-2 py-1"
+              className="flex items-start gap-2 text-sm text-text-primary bg-white rounded-md border border-beroe-card-border px-2 py-1"
             >
               <span className="flex-1">{s}</span>
               {editable && (
                 <button
                   onClick={() => onChange(items.filter((_, j) => j !== i))}
-                  className="text-text-muted hover:text-red-700 text-xs"
+                  className="text-text-muted hover:text-beroe-red text-xs"
                   aria-label="Remove"
                 >
                   ✕
@@ -1510,7 +1510,7 @@ function StringListField({
               }
             }}
             placeholder={placeholder}
-            className="flex-1 px-2 py-1 text-xs rounded-md border border-slate-200 focus:outline-none focus:border-beroe-blue"
+            className="flex-1 px-2 py-1 text-xs rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
           />
           <button
             onClick={add}
@@ -1529,15 +1529,15 @@ function StringListField({
 
 function inputCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
 function textareaCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-2 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
