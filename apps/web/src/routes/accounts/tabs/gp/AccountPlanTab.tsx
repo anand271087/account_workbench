@@ -220,11 +220,11 @@ function ModeBanner({
           <div className="text-[11px] mt-0.5" style={{ color: conf.col + "cc" }}>
             {conf.desc}
           </div>
-          <div className="text-[10px] text-slate-600 mt-1">
+          <div className="text-[10px] text-text-muted mt-1">
             Score: <b>{appetite.score}/100</b>
           </div>
           {isOver && (
-            <div className="text-[10px] text-slate-400 mt-0.5">
+            <div className="text-[10px] text-text-subtle mt-0.5">
               System recommends <b>{recConf.label}</b> · Currently set to{" "}
               <b>{conf.label}</b>
             </div>
@@ -278,7 +278,7 @@ function ModeOverrideModal({
           className={cn(
             "text-[12px] px-3 py-2 rounded-md border-[1.5px] text-left",
             picked === null
-              ? "border-emerald-500 bg-emerald-50"
+              ? "border-beroe-green bg-beroe-green/15"
               : "border-beroe-card-border bg-white hover:bg-beroe-bg/60",
           )}
         >
@@ -310,7 +310,7 @@ function ModeOverrideModal({
           );
         })}
       </div>
-      {err && <div className="text-[11px] text-red-700 mb-2">{err}</div>}
+      {err && <div className="text-[11px] text-beroe-red mb-2">{err}</div>}
       <div className="flex justify-end gap-2">
         <button
           onClick={onClose}
@@ -349,7 +349,7 @@ function ScoreBreakdownDetails({ appetite }: { appetite: Appetite }) {
     ],
   ];
   return (
-    <details className="bg-slate-50 border border-beroe-card-border rounded-md">
+    <details className="bg-beroe-bg border border-beroe-card-border rounded-md">
       <summary className="px-3.5 py-2.5 text-[11px] font-semibold text-text-secondary cursor-pointer flex items-center gap-1.5 list-none">
         <span>ℹ️</span> How is this mode determined?
       </summary>
@@ -372,7 +372,7 @@ function ScoreBreakdownDetails({ appetite }: { appetite: Appetite }) {
                 {label}
               </div>
               <div className="text-[9px] text-text-muted">{weight} weight</div>
-              <div className="text-[9px] text-slate-400 mt-1">{desc}</div>
+              <div className="text-[9px] text-text-subtle mt-1">{desc}</div>
             </div>
           ))}
         </div>
@@ -449,7 +449,7 @@ function AcvTile({
         {tiles.map(([label, value, col]) => (
           <div
             key={label}
-            className="bg-slate-50 rounded-md px-2 py-2.5 text-center"
+            className="bg-beroe-bg rounded-md px-2 py-2.5 text-center"
           >
             <div className="text-[9px] uppercase tracking-wider text-text-muted">
               {label}
@@ -463,7 +463,7 @@ function AcvTile({
           </div>
         ))}
       </div>
-      <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+      <div className="h-3 bg-beroe-bg rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all"
           style={{ width: `${pct}%`, background: conf.col }}
@@ -520,7 +520,7 @@ function ArrBurnDown({
           ["Projected (ACV+Pipeline)", fmtK(projected), "#4A00F8"],
           [`Target (${bd.arr_target_pct}% growth)`, fmtK(target), "#2fb87a"],
         ].map(([label, value, col]) => (
-          <div key={label} className="bg-slate-50 rounded-md p-2 text-center">
+          <div key={label} className="bg-beroe-bg rounded-md p-2 text-center">
             <div className="text-[14px] font-extrabold" style={{ color: col }}>
               {value}
             </div>
@@ -528,7 +528,7 @@ function ArrBurnDown({
           </div>
         ))}
       </div>
-      <div className="relative h-5.5 bg-slate-100 rounded-full overflow-visible">
+      <div className="relative h-5.5 bg-beroe-bg rounded-full overflow-visible">
         <div
           className="h-full rounded-full transition-all flex items-center justify-end pr-2"
           style={{ width: `${pct}%`, background: statusCol }}
@@ -536,7 +536,7 @@ function ArrBurnDown({
           <span className="text-[9px] font-bold text-white">{pct}%</span>
         </div>
         <div
-          className="absolute top-[-3px] right-0 w-0.5 h-7 bg-emerald-500 rounded-sm"
+          className="absolute top-[-3px] right-0 w-0.5 h-7 bg-beroe-green/150 rounded-sm"
           title="Target"
         />
       </div>
@@ -640,7 +640,7 @@ function PlayList({
                   if (confirm(`Delete play "${p.title}"?`))
                     deleteMutation.mutate(p.id);
                 }}
-                className="text-[11px] text-text-muted hover:text-red-700 px-1"
+                className="text-[11px] text-text-muted hover:text-beroe-red px-1"
               >
                 ✕
               </button>
@@ -802,7 +802,7 @@ function AddPlayModal({
             })}
           </div>
         </div>
-        {err && <div className="text-[11px] text-red-700">{err}</div>}
+        {err && <div className="text-[11px] text-beroe-red">{err}</div>}
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
@@ -920,10 +920,10 @@ function RetainChecklist({
           className={cn(
             "text-[11px] font-bold px-2 py-0.5 rounded-full",
             done === items.length
-              ? "bg-emerald-100 text-emerald-800"
+              ? "bg-beroe-green/20 text-beroe-green"
               : done >= items.length - 2
-                ? "bg-amber-100 text-amber-800"
-                : "bg-red-100 text-red-800",
+                ? "bg-beroe-amber/20 text-beroe-amber"
+                : "bg-beroe-red/15 text-beroe-red",
           )}
         >
           {done} / {items.length} healthy
@@ -935,7 +935,7 @@ function RetainChecklist({
             key={it.label}
             className="flex items-start gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
           >
-            <span className={it.done ? "text-emerald-600" : "text-amber-600"}>
+            <span className={it.done ? "text-beroe-green" : "text-beroe-amber"}>
               {it.done ? "✓" : "⚠"}
             </span>
             <span className="flex-1">
@@ -1010,7 +1010,7 @@ function ProductSaturation({ accountId }: { accountId: string }) {
           <div className="text-[9px] text-text-muted">Saturation</div>
         </div>
       </div>
-      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
+      <div className="h-1.5 bg-beroe-bg rounded-full overflow-hidden mb-3">
         <div
           className="h-full"
           style={{
@@ -1031,7 +1031,7 @@ function ProductSaturation({ accountId }: { accountId: string }) {
                 className={cn(
                   "flex items-center gap-2 px-2 py-1 rounded-md border text-[11px]",
                   has
-                    ? "border-emerald-200 bg-emerald-50/40"
+                    ? "border-beroe-green/30 bg-beroe-green/15/40"
                     : "border-beroe-card-border bg-white",
                 )}
               >
@@ -1039,8 +1039,8 @@ function ProductSaturation({ accountId }: { accountId: string }) {
                   className={cn(
                     "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
                     has
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700",
+                      ? "bg-beroe-green/20 text-beroe-green"
+                      : "bg-beroe-amber/20 text-beroe-amber",
                   )}
                 >
                   {has ? "✓" : "→"}
@@ -1049,7 +1049,7 @@ function ProductSaturation({ accountId }: { accountId: string }) {
                 <span
                   className={cn(
                     "text-[9px] font-bold uppercase",
-                    has ? "text-emerald-700" : "text-amber-700",
+                    has ? "text-beroe-green" : "text-beroe-amber",
                   )}
                 >
                   {has ? "Owned" : "Gap"}
@@ -1272,7 +1272,7 @@ function PlanInputs({
         {rows.map((r) => (
           <div
             key={r.label}
-            className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0"
+            className="flex items-center justify-between py-1.5 border-b border-beroe-card-border last:border-b-0"
           >
             <span className="text-[11px] text-text-muted">{r.label}</span>
             <span

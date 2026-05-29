@@ -94,7 +94,7 @@ export default function ExternalIntelTab() {
             <button
               onClick={() => refreshMutation.mutate()}
               disabled={refreshMutation.isPending}
-              className="text-[12px] px-3 py-1.5 rounded-md bg-emerald-600 text-white font-semibold disabled:opacity-50"
+              className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold disabled:opacity-50"
               title="Generate fresh intel via Claude (stub when no key)"
             >
               {refreshMutation.isPending ? "Refreshing…" : "🔄 Refresh"}
@@ -106,7 +106,7 @@ export default function ExternalIntelTab() {
             Last refresh: <b>{refreshMutation.data.created}</b> new item
             {refreshMutation.data.created === 1 ? "" : "s"}
             {refreshMutation.data.is_stub && (
-              <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wider font-semibold text-[10px]">
+              <span className="ml-2 px-1.5 py-0.5 rounded bg-beroe-amber/15 text-beroe-amber border border-beroe-amber/40 uppercase tracking-wider font-semibold text-[10px]">
                 Stub AI
               </span>
             )}
@@ -120,7 +120,7 @@ export default function ExternalIntelTab() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Search news about ${account.name}…`}
-          className="w-full text-[12px] border border-beroe-card-border rounded-md px-3 py-2 focus:border-emerald-500 focus:outline-none"
+          className="w-full text-[12px] border border-beroe-card-border rounded-md px-3 py-2 focus:border-beroe-green focus:outline-none"
         />
         {/* Filter pills */}
         <div className="flex gap-1 flex-wrap">
@@ -366,7 +366,7 @@ function IntelCard({
                       href={item.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-emerald-700 hover:underline font-semibold"
+                      className="text-beroe-green hover:underline font-semibold"
                       title={`Open original article on ${item.source}`}
                     >
                       📰 {item.source}
@@ -378,12 +378,12 @@ function IntelCard({
               )}
             </span>
             {item.is_new && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-600 text-white">
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-beroe-purple text-white">
                 New
               </span>
             )}
             {item.ai_generated && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 font-semibold uppercase tracking-wider">
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-beroe-teal/10 text-beroe-teal border border-beroe-teal/30 font-semibold uppercase tracking-wider">
                 AI
               </span>
             )}
@@ -393,7 +393,7 @@ function IntelCard({
               href={item.source_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[13px] font-bold text-text-primary text-left hover:text-emerald-700 hover:underline block"
+              className="text-[13px] font-bold text-text-primary text-left hover:text-beroe-green hover:underline block"
               title="Open the original article in a new tab"
             >
               {item.headline} ↗
@@ -401,7 +401,7 @@ function IntelCard({
           ) : (
             <button
               onClick={() => setOpen((v) => !v)}
-              className="text-[13px] font-bold text-text-primary text-left hover:text-emerald-700"
+              className="text-[13px] font-bold text-text-primary text-left hover:text-beroe-green"
             >
               {item.headline}
             </button>
@@ -424,7 +424,7 @@ function IntelCard({
                     href={item.source_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-emerald-700 hover:underline"
+                    className="text-beroe-green hover:underline"
                   >
                     Source link
                   </a>
@@ -434,7 +434,7 @@ function IntelCard({
           )}
           <div className="flex gap-1.5 mt-2 flex-wrap">
             {item.signal_created ? (
-              <span className="text-[10px] text-emerald-700 inline-flex items-center gap-1 px-1.5 py-0.5">
+              <span className="text-[10px] text-beroe-green inline-flex items-center gap-1 px-1.5 py-0.5">
                 ✓ Signal created
               </span>
             ) : (
@@ -442,7 +442,7 @@ function IntelCard({
                 <button
                   onClick={() => push.mutate()}
                   disabled={push.isPending}
-                  className="text-[10px] px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  className="text-[10px] px-2 py-0.5 rounded border border-beroe-green/30 bg-beroe-green/15 text-beroe-green hover:bg-beroe-green/20 disabled:opacity-50"
                   title="Promote this intel to a Soft Signal (drives the appetite score)"
                 >
                   → Push as Soft Signal
@@ -464,7 +464,7 @@ function IntelCard({
               ✉ Email to team
             </button>
             {emailToast && (
-              <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+              <span className="text-[10px] text-beroe-green bg-beroe-green/15 border border-beroe-green/30 rounded px-1.5 py-0.5">
                 ✓ {emailToast}
               </span>
             )}

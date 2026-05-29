@@ -108,7 +108,7 @@ export default function DocumentsReportsTab() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-md px-3 py-2 text-[12px]">
+        <div className="bg-beroe-red/10 border border-beroe-red/30 text-beroe-red rounded-md px-3 py-2 text-[12px]">
           {error}
         </div>
       )}
@@ -169,7 +169,7 @@ export default function DocumentsReportsTab() {
               key={g.group}
               className="bg-white border border-beroe-card-border rounded-card p-3.5"
             >
-              <div className="text-[12px] font-bold text-cyan-700 mb-2">
+              <div className="text-[12px] font-bold text-beroe-teal mb-2">
                 {g.group}
               </div>
               <div className="space-y-1">
@@ -243,7 +243,7 @@ function ReportCard({
     <div
       className={cn(
         "bg-white border rounded-card p-4 flex items-start gap-3",
-        active ? "border-cyan-500/40 ring-1 ring-cyan-500/20" : "border-beroe-card-border",
+        active ? "border-beroe-teal/40 ring-1 ring-beroe-teal/20" : "border-beroe-card-border",
       )}
     >
       <div className="text-[28px] flex-shrink-0">{r.icon}</div>

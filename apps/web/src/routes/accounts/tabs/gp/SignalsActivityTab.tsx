@@ -162,7 +162,7 @@ function SignalRow({
         className={cn(
           "flex items-start gap-2.5 p-2 rounded-md border",
           isResolved
-            ? "bg-slate-50 border-slate-200 opacity-80"
+            ? "bg-beroe-bg border-beroe-card-border opacity-80"
             : "border-beroe-card-border bg-white",
         )}
       >
@@ -183,7 +183,7 @@ function SignalRow({
               · {IMPACT_LABELS[sig.impact]}
             </span>
             {isResolved && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 uppercase tracking-wider font-semibold">
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-beroe-bg text-text-secondary uppercase tracking-wider font-semibold">
                 Resolved
               </span>
             )}
@@ -198,7 +198,7 @@ function SignalRow({
             {sig.category && <> · {sig.category}</>}
           </div>
           {isResolved && sig.resolved_note && (
-            <div className="text-[10px] text-emerald-700 mt-1 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+            <div className="text-[10px] text-beroe-green mt-1 bg-beroe-green/15 border border-beroe-green/30 rounded px-2 py-1">
               <b>Resolution:</b> {sig.resolved_note}
             </div>
           )}
@@ -208,7 +208,7 @@ function SignalRow({
             {!isResolved && (
               <button
                 onClick={() => setShowResolveModal(true)}
-                className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                className="text-[10px] px-1.5 py-0.5 rounded border border-beroe-green/30 text-beroe-green hover:bg-beroe-green/15"
                 title="Mark resolved (requires note)"
               >
                 ✅ Resolve
@@ -237,7 +237,7 @@ function SignalRow({
                   if (confirm(`Hard-delete "${sig.signal}"? This is irreversible.`))
                     del.mutate();
                 }}
-                className="text-[10px] px-1.5 py-0.5 rounded border border-red-200 text-red-700 hover:bg-red-50"
+                className="text-[10px] px-1.5 py-0.5 rounded border border-beroe-red/30 text-beroe-red hover:bg-beroe-red/10"
               >
                 ✕ Delete
               </button>
@@ -290,7 +290,7 @@ function ResolveSignalModal({
         placeholder="e.g. IT configured SSO on 14 Nov; 32 users now active"
         className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
       />
-      {err && <div className="text-[11px] text-red-700 mt-2">{err}</div>}
+      {err && <div className="text-[11px] text-beroe-red mt-2">{err}</div>}
       <div className="flex justify-end gap-2 mt-3">
         <button
           onClick={onClose}
@@ -301,7 +301,7 @@ function ResolveSignalModal({
         <button
           onClick={() => m.mutate()}
           disabled={m.isPending || note.trim().length < 5}
-          className="text-[11px] px-3 py-1.5 rounded-md bg-emerald-600 text-white font-semibold disabled:opacity-50"
+          className="text-[11px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold disabled:opacity-50"
         >
           Mark resolved
         </button>
@@ -411,7 +411,7 @@ function AddSignalModal({
             className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
           />
         </FormRow>
-        {err && <div className="text-[11px] text-red-700">{err}</div>}
+        {err && <div className="text-[11px] text-beroe-red">{err}</div>}
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
@@ -535,7 +535,7 @@ function ActivityRow({
             onClick={() => {
               if (confirm(`Delete activity "${act.title}"?`)) del.mutate();
             }}
-            className="text-[10px] text-text-muted hover:text-red-700 px-1"
+            className="text-[10px] text-text-muted hover:text-beroe-red px-1"
           >
             ✕
           </button>
@@ -649,7 +649,7 @@ function LogActivityModal({
             onChange={(ids) => setForm({ ...form, linked_metrics: ids })}
           />
         </FormRow>
-        {err && <div className="text-[11px] text-red-700">{err}</div>}
+        {err && <div className="text-[11px] text-beroe-red">{err}</div>}
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}

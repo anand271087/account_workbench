@@ -57,7 +57,7 @@ export default function IntelligenceTab() {
             className={cn(
               "text-[12px] px-3 py-1.5 rounded-md border-[1.5px] transition-colors",
               sub === t.id
-                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-700 font-bold"
+                ? "border-beroe-teal/40 bg-beroe-teal/100/10 text-beroe-teal font-bold"
                 : "border-beroe-card-border bg-white text-text-secondary font-medium hover:bg-beroe-bg/60",
             )}
           >
@@ -156,7 +156,7 @@ function CategoryWatch({ data }: { data: PlatformIntel }) {
                       {cat.visits} visits
                     </span>
                   </div>
-                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-beroe-bg rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${pct}%`, background: HEAT_COLOR[cat.heat] }}
@@ -176,10 +176,10 @@ function CategoryWatch({ data }: { data: PlatformIntel }) {
             {ci.insights.map((ins, i) => {
               const tone =
                 ins.tone === "red"
-                  ? "bg-red-50 text-red-700 border-red-200"
+                  ? "bg-beroe-red/10 text-beroe-red border-beroe-red/30"
                   : ins.tone === "warn"
-                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200";
+                    ? "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40"
+                    : "bg-beroe-green/15 text-beroe-green border-beroe-green/30";
               return (
                 <div
                   key={i}
@@ -322,7 +322,7 @@ function AbiEngagement({ data }: { data: PlatformIntel }) {
                       {val} <span className="text-text-muted">({pct}%)</span>
                     </span>
                   </div>
-                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-beroe-bg rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${pct}%`, background: col }}
@@ -363,7 +363,7 @@ function AbiEngagement({ data }: { data: PlatformIntel }) {
       {abi.insight && (
         <Card>
           <div className="text-[14px] font-bold mb-2">Abi Usage Insight</div>
-          <div className="text-[12px] text-text-secondary bg-cyan-50 border border-cyan-200 rounded px-3 py-2 leading-relaxed">
+          <div className="text-[12px] text-text-secondary bg-beroe-teal/10 border border-beroe-teal/30 rounded px-3 py-2 leading-relaxed">
             {abi.insight}
           </div>
         </Card>
@@ -421,7 +421,7 @@ function IndustryBenchmark({
           return (
             <div
               key={label}
-              className="bg-slate-50 rounded-md p-3.5 text-center"
+              className="bg-beroe-bg rounded-md p-3.5 text-center"
             >
               <div
                 className="text-[24px] font-extrabold"
@@ -481,7 +481,7 @@ function EngagementMetrics({ data }: { data: PlatformIntel }) {
           return (
             <div
               key={label}
-              className="bg-slate-50 rounded-md p-3.5 text-center"
+              className="bg-beroe-bg rounded-md p-3.5 text-center"
             >
               <div
                 className="text-[20px] font-extrabold"
@@ -490,7 +490,7 @@ function EngagementMetrics({ data }: { data: PlatformIntel }) {
                 {val}
               </div>
               <div className="text-[10px] text-text-muted my-1">{label}</div>
-              <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-1 bg-beroe-bg rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full"
                   style={{ width: `${pct}%`, background: col }}
@@ -507,7 +507,7 @@ function EngagementMetrics({ data }: { data: PlatformIntel }) {
             {segRows.map(([label, val, col]) => (
               <div
                 key={label}
-                className="bg-slate-50 rounded-md p-2 text-center"
+                className="bg-beroe-bg rounded-md p-2 text-center"
               >
                 <div
                   className="text-[16px] font-extrabold"

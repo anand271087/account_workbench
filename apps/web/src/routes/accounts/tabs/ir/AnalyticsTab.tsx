@@ -81,7 +81,7 @@ export default function AnalyticsTab() {
               className={cn(
                 "text-[11px] px-2.5 py-1.5 rounded-md border-[1.5px] transition-colors",
                 sub === t.id
-                  ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-700 font-bold"
+                  ? "border-beroe-teal/40 bg-beroe-teal/10 text-beroe-teal font-bold"
                   : "border-beroe-card-border bg-white text-text-secondary font-medium hover:bg-beroe-bg/60",
               )}
             >
@@ -89,7 +89,7 @@ export default function AnalyticsTab() {
             </button>
           ))}
         </div>
-        <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5 flex-shrink-0">
+        <div className="flex gap-0.5 bg-beroe-bg rounded-md p-0.5 flex-shrink-0">
           {(["numbers", "charts"] as Mode[]).map((mv) => (
             <button
               key={mv}
@@ -97,7 +97,7 @@ export default function AnalyticsTab() {
               className={cn(
                 "text-[11px] px-2.5 py-1 rounded font-semibold uppercase tracking-wider",
                 mode === mv
-                  ? "bg-white shadow-sm text-cyan-700"
+                  ? "bg-white shadow-sm text-beroe-teal"
                   : "text-text-muted",
               )}
             >
@@ -707,7 +707,7 @@ function CCSection({
       <Card>
         <CardTitle>Total Credits Estimated</CardTitle>
         <div className="text-center py-10">
-          <div className="text-[48px] font-extrabold text-cyan-700">
+          <div className="text-[48px] font-extrabold text-beroe-teal">
             {creditsEst}
           </div>
           <div className="text-[12px] text-text-muted mt-2">
@@ -908,7 +908,7 @@ function BarChart({
               <span className="font-medium">{r.label}</span>
               <span className="font-semibold">{r.value}</span>
             </div>
-            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-2.5 bg-beroe-bg rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full"
                 style={{ width: `${pct}%`, background: r.color }}
