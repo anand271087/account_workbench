@@ -814,7 +814,7 @@ function KanbanColumn({
                   />
                   <button
                     onClick={() => onChange(items.filter((_, j) => j !== i))}
-                    className="text-[11px] text-text-muted hover:text-red-700 px-1"
+                    className="text-[11px] text-text-muted hover:text-beroe-red px-1"
                   >
                     ✕
                   </button>

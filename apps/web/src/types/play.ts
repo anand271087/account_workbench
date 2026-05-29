@@ -68,7 +68,7 @@ export interface Appetite {
 
 // Mirrors prototype PLAY_MODES.
 // Per-mode brand palette (Beroe brand book Sept 2025). The previous
-// prototype hex (#FD576B / #EF9637 / #35E1D4) have been substituted
+// prototype hex (#CF4548 / #F0BC41 / #35E1D4) have been substituted
 // for the brand RAG triad:
 //   rescue → Risk Red   #CF4548
 //   retain → Risk Amber #F0BC41

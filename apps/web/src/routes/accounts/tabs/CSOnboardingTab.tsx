@@ -158,7 +158,7 @@ export default function CSOnboardingTab() {
             desc="CSM picks up account with no clean handover"
             active={form.cs_entry_type === "B"}
             disabled={!editable}
-            col="#EF9637"
+            col="#F0BC41"
             activeBg="#fff8eb"
             onClick={() => setEntry("B")}
           />
@@ -427,8 +427,8 @@ function HandoverChecklistInline({
                 width: 18,
                 height: 18,
                 borderRadius: 4,
-                border: `2px solid ${checked ? "#40CC8F" : "#cbd5e1"}`,
-                background: checked ? "#40CC8F" : "#fff",
+                border: `2px solid ${checked ? "#6EC457" : "#cbd5e1"}`,
+                background: checked ? "#6EC457" : "#fff",
                 fontSize: 10,
               }}
             >
@@ -437,7 +437,7 @@ function HandoverChecklistInline({
             <span
               className="text-[12px]"
               style={{
-                color: checked ? "#2fb87a" : undefined,
+                color: checked ? "#6EC457" : undefined,
                 textDecoration: checked ? "line-through" : "none",
               }}
             >
@@ -451,8 +451,8 @@ function HandoverChecklistInline({
           className="mt-2 text-[11px] px-3 py-2 rounded-md"
           style={{
             background: "#f0fdf4",
-            border: "1px solid #40CC8F30",
-            color: "#2fb87a",
+            border: "1px solid #6EC45730",
+            color: "#6EC457",
           }}
         >
           ✅ Handover complete. Proceed to stakeholder mapping and success
@@ -463,7 +463,7 @@ function HandoverChecklistInline({
           className="mt-2 text-[11px] px-3 py-2 rounded-md"
           style={{
             background: "#fff8eb",
-            border: "1px solid #EF963730",
+            border: "1px solid #F0BC4130",
             color: "#b45309",
           }}
         >
@@ -525,8 +525,8 @@ function EntryBBaselineInline({
           className="mt-2 text-[11px] px-3 py-2 rounded-md"
           style={{
             background: "#f0fdf4",
-            border: "1px solid #40CC8F30",
-            color: "#2fb87a",
+            border: "1px solid #6EC45730",
+            color: "#6EC457",
           }}
         >
           ✅ Baseline captured. Proceed to stakeholder mapping.
@@ -536,7 +536,7 @@ function EntryBBaselineInline({
           className="mt-2 text-[11px] px-3 py-2 rounded-md"
           style={{
             background: "#fff8eb",
-            border: "1px solid #EF963730",
+            border: "1px solid #F0BC4130",
             color: "#b45309",
           }}
         >
@@ -659,7 +659,7 @@ function StakeholderCard({
           : filled
             ? `${col}08`
             : "#f8f9fc",
-        border: `1.5px solid ${duplicateOf ? "#FD576B30" : filled ? `${col}30` : "#e4eaf6"}`,
+        border: `1.5px solid ${duplicateOf ? "#CF454830" : filled ? `${col}30` : "#e4eaf6"}`,
       }}
     >
       <div className="flex items-center gap-1.5 mb-2">
@@ -671,7 +671,7 @@ function StakeholderCard({
           {label}
         </span>
         {filled && (
-          <span className="text-[10px]" style={{ color: "#2fb87a" }}>
+          <span className="text-[10px]" style={{ color: "#6EC457" }}>
             ✓
           </span>
         )}
@@ -705,7 +705,7 @@ function StakeholderCard({
         className={inputCls(editable)}
       />
       {duplicateOf && (
-        <div className="mt-2 text-[10px] font-semibold flex items-start gap-1" style={{ color: "#e63950" }}>
+        <div className="mt-2 text-[10px] font-semibold flex items-start gap-1" style={{ color: "#CF4548" }}>
           <span>⚠</span>
           <span>
             Same {duplicateOf.field} as the {duplicateOf.roleLabel} role —
@@ -897,7 +897,7 @@ function GoalAlignmentRow({
   const qc = useQueryClient();
   const dot =
     g.alignment_status === "aligned"
-      ? "bg-emerald-500"
+      ? "bg-beroe-green"
       : g.alignment_status === "partial"
         ? "bg-beroe-amber/150"
         : "bg-text-muted";

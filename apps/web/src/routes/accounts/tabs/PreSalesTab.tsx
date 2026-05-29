@@ -547,12 +547,12 @@ export default function PreSalesTab() {
       {form.is_editable && account.handed_off_to_solutioning && (
         <div
           className="mt-2 rounded-lg px-3 py-2 flex items-center gap-2"
-          style={{ background: "#f0fdf4", border: "1px solid #40CC8F30" }}
+          style={{ background: "#f0fdf4", border: "1px solid #6EC45730" }}
         >
-          <span style={{ color: "#40CC8F" }}>✓</span>
+          <span style={{ color: "#6EC457" }}>✓</span>
           <span
             className="text-[11px] font-semibold"
-            style={{ color: "#2fb87a" }}
+            style={{ color: "#6EC457" }}
           >
             Handed off to Solutioning
             {account.handed_off_at &&
@@ -566,7 +566,7 @@ export default function PreSalesTab() {
                 ?.scrollIntoView({ behavior: "smooth", block: "start" })
             }
             className="ml-auto text-[11px] font-semibold hover:underline"
-            style={{ color: "#2fb87a" }}
+            style={{ color: "#6EC457" }}
           >
             Open Solutioning ↓
           </button>

@@ -79,7 +79,7 @@ export function UnsavedChangesDialog({
           </button>
           <button
             onClick={onDiscardAndGo}
-            className="px-3 py-1.5 rounded-lg text-sm border border-red-200 text-red-700 hover:bg-red-50 font-semibold"
+            className="px-3 py-1.5 rounded-lg text-sm border border-beroe-red/30 text-beroe-red hover:bg-beroe-red/10 font-semibold"
           >
             Discard & continue
           </button>

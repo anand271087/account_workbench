@@ -11,7 +11,7 @@ export function PlaceholderTab({ title, milestone, description }: Props) {
       <div className="text-3xl mb-2">🚧</div>
       <h2 className="text-base font-bold text-text-primary mb-1">{title}</h2>
       <p className="text-sm text-text-secondary max-w-md mx-auto">{description}</p>
-      <div className="inline-block mt-3 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-bold">
+      <div className="inline-block mt-3 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-beroe-amber/10 text-beroe-amber border border-beroe-amber/40 font-bold">
         Ships in {milestone}
       </div>
     </div>

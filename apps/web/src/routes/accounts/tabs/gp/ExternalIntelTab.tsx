@@ -342,7 +342,7 @@ function IntelCard({
         {item.signal_relevance === "high" && (
           <span
             className="w-2 h-2 rounded-full mt-2 flex-shrink-0 animate-pulse"
-            style={{ background: "#e63950" }}
+            style={{ background: "#CF4548" }}
             title="High relevance"
           />
         )}

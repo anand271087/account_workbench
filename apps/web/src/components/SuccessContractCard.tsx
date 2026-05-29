@@ -9,13 +9,13 @@
 //       Green-tinted summary card (3 compact tiles) — Metric ·
 //       Measurement · Value Narrative — with a 🔒 "Locked" header
 //       and (admin-only) Unlock button on the right.
-//       Brand colour: Risk Green #6EC457 (was prototype #40CC8F).
+//       Brand colour: Risk Green #6EC457 (was prototype #6EC457).
 //
 //   * DRAFT (locked_at == null):
 //       Dashed-border card with 3 columns — Lock 1 / Lock 2 / Lock 3.
 //       Centered "🔒 Lock Success Contract" CTA at the bottom.
 //       Brand colour: Risk Amber #F0BC41 for lock labels + dashed
-//       border (was prototype #EF9637).
+//       border (was prototype #F0BC41).
 //
 // On top of either layout, an amber "📋 Draft pre-filled from Sales
 // handoff" banner shows when auto_drafted is true and the contract
@@ -122,7 +122,7 @@ export function SuccessContractCard({ accountId, isAdmin = false }: Props) {
   if (isError) {
     return (
       <div className="bg-white border border-beroe-card-border rounded-card p-5">
-        <div className="text-red-700 text-sm">Could not load Success Contract.</div>
+        <div className="text-beroe-red text-sm">Could not load Success Contract.</div>
       </div>
     );
   }
@@ -298,7 +298,7 @@ function LockedSummary({
         <LockedTile label="Value Narrative">
           <div
             className="text-[11px] italic leading-snug"
-            style={{ color: "#7a3800" }}
+            style={{ color: "#F0BC41" }}
           >
             &ldquo;
             {(form.value_narrative ?? "").slice(0, 120)}

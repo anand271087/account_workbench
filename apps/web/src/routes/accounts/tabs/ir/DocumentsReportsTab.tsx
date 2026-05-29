@@ -45,14 +45,14 @@ const REPORT_CARDS: Array<{
     title: "Monthly Business Review (MBR)",
     desc: "Shorter monthly snapshot: usage highlights, open checkpoints, metrics, and action items.",
     icon: "📅",
-    color: "#EF9637",
+    color: "#F0BC41",
   },
   {
     type: "utilization",
     title: "Utilization Report",
     desc: "User adoption overview, module-wise usage, and top platform power-users (Super Users).",
     icon: "📊",
-    color: "#40CC8F",
+    color: "#6EC457",
   },
 ];
 

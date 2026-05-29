@@ -5,7 +5,7 @@
 //   Signals & Activity (M27 — stub)
 //   External Intelligence (M28 — stub)
 //
-// Green theme to match the prototype's strategy palette (#40CC8F).
+// Green theme to match the prototype's strategy palette (#6EC457).
 
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 
@@ -45,8 +45,8 @@ export default function GrowthPipelineLayout() {
               cn(
                 "flex-1 min-w-[140px] px-3 py-2 rounded-lg border-[1.5px] text-[12px] text-center transition-colors duration-100",
                 isActive
-                  ? "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 font-bold"
-                  : "border-beroe-card-border bg-white text-text-secondary font-medium hover:border-emerald-500/30 hover:text-emerald-700",
+                  ? "border-beroe-green/40 bg-beroe-green/5 text-beroe-green font-bold"
+                  : "border-beroe-card-border bg-white text-text-secondary font-medium hover:border-beroe-green/30 hover:text-beroe-green",
               )
             }
             end

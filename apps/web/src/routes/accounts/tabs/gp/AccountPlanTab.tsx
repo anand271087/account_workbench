@@ -339,12 +339,12 @@ function ScoreBreakdownDetails({ appetite }: { appetite: Appetite }) {
   const tiles: Array<[string, string, string, string, string]> = [
     ["Health Score", "40%", `${bd.health_pts}/40`, "#4A00F8", "Account health (adoption + signals)"],
     ["Signal Mix", "25%", `${bd.sig_pts}/25`, "#C344C7", "Balance of positive vs risk signals"],
-    ["Renewal Proximity", "15%", `${bd.renew_pts}/15`, "#EF9637", "Time to renewal + risk pressure"],
+    ["Renewal Proximity", "15%", `${bd.renew_pts}/15`, "#F0BC41", "Time to renewal + risk pressure"],
     [
       "ARR Growth",
       "20%",
       `${bd.arr_pts}/20`,
-      "#40CC8F",
+      "#6EC457",
       `Pipeline vs ${bd.arr_target_pct}% target`,
     ],
   ];
@@ -420,17 +420,17 @@ function AcvTile({
   const tiles =
     mode === "rescue"
       ? ([
-          ["ACV at Risk", fmtK(current), "#e63950"],
-          ["Days to Renewal", "—", "#d88520"],
-          ["Risk Level", "Elevated", "#e63950"],
+          ["ACV at Risk", fmtK(current), "#CF4548"],
+          ["Days to Renewal", "—", "#F0BC41"],
+          ["Risk Level", "Elevated", "#CF4548"],
         ] as Array<[string, string, string]>)
       : ([
           ["Current", fmtK(current), "#0d1b2e"],
-          ["Target", target > 0 ? fmtK(target) : fmtK(current), "#2fb87a"],
+          ["Target", target > 0 ? fmtK(target) : fmtK(current), "#6EC457"],
           [
             "Gap",
             gap > 0 ? fmtK(gap) : "Done",
-            gap > 0 ? "#FD576B" : "#2fb87a",
+            gap > 0 ? "#CF4548" : "#6EC457",
           ],
           ["Pipeline", fmtK(pipeline), "#C344C7"],
         ] as Array<[string, string, string]>);
@@ -493,10 +493,10 @@ function ArrBurnDown({
   const statusCol = isNA
     ? "#94a3b8"
     : bd.arr_status === "on_track"
-      ? "#40CC8F"
+      ? "#6EC457"
       : bd.arr_status === "behind"
-        ? "#EF9637"
-        : "#FD576B";
+        ? "#F0BC41"
+        : "#CF4548";
   const statusLabel = isNA
     ? "Set a target to track"
     : bd.arr_status === "on_track"
@@ -518,7 +518,7 @@ function ArrBurnDown({
         {[
           ["Current ACV", fmtK(current), "#0d1b2e"],
           ["Projected (ACV+Pipeline)", fmtK(projected), "#4A00F8"],
-          [`Target (${bd.arr_target_pct}% growth)`, fmtK(target), "#2fb87a"],
+          [`Target (${bd.arr_target_pct}% growth)`, fmtK(target), "#6EC457"],
         ].map(([label, value, col]) => (
           <div key={label} className="bg-beroe-bg rounded-md p-2 text-center">
             <div className="text-[14px] font-extrabold" style={{ color: col }}>
@@ -1002,7 +1002,7 @@ function ProductSaturation({ accountId }: { accountId: string }) {
           <div
             className="text-[20px] font-extrabold"
             style={{
-              color: pct >= 50 ? "#2fb87a" : pct >= 25 ? "#EF9637" : "#FD576B",
+              color: pct >= 50 ? "#6EC457" : pct >= 25 ? "#F0BC41" : "#CF4548",
             }}
           >
             {pct}%
@@ -1015,7 +1015,7 @@ function ProductSaturation({ accountId }: { accountId: string }) {
           className="h-full"
           style={{
             width: `${pct}%`,
-            background: pct >= 50 ? "#40CC8F" : pct >= 25 ? "#EF9637" : "#FD576B",
+            background: pct >= 50 ? "#6EC457" : pct >= 25 ? "#F0BC41" : "#CF4548",
           }}
         />
       </div>
@@ -1242,15 +1242,15 @@ function PlanInputs({
 
   const rows: { label: string; value: string; col: string }[] = [
     { label: "Health", value: `${accountHealth ?? 0}/100`, col: "#4A00F8" },
-    { label: "Product", value: `${productScore}/100`, col: "#40CC8F" },
+    { label: "Product", value: `${productScore}/100`, col: "#6EC457" },
     { label: "Signals", value: `${signalsScore}/100`, col: "#C344C7" },
     {
       label: "Active Signals",
       value: `${activeSignals} logged`,
-      col: "#e63950",
+      col: "#CF4548",
     },
-    { label: "Activity", value: `${activityCount} entries`, col: "#EF9637" },
-    { label: "Hot Cats", value: `${hotCats}`, col: "#FD576B" },
+    { label: "Activity", value: `${activityCount} entries`, col: "#F0BC41" },
+    { label: "Hot Cats", value: `${hotCats}`, col: "#CF4548" },
   ];
 
   return (

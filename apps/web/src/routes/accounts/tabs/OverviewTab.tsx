@@ -439,9 +439,9 @@ function Lifecycle({
           className={cn(
             "h-full rounded-full transition-all",
             dtr !== null && dtr < 0
-              ? "bg-red-500"
+              ? "bg-beroe-red"
               : pct > 80
-                ? "bg-amber-500"
+                ? "bg-beroe-amber"
                 : "bg-beroe-blue",
           )}
           style={{ width: `${pct}%` }}

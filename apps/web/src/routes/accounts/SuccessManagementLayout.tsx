@@ -10,7 +10,7 @@
 //      missing (prototype line 2913-2919).
 //   3. 5 pill sub-tabs with prototype's exact icons + colours + per-tab
 //      status badge (pg=✓ green / pa=• amber / pr=! red / pgr=• grey).
-//      Active pill: bg #fff0f2 + border #FD576B40 + text #FD576B.
+//      Active pill: bg #fff0f2 + border #CF454840 + text #CF4548.
 //      Locked pill: greyed at opacity 0.4 with 🔒 badge (matches
 //      prototype line 2926 — Checkpoints locks until contract locks;
 //      Renewal locks until at least one checkpoint is signed off).
@@ -45,7 +45,7 @@ interface SMSubTab {
   lockReason: string;
 }
 
-const PINK = "#FD576B";
+const PINK = "#CF4548";
 const PINK_BG = "#fff0f2";
 const PINK_BORDER = `${PINK}40`;
 
@@ -264,12 +264,12 @@ export default function SuccessManagementLayout() {
       {isActivated ? (
         <div
           className="rounded-card px-4 py-2.5 mb-3 flex items-center gap-2.5"
-          style={{ background: "#f0fdf4", border: "1.5px solid #40CC8F40" }}
+          style={{ background: "#f0fdf4", border: "1.5px solid #6EC45740" }}
         >
           <span className="text-[14px]">✅</span>
           <div
             className="text-[12px] font-semibold"
-            style={{ color: "#2fb87a" }}
+            style={{ color: "#6EC457" }}
           >
             Account Activated · Success contract locked{" "}
             {sc.data?.locked_at
@@ -288,13 +288,13 @@ export default function SuccessManagementLayout() {
           <div className="flex-1">
             <div
               className="text-[13px] font-bold"
-              style={{ color: "#e63950" }}
+              style={{ color: "#CF4548" }}
             >
               Account Not Activated
             </div>
             <div
               className="text-[11px]"
-              style={{ color: "#c42040" }}
+              style={{ color: "#CF4548" }}
             >
               Lock the success contract and define at least one goal to
               activate.
@@ -317,12 +317,12 @@ export default function SuccessManagementLayout() {
       {stkMissing.length > 0 && (
         <div
           className="rounded-card px-4 py-2.5 mb-2.5 flex items-center gap-2.5"
-          style={{ background: "#fff8eb", border: "1.5px solid #EF963740" }}
+          style={{ background: "#fff8eb", border: "1.5px solid #F0BC4140" }}
         >
           <span className="text-[14px]">👥</span>
           <div
             className="flex-1 text-[12px]"
-            style={{ color: "#d88520" }}
+            style={{ color: "#F0BC41" }}
           >
             <b>Stakeholder map incomplete</b> — missing:{" "}
             {stkMissing.join(", ")}. All 3 roles required.

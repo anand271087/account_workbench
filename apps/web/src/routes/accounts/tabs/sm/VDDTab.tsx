@@ -549,9 +549,9 @@ function SectionHeader({ title, hint }: { title: string; hint?: string }) {
  *  3382-3392. Green-tinted box with "CSM Attribution Summary" title in
  *  Risk Green, 3-column grid with per-value colours from the brand
  *  palette:
- *    Identified  → Risk Amber #F0BC41  (was prototype #EF9637)
+ *    Identified  → Risk Amber #F0BC41  (was prototype #F0BC41)
  *    Committed   → Indigo     #4A00F8  (on brand)
- *    Implemented → Risk Green #6EC457  (was prototype #40CC8F)
+ *    Implemented → Risk Green #6EC457  (was prototype #6EC457)
  *  Only renders when at least one total is > 0 (prototype's
  *  `if(idSum>0)` gate). */
 function CsmAttributionRollup({

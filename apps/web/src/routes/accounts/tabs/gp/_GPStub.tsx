@@ -19,7 +19,7 @@ export function GPStub({
     <div className="bg-white border border-beroe-card-border rounded-card p-6">
       <div className="flex items-center gap-2 mb-2">
         <h2 className="text-[15px] font-bold text-text-primary">{title}</h2>
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-beroe-green/15 text-beroe-green">
           {milestone}
         </span>
       </div>

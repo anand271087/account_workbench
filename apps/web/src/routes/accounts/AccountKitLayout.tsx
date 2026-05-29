@@ -107,14 +107,14 @@ function KitCompletion({ account }: { account: AccountDetail }) {
       done: account.handed_off_to_solutioning,
       col: "#4A00F8", // violet
     },
-    { label: "Sales Hand-off", done: account.gate_signed, col: "#EF9637" }, // orange
+    { label: "Sales Hand-off", done: account.gate_signed, col: "#F0BC41" }, // orange
     { label: "CS Onboarding", done: account.cs_entry_type !== null, col: "#C344C7" }, // magenta
     { label: "Brief", done: account.handed_off_to_solutioning, col: "#35E1D4" }, // teal
   ];
   const completed = steps.filter((s) => s.done).length;
   const overallPct = Math.round((completed / steps.length) * 100);
   const overallCol =
-    overallPct >= 75 ? "#2fb87a" : overallPct >= 40 ? "#d88520" : "#FD576B";
+    overallPct >= 75 ? "#6EC457" : overallPct >= 40 ? "#F0BC41" : "#CF4548";
 
   return (
     <div className="mb-3 bg-white border border-beroe-card-border rounded-card px-4 py-2.5">
@@ -197,9 +197,9 @@ function downloadAccountKit(account: AccountDetail) {
 <html><head><meta charset="utf-8" /><title>Account Kit — ${account.name}</title>
 <style>
   body { font-family: -apple-system, system-ui, sans-serif; padding: 32px; max-width: 880px; margin: 0 auto; color: #1f2937; }
-  h1 { color: #001e52; margin-bottom: 4px; font-size: 22px; }
+  h1 { color: #001137; margin-bottom: 4px; font-size: 22px; }
   .meta { color: #64748b; font-size: 12px; margin-bottom: 16px; }
-  h2 { color: #0074D9; margin-top: 24px; border-bottom: 2px solid #e4eaf6; padding-bottom: 4px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
+  h2 { color: #4A00F8; margin-top: 24px; border-bottom: 2px solid #e4eaf6; padding-bottom: 4px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
   td { padding: 4px 0; vertical-align: top; }
   td:first-child { color: #64748b; font-weight: 600; width: 200px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }

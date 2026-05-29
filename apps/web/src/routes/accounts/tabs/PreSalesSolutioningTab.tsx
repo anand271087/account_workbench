@@ -16,7 +16,7 @@ export default function PreSalesSolutioningTab() {
   return (
     <div className="space-y-4">
       {/* Section anchor for jumping to Solutioning portion */}
-      <div className="bg-blue-50/40 border border-blue-200/50 rounded-md px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+      <div className="bg-beroe-blue/10/40 border border-beroe-blue/30/50 rounded-md px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
         <div className="text-text-secondary">
           Pre-Sales information + Solutioning value definition live here as a
           combined pre-signing workflow.

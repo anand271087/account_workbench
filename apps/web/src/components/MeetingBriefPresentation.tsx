@@ -19,8 +19,8 @@ import {
 import type { Engagement } from "@/types/engagement";
 
 // Prototype palette — keep in sync with bMomBrief inline colours.
-const MP = "#534AB7"; // Beroe purple
-const MN = "#0D1117"; // dark/self
+const MP = "#4A00F8"; // Beroe purple
+const MN = "#001137"; // dark/self
 const MA = "#B45309"; // amber accent (insights)
 const MG = "#166534"; // success green
 const MR = "#CF3030"; // red
@@ -66,12 +66,12 @@ export function MeetingBriefPresentation({
 
   if (isEmpty) {
     return (
-      <div className="bg-violet-50 border border-violet-200 rounded-card p-8 text-center">
+      <div className="bg-beroe-blue/5 border border-beroe-blue/30 rounded-card p-8 text-center">
         <div className="text-[24px] mb-2">📝</div>
-        <div className="text-sm font-bold text-violet-900 mb-1">
+        <div className="text-sm font-bold text-beroe-blue mb-1">
           No brief generated yet
         </div>
-        <div className="text-[12px] text-violet-800/80">
+        <div className="text-[12px] text-beroe-blue/80">
           Switch to <b>Edit</b> mode and click <b>✨ Generate full brief</b>
           {" "}to auto-fill from {accountName}'s context.
         </div>
@@ -104,7 +104,7 @@ export function MeetingBriefPresentation({
           </span>
           <span
             className="text-[15px] font-bold uppercase"
-            style={{ color: "#FD576B", letterSpacing: "0.5px" }}
+            style={{ color: "#CF4548", letterSpacing: "0.5px" }}
           >
             {accountName}
           </span>
@@ -144,7 +144,7 @@ export function MeetingBriefPresentation({
           <div
             className="rounded-lg px-5 py-3.5 text-[13px] font-semibold text-white leading-relaxed"
             style={{
-              background: `linear-gradient(135deg, ${MP}, #7C6FD6)`,
+              background: `linear-gradient(135deg, ${MP}, #4A00F8)`,
             }}
           >
             🎯 {data.win_condition}
@@ -152,7 +152,7 @@ export function MeetingBriefPresentation({
         )}
         {/* ============================================================
             3. COMPANY SNAPSHOT — verbatim port of prototype line 8835-8842.
-               Dark #0D1117 bar with vertical-divider columns.
+               Dark #001137 bar with vertical-divider columns.
             ============================================================ */}
         {data.company_snapshot.length > 0 && (
           <div
@@ -291,7 +291,7 @@ export function MeetingBriefPresentation({
                                     ? {
                                         background: "#EAF3DE",
                                         color: "#27500A",
-                                        borderColor: "#97C459",
+                                        borderColor: "#6EC457",
                                       }
                                     : {
                                         background: "#f4f3fe",
@@ -357,7 +357,7 @@ export function MeetingBriefPresentation({
                       className="rounded-r-lg px-3 py-2.5"
                       style={{
                         background: isHigh ? "#FCEBEB" : "#FFF8EB",
-                        border: `1px solid ${isHigh ? "#F7C1C1" : "#FAC775"}`,
+                        border: `1px solid ${isHigh ? "#F7C1C1" : "#F0BC41"}`,
                         borderLeft: `3px solid ${isHigh ? MR : MA}`,
                       }}
                     >
@@ -379,7 +379,7 @@ export function MeetingBriefPresentation({
                           className="text-[11px] pt-1 leading-snug"
                           style={{
                             color: isHigh ? "#791F1F" : "#854F0B",
-                            borderTop: `0.5px solid ${isHigh ? "#F09595" : "#FAC775"}`,
+                            borderTop: `0.5px solid ${isHigh ? "#F09595" : "#F0BC41"}`,
                           }}
                         >
                           {m.why}
@@ -768,10 +768,10 @@ export function MeetingBriefPresentation({
                 const isNeutral = c.type === "neutral";
                 const bg = isGood ? "#EAF3DE" : isNeutral ? "#f4f3fe" : "#FAEEDA";
                 const bc = isGood
-                  ? "#97C459"
+                  ? "#6EC457"
                   : isNeutral
                     ? "#e0deff"
-                    : "#FAC775";
+                    : "#F0BC41";
                 const tc = isGood ? MG : isNeutral ? MP : MA;
                 const tx = isGood
                   ? "#173404"
@@ -856,7 +856,7 @@ export function MeetingBriefPresentation({
 
         {/* ============================================================
             12. CHEAT SHEET — verbatim port of prototype line 8964-8981.
-               Dark #0D1117 bar at the bottom with 3 columns:
+               Dark #001137 bar at the bottom with 3 columns:
                Never Say (red) · Opening Asks (green) · Win Condition (white).
             ============================================================ */}
         {(data.cheat_sheet_never_say.length > 0 ||
@@ -886,7 +886,7 @@ export function MeetingBriefPresentation({
                     <div
                       key={i}
                       className="text-[11px] py-0.5"
-                      style={{ color: "#f87171" }}
+                      style={{ color: "#CF4548" }}
                     >
                       • {s}
                     </div>
@@ -903,7 +903,7 @@ export function MeetingBriefPresentation({
               <div>
                 <div
                   className="text-[9px] font-bold uppercase tracking-wider mb-1.5"
-                  style={{ color: "#40CC8F" }}
+                  style={{ color: "#6EC457" }}
                 >
                   💬 Opening Asks
                 </div>
@@ -912,7 +912,7 @@ export function MeetingBriefPresentation({
                     <div
                       key={i}
                       className="text-[11px] py-0.5"
-                      style={{ color: "#a5f3c8" }}
+                      style={{ color: "#6EC457" }}
                     >
                       • {s}
                     </div>

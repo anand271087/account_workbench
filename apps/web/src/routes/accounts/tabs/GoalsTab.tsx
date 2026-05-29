@@ -50,9 +50,9 @@ const CATEGORY_OPTIONS: CSGoalCategory[] = [
 /** Per-category icon + colour. Verbatim port of prototype line
  *  3084-3090 (`GOAL_CATS`), with the two off-brand hex values mapped
  *  to the Beroe brand palette:
- *    cost_savings        prototype #40CC8F → Risk Green  #6EC457
+ *    cost_savings        prototype #6EC457 → Risk Green  #6EC457
  *    base_rationalization prototype #4A00F8 → Indigo      #4A00F8 (on brand)
- *    risk_mitigation     prototype #EF9637 → Risk Amber  #F0BC41
+ *    risk_mitigation     prototype #F0BC41 → Risk Amber  #F0BC41
  *    adoption            prototype #C344C7 → Fuscia      #C344C7 (on brand)
  *    other               prototype #64748b → Midnight 60% #00113799
  *  Saves repeating the icon emoji + colour map in three render sites

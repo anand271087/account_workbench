@@ -45,7 +45,7 @@ const SUB_NAV: SubNavItem[] = [
   {
     to: "account-kit",
     label: "📋 Account Kit",
-    col: "#EF9637",
+    col: "#F0BC41",
     bg: "#fff8eb",
     show: (a) =>
       a.can_view_pre_sales ||
@@ -56,14 +56,14 @@ const SUB_NAV: SubNavItem[] = [
   {
     to: "success-management",
     label: "🎯 Success Management",
-    col: "#FD576B",
+    col: "#CF4548",
     bg: "#fff0f2",
     show: (a) => a.can_view_cs_onboarding,
   },
   {
     to: "growth-pipeline",
     label: "🚀 Growth & Pipeline",
-    col: "#40CC8F",
+    col: "#6EC457",
     bg: "#f0fdf4",
     show: (a) => a.can_view_cs_onboarding,
   },
@@ -210,8 +210,8 @@ export default function AccountProfileLayout() {
                   className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                   style={{
                     background: "#E8F8EF",
-                    color: "#40CC8F",
-                    border: "1px solid #40CC8F40",
+                    color: "#6EC457",
+                    border: "1px solid #6EC45740",
                   }}
                 >
                   {data.account_type}
@@ -297,10 +297,10 @@ function LogoBox({
   const s = healthScore ?? 0;
   const tone =
     s >= 70
-      ? { col: "#40CC8F", bg: "#E8F8EF" }
+      ? { col: "#6EC457", bg: "#E8F8EF" }
       : s >= 40
-        ? { col: "#EF9637", bg: "#FFF4E5" }
-        : { col: "#e63950", bg: "#FCEBED" };
+        ? { col: "#F0BC41", bg: "#FFF4E5" }
+        : { col: "#CF4548", bg: "#FCEBED" };
   return (
     <div
       className="w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-extrabold flex-shrink-0"
@@ -350,10 +350,10 @@ function HealthBadge({ score }: { score: number | null }) {
   const s = score ?? 0;
   const tone =
     s >= 70
-      ? { col: "#40CC8F", bg: "#E8F8EF", label: "Healthy" }
+      ? { col: "#6EC457", bg: "#E8F8EF", label: "Healthy" }
       : s >= 40
-        ? { col: "#EF9637", bg: "#FFF4E5", label: "At Risk" }
-        : { col: "#e63950", bg: "#FCEBED", label: "Critical" };
+        ? { col: "#F0BC41", bg: "#FFF4E5", label: "At Risk" }
+        : { col: "#CF4548", bg: "#FCEBED", label: "Critical" };
   return (
     <div
       className="text-center rounded-lg px-3 py-1.5"

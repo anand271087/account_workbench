@@ -85,7 +85,7 @@ export const STATUS_LABELS: Record<CheckpointStatus, string> = {
  *  bCheckpoints line 4384 → brand):
  *    not_held    → brand grey #94a3b8
  *    held        → Indigo     #4A00F8 (on brand)
- *    signed_off  → Risk Green #6EC457 (was prototype #40CC8F)
+ *    signed_off  → Risk Green #6EC457 (was prototype #6EC457)
  */
 export const STATUS_TONES: Record<
   CheckpointStatus,

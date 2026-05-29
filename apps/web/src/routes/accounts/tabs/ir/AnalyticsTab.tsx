@@ -179,8 +179,8 @@ function UsageSection({
   const logins = u.monthly_logins.slice(Math.max(0, len - monthsToShow));
   const active = u.monthly_active.slice(Math.max(0, len - monthsToShow));
   const adoption = [
-    ["Active", u.active_seats, "#40CC8F"],
-    ["Inactive", u.inactive_seats, "#FD576B"],
+    ["Active", u.active_seats, "#6EC457"],
+    ["Inactive", u.inactive_seats, "#CF4548"],
     ["Total Licensed", u.licensed_users, "#4A00F8"],
   ] as Array<[string, number, string]>;
 
@@ -223,7 +223,7 @@ function UsageSection({
       </Card>
       <Card>
         <CardTitle>Monthly Active Users · {period}</CardTitle>
-        <LineChart labels={months} values={active} color="#40CC8F" />
+        <LineChart labels={months} values={active} color="#6EC457" />
       </Card>
       <Card>
         <CardTitle>User Adoption</CardTitle>
@@ -258,8 +258,8 @@ function ModulesSection({
   const items: Array<[string, number, string, keyof typeof m.monthly]> = [
     ["Market Monitor", scaleInt(m.mmd, scale), "#4A00F8", "mmd"],
     ["Abi Queries", scaleInt(m.abi, scale), "#C344C7", "abi"],
-    ["Supplier Discovery", scaleInt(m.sd, scale), "#40CC8F", "sd"],
-    ["Downloads", scaleInt(m.dl, scale), "#d88520", "dl"],
+    ["Supplier Discovery", scaleInt(m.sd, scale), "#6EC457", "sd"],
+    ["Downloads", scaleInt(m.dl, scale), "#F0BC41", "dl"],
     ["Benchmarks", scaleInt(m.bm, scale), "#35E1D4", "bm"],
   ];
   void period;
@@ -352,8 +352,8 @@ function CWSection({
     ["Price Intelligence", sa.price, "#4A00F8"],
     ["Supplier Analysis", sa.supplier, "#C344C7"],
     ["Market Dynamics", sa.market, "#35E1D4"],
-    ["Forecasts", sa.forecast, "#40CC8F"],
-    ["Risk & Alerts", sa.risk, "#EF9637"],
+    ["Forecasts", sa.forecast, "#6EC457"],
+    ["Risk & Alerts", sa.risk, "#F0BC41"],
   ];
 
   if (mode === "numbers") {
@@ -396,9 +396,9 @@ function CWSection({
             value: c.visits,
             color:
               c.heat === "hot"
-                ? "#FD576B"
+                ? "#CF4548"
                 : c.heat === "warm"
-                  ? "#EF9637"
+                  ? "#F0BC41"
                   : c.heat === "whitespace"
                     ? "#94a3b8"
                     : "#cbd5e1",
@@ -437,9 +437,9 @@ function AbiSection({
   const rows: Array<[string, number, string]> = [
     ["L1 Auto", cm.l1a, "#4A00F8"],
     ["L1 Manual", cm.l1m, "#C344C7"],
-    ["L2", cm.l2, "#40CC8F"],
-    ["L3", cm.l3, "#EF9637"],
-    ["L4", cm.l4, "#FD576B"],
+    ["L2", cm.l2, "#6EC457"],
+    ["L3", cm.l3, "#F0BC41"],
+    ["L4", cm.l4, "#CF4548"],
   ];
 
   if (mode === "numbers") {
@@ -488,7 +488,7 @@ function AbiSection({
           rows={(abi.top_types ?? []).map((t, i) => ({
             label: t,
             value: 100 - i * 10,
-            color: ["#4A00F8", "#C344C7", "#40CC8F", "#EF9637", "#35E1D4"][i % 5],
+            color: ["#4A00F8", "#C344C7", "#6EC457", "#F0BC41", "#35E1D4"][i % 5],
           }))}
         />
       </Card>
@@ -516,7 +516,7 @@ function SDSection({
   const convRate = sd > 0 ? Math.round((shortlists / sd) * 100) : 0;
   const regions: Array<[string, number, string]> = [
     ["EMEA", Math.round(sd * 0.45), "#4A00F8"],
-    ["APAC", Math.round(sd * 0.3), "#40CC8F"],
+    ["APAC", Math.round(sd * 0.3), "#6EC457"],
     ["Americas", Math.round(sd * 0.25), "#C344C7"],
   ];
 
@@ -548,7 +548,7 @@ function SDSection({
     <div className="grid grid-cols-2 gap-3">
       <Card>
         <CardTitle>Searches Trend (12 months)</CardTitle>
-        <LineChart labels={months} values={monthly} color="#40CC8F" />
+        <LineChart labels={months} values={monthly} color="#6EC457" />
       </Card>
       <Card>
         <CardTitle>Searches by Region</CardTitle>
@@ -657,9 +657,9 @@ function CCSection({
 
   const rows: Array<[string, number, number, string]> = [
     ["L1M", l1mQ, 0, "#C344C7"],
-    ["L2", l2Q, Math.round(l2Q * 0.5), "#40CC8F"],
-    ["L3", l3Q, l3Q * 2, "#EF9637"],
-    ["L4", l4Q, l4Q * 5, "#FD576B"],
+    ["L2", l2Q, Math.round(l2Q * 0.5), "#6EC457"],
+    ["L3", l3Q, l3Q * 2, "#F0BC41"],
+    ["L4", l4Q, l4Q * 5, "#CF4548"],
   ];
 
   // Avg Feedback comes from the platform telemetry when available; until

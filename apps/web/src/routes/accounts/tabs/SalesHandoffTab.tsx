@@ -912,8 +912,8 @@ function HandoverQualityCheck({
   void account;
   const overrides = gate.handover_quality_check ?? {};
   // 28-May — literal port of prototype line 6055-6075. 2-column tile
-  // grid: green (#f0fdf4 / #40CC8F30 / #2fb87a) when checked, red
-  // (#fff0f2 / #FD576B30 / #e63950) when missing. Bottom status line
+  // grid: green (#f0fdf4 / #6EC45730 / #6EC457) when checked, red
+  // (#fff0f2 / #CF454830 / #CF4548) when missing. Bottom status line
   // flips between red-italic "Incomplete handover" and green "Handover
   // complete". Tiles are clickable so a user with write access can flip
   // them in place.
@@ -940,8 +940,8 @@ function HandoverQualityCheck({
             className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium text-left disabled:opacity-60"
             style={{
               background: i.ok ? "#f0fdf4" : "#fff0f2",
-              border: `1px solid ${i.ok ? "#40CC8F30" : "#FD576B30"}`,
-              color: i.ok ? "#2fb87a" : "#e63950",
+              border: `1px solid ${i.ok ? "#6EC45730" : "#CF454830"}`,
+              color: i.ok ? "#6EC457" : "#CF4548",
             }}
           >
             <span className="text-[10px]">{i.ok ? "✓" : "✗"}</span>
@@ -950,11 +950,11 @@ function HandoverQualityCheck({
         ))}
       </div>
       {allGood ? (
-        <div className="text-[10px]" style={{ color: "#2fb87a" }}>
+        <div className="text-[10px]" style={{ color: "#6EC457" }}>
           ✓ Handover complete
         </div>
       ) : (
-        <div className="text-[10px] italic" style={{ color: "#e63950" }}>
+        <div className="text-[10px] italic" style={{ color: "#CF4548" }}>
           ⚠️ Incomplete handover — flag missing items to Sales before
           proceeding to CS workflow.
         </div>

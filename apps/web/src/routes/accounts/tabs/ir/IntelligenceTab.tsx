@@ -108,8 +108,8 @@ function CategoryWatch({ data }: { data: PlatformIntel }) {
     ["Price Intelligence", ci.section_avg.price, "#4A00F8"],
     ["Supplier Analysis", ci.section_avg.supplier, "#C344C7"],
     ["Market Dynamics", ci.section_avg.market, "#35E1D4"],
-    ["Forecasts", ci.section_avg.forecast, "#40CC8F"],
-    ["Risk & Alerts", ci.section_avg.risk, "#EF9637"],
+    ["Forecasts", ci.section_avg.forecast, "#6EC457"],
+    ["Risk & Alerts", ci.section_avg.risk, "#F0BC41"],
   ];
   const maxVisits = Math.max(...(ci.top_cats?.map((c) => c.visits) ?? [1]), 1);
 
@@ -285,16 +285,16 @@ function AbiEngagement({ data }: { data: PlatformIntel }) {
   const cards: Array<[string, string, string]> = [
     ["Total Queries", String(abi.total_queries), "#4A00F8"],
     ["Queries/User", abi.queries_per_user.toFixed(1), "#C344C7"],
-    ["Resolution Rate", abi.resolution_rate ?? "—", "#40CC8F"],
-    ["Avg Response", abi.avg_response ?? "—", "#EF9637"],
-    ["Usage Trend", usageTrend, "#40CC8F"],
+    ["Resolution Rate", abi.resolution_rate ?? "—", "#6EC457"],
+    ["Avg Response", abi.avg_response ?? "—", "#F0BC41"],
+    ["Usage Trend", usageTrend, "#6EC457"],
   ];
   const complexityRows: Array<[string, number, string, string]> = [
     ["L1 Auto", cm.l1a, "#4A00F8", "Quick lookups"],
     ["L1 Manual", cm.l1m, "#C344C7", "Guided queries"],
-    ["L2", cm.l2, "#40CC8F", "Multi-source analysis"],
-    ["L3", cm.l3, "#EF9637", "Deep research"],
-    ["L4", cm.l4, "#FD576B", "Strategic advisory"],
+    ["L2", cm.l2, "#6EC457", "Multi-source analysis"],
+    ["L3", cm.l3, "#F0BC41", "Deep research"],
+    ["L4", cm.l4, "#CF4548", "Strategic advisory"],
   ];
   return (
     <div className="space-y-3">
@@ -340,7 +340,7 @@ function AbiEngagement({ data }: { data: PlatformIntel }) {
           ) : (
             <div className="space-y-2">
               {abi.top_types.map((t, i) => {
-                const col = ["#4A00F8", "#C344C7", "#40CC8F", "#EF9637", "#35E1D4"][i % 5];
+                const col = ["#4A00F8", "#C344C7", "#6EC457", "#F0BC41", "#35E1D4"][i % 5];
                 return (
                   <div
                     key={i}
@@ -398,10 +398,10 @@ function IndustryBenchmark({
 
   const metrics: Array<[string, number, number, string]> = [
     ["Abi Queries", accAbi, b.avg_abi, "#C344C7"],
-    ["Engagement", accEngagement, b.avg_engagement, "#40CC8F"],
+    ["Engagement", accEngagement, b.avg_engagement, "#6EC457"],
     ["Health Avg", b.avg_health, b.avg_health, "#4A00F8"],
     ["Seat % Avg", b.avg_seat_pct, b.avg_seat_pct, "#35E1D4"],
-    ["Logins Avg", b.avg_logins, b.avg_logins, "#EF9637"],
+    ["Logins Avg", b.avg_logins, b.avg_logins, "#F0BC41"],
   ];
 
   return (
@@ -417,7 +417,7 @@ function IndustryBenchmark({
           const pct = avg > 0 ? Math.round((val / avg) * 100) : 0;
           const status = pct >= 120 ? "Above" : pct >= 80 ? "On Par" : "Below";
           const sc =
-            pct >= 120 ? "#2fb87a" : pct >= 80 ? "#4A00F8" : "#e63950";
+            pct >= 120 ? "#6EC457" : pct >= 80 ? "#4A00F8" : "#CF4548";
           return (
             <div
               key={label}
@@ -455,20 +455,20 @@ function EngagementMetrics({ data }: { data: PlatformIntel }) {
   const e = data.engagement;
   const items: Array<[string, number, number, string]> = [
     ["🔔 Alerts", e.alerts, 100, "#4A00F8"],
-    ["📧 Newsletters", e.newsletters, 100, "#40CC8F"],
+    ["📧 Newsletters", e.newsletters, 100, "#6EC457"],
     ["🎥 Webinars", e.webinars, 30, "#C344C7"],
-    ["🎙 Podcasts", e.podcasts, 20, "#EF9637"],
+    ["🎙 Podcasts", e.podcasts, 20, "#F0BC41"],
     ["📚 Training", e.training, 30, "#35E1D4"],
   ];
   const us = e.user_segmentation;
   const segRows: Array<[string, number, string]> = [
     ["Cat. Managers", us.cat_managers, "#4A00F8"],
-    ["Buyers", us.buyers, "#40CC8F"],
+    ["Buyers", us.buyers, "#6EC457"],
     ["Sourcing", us.sourcing_analysts, "#C344C7"],
-    ["Directors", us.directors, "#EF9637"],
-    ["Exec Team", us.exec_team, "#FD576B"],
+    ["Directors", us.directors, "#F0BC41"],
+    ["Exec Team", us.exec_team, "#CF4548"],
     ["COE", us.coe, "#35E1D4"],
-    ["CPO", us.cpo, "#a830b0"],
+    ["CPO", us.cpo, "#C344C7"],
   ];
   const segHasData = segRows.some(([, v]) => v > 0);
 
@@ -538,10 +538,10 @@ function Nps({ data }: { data: PlatformIntel }) {
     score === null
       ? "#94a3b8"
       : score >= 50
-        ? "#2fb87a"
+        ? "#6EC457"
         : score >= 0
-          ? "#EF9637"
-          : "#e63950";
+          ? "#F0BC41"
+          : "#CF4548";
   const label =
     score === null
       ? "—"
@@ -584,9 +584,9 @@ function Nps({ data }: { data: PlatformIntel }) {
             {nps.voc.map((v, i) => {
               const sc =
                 v.sentiment === "positive"
-                  ? "#2fb87a"
+                  ? "#6EC457"
                   : v.sentiment === "negative"
-                    ? "#e63950"
+                    ? "#CF4548"
                     : "#64748b";
               return (
                 <div
