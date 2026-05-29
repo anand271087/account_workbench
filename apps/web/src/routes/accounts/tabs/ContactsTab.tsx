@@ -97,7 +97,7 @@ export default function ContactsTab() {
   };
 
   if (isLoading) return <div className="text-sm text-text-muted">Loading contacts…</div>;
-  if (isError || !data) return <div className="text-sm text-red-700">Failed to load contacts.</div>;
+  if (isError || !data) return <div className="text-sm text-beroe-red">Failed to load contacts.</div>;
 
   const visible = data.items;
   const activeCount = visible.filter((c) => !c.deleted_at).length;
@@ -144,7 +144,7 @@ export default function ContactsTab() {
       ) : (
         <div className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-text-muted">
+            <thead className="bg-beroe-bg text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
                 <SortableTh label="Name" k="name" current={sortBy} dir={sortDir} onClick={onSortClick} />
                 <SortableTh label="Title" k="title" current={sortBy} dir={sortDir} onClick={onSortClick} />
@@ -161,14 +161,14 @@ export default function ContactsTab() {
                 <tr
                   key={c.id}
                   className={cn(
-                    "border-t border-beroe-card-border/60 hover:bg-slate-50/60",
+                    "border-t border-beroe-card-border/60 hover:bg-beroe-bg/60",
                     c.deleted_at && "opacity-50",
                   )}
                 >
                   <td className="px-4 py-2.5 font-semibold text-text-primary">
                     {c.name}
                     {c.deleted_at && (
-                      <span className="ml-2 text-[10px] text-red-700 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5">
+                      <span className="ml-2 text-[10px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-full px-1.5 py-0.5">
                         deleted
                       </span>
                     )}
@@ -181,14 +181,14 @@ export default function ContactsTab() {
                   </td>
                   <td className="px-4 py-2.5">
                     {c.function ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-text-secondary">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-beroe-bg text-text-secondary">
                         {FUNCTION_LABELS[c.function]}
                       </span>
                     ) : <span className="text-text-muted">—</span>}
                   </td>
                   <td className="px-4 py-2.5">
                     {c.seniority ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-text-secondary">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-beroe-bg text-text-secondary">
                         {SENIORITY_LABELS[c.seniority]}
                       </span>
                     ) : <span className="text-text-muted">—</span>}
@@ -199,12 +199,12 @@ export default function ContactsTab() {
                   <td className="px-4 py-2.5">
                     <div className="flex gap-1">
                       {c.is_spoc && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-beroe-blue/15 text-beroe-blue">
                           SPOC
                         </span>
                       )}
                       {c.is_sponsor && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-beroe-purple/15 text-beroe-purple">
                           Sponsor
                         </span>
                       )}
@@ -236,7 +236,7 @@ export default function ContactsTab() {
                                 deleteMutation.mutate(c.id);
                               }
                             }}
-                            className="text-xs text-red-700 hover:underline font-semibold"
+                            className="text-xs text-beroe-red hover:underline font-semibold"
                           >
                             Delete
                           </button>
@@ -304,14 +304,14 @@ function SortableTh({
 function DecisionPowerPill({ p }: { p: ContactDecisionPower }) {
   const tone =
     p === "executive_sponsor"
-      ? "bg-purple-100 text-purple-800"
+      ? "bg-beroe-purple/15 text-beroe-purple"
       : p === "champion"
-        ? "bg-green-100 text-green-800"
+        ? "bg-beroe-green/20 text-beroe-green"
         : p === "detractor"
-          ? "bg-red-100 text-red-800"
+          ? "bg-beroe-red/15 text-beroe-red"
           : p === "influencer"
-            ? "bg-amber-100 text-amber-800"
-            : "bg-slate-100 text-text-secondary";
+            ? "bg-beroe-amber/20 text-beroe-amber"
+            : "bg-beroe-bg text-text-secondary";
   return (
     <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold", tone)}>
       {DECISION_POWER_LABELS[p]}
@@ -525,7 +525,7 @@ function ContactFormModal({
         </div>
 
         {error && (
-          <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="mt-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
@@ -533,7 +533,7 @@ function ContactFormModal({
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary"
+            className="px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary"
           >
             Cancel
           </button>
@@ -571,4 +571,4 @@ function ModalField({
 }
 
 const modalInputCls =
-  "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue";
+  "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue";

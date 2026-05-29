@@ -187,7 +187,7 @@ export default function CSOnboardingTab() {
         )}
 
         {savingError && (
-          <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="mt-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
             {savingError}
           </div>
         )}
@@ -195,7 +195,7 @@ export default function CSOnboardingTab() {
 
       {/* Idle state — neither entry chosen yet (prototype line 6164). */}
       {!activated && form.cs_entry_type !== "A" && form.cs_entry_type !== "B" && (
-        <div className="bg-slate-50 rounded-card border border-beroe-card-border p-3 text-xs text-text-muted text-center">
+        <div className="bg-beroe-bg rounded-card border border-beroe-card-border p-3 text-xs text-text-muted text-center">
           Select an entry type to begin CS onboarding.
         </div>
       )}
@@ -266,20 +266,20 @@ export default function CSOnboardingTab() {
           className={cn(
             "sticky bottom-0 -mx-6 px-6 py-3 flex items-center gap-3 border-t z-30 transition-colors",
             dirty
-              ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+              ? "bg-beroe-amber/15 border-beroe-amber/50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
               : "bg-white border-beroe-card-border",
           )}
         >
           {savingError && (
-            <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+            <span className="text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-1">
               {savingError}
             </span>
           )}
           {!savingError && dirty && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-xs text-beroe-amber font-bold">
+              <span className="inline-block w-2 h-2 rounded-full bg-beroe-amber/150 animate-pulse" />
               Unsaved changes
-              <span className="text-amber-700/70 font-normal ml-1">
+              <span className="text-beroe-amber/70 font-normal ml-1">
                 · Cmd / Ctrl + S to save
               </span>
             </span>
@@ -290,7 +290,7 @@ export default function CSOnboardingTab() {
           <button
             onClick={() => data && setForm(data)}
             disabled={!dirty || save.isPending}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary disabled:opacity-50 bg-white"
           >
             Discard
           </button>
@@ -755,7 +755,7 @@ function StakeholderDuplicateBanner({
   );
   if (dups.length === 0) return null;
   return (
-    <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+    <div className="mb-3 rounded-md border border-beroe-red/30 bg-beroe-red/10 px-3 py-2 text-xs text-beroe-red">
       <span className="font-bold">⚠ Duplicate stakeholders — </span>
       the same person appears in more than one role. Each role should be a
       different person, otherwise the coverage rollup overcounts.
@@ -770,15 +770,15 @@ function StakeholderDuplicateBanner({
 
 function inputCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
 function textareaCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-2 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
@@ -899,8 +899,8 @@ function GoalAlignmentRow({
     g.alignment_status === "aligned"
       ? "bg-emerald-500"
       : g.alignment_status === "partial"
-        ? "bg-amber-500"
-        : "bg-slate-400";
+        ? "bg-beroe-amber/150"
+        : "bg-text-muted";
   const phaseA = (g.phase_a ?? {}) as Record<string, unknown>;
   const phaseB = (g.phase_b ?? {}) as Record<string, unknown>;
   const phaseC = (g.phase_c ?? {}) as Record<string, unknown>;
@@ -915,17 +915,17 @@ function GoalAlignmentRow({
   return (
     <li className="border border-beroe-card-border rounded-lg overflow-hidden">
       <details>
-        <summary className="px-3 py-2 cursor-pointer hover:bg-slate-50 flex items-center gap-2">
+        <summary className="px-3 py-2 cursor-pointer hover:bg-beroe-bg flex items-center gap-2">
           <span className={cn("w-2 h-2 rounded-full", dot)} />
           <span className="text-sm font-semibold text-text-primary">{g.title}</span>
-          <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-slate-100 text-text-muted">
+          <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-beroe-bg text-text-muted">
             {g.category.replace(/_/g, " ")}
           </span>
           <span className="ml-auto text-[10px] uppercase tracking-wider font-bold text-text-muted">
             {g.alignment_status}
           </span>
         </summary>
-        <div className="px-3 py-2 grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50/40">
+        <div className="px-3 py-2 grid grid-cols-1 md:grid-cols-3 gap-2 bg-beroe-bg/40">
           <PhaseAEditableBlock
             title="What does it mean?"
             phase={phaseA}

@@ -243,11 +243,11 @@ export default function SalesHandoffTab() {
         {/* 27-May Row 85 — Value Definition (received) + Value Themes
             merged into ONE violet box so Sales sees the full Solutioning
             output at a glance instead of two separate fields. */}
-        <div className="rounded-xl border-2 border-violet-200 bg-violet-50/60 p-3 mb-3">
-          <div className="text-[10px] uppercase tracking-wider font-bold text-violet-700 mb-1.5">
+        <div className="rounded-xl border-2 border-beroe-purple/30 bg-beroe-purple/10/60 p-3 mb-3">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-purple mb-1.5">
             From Solutioning
           </div>
-          <div className="text-[11px] font-bold text-violet-900 mb-0.5">
+          <div className="text-[11px] font-bold text-beroe-purple mb-0.5">
             Value definition
           </div>
           {form.sh_value_from_solutioning ? (
@@ -262,7 +262,7 @@ export default function SalesHandoffTab() {
           )}
           {form.sh_value_themes_from_solutioning && (
             <>
-              <div className="text-[11px] font-bold text-violet-900 mt-2 mb-0.5">
+              <div className="text-[11px] font-bold text-beroe-purple mt-2 mb-0.5">
                 Value themes
               </div>
               <div className="text-sm text-text-primary">
@@ -271,7 +271,7 @@ export default function SalesHandoffTab() {
             </>
           )}
           {form.sh_value_received_at && (
-            <div className="text-[10px] text-violet-700/70 mt-2 italic">
+            <div className="text-[10px] text-beroe-purple/70 mt-2 italic">
               Received {new Date(form.sh_value_received_at).toLocaleString()}
             </div>
           )}
@@ -405,18 +405,18 @@ export default function SalesHandoffTab() {
             className={cn(
               "sticky bottom-0 -mx-5 px-5 py-3 flex items-center gap-3 border-t z-30 mt-3 transition-colors",
               dirty
-                ? "bg-amber-50 border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
+                ? "bg-beroe-amber/15 border-beroe-amber/50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
                 : "bg-white border-beroe-card-border",
             )}
           >
             {shError && (
-              <span className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+              <span className="text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-1">
                 {shError}
               </span>
             )}
             {!shError && dirty && (
-              <span className="flex items-center gap-1.5 text-xs text-amber-800 font-bold">
-                <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span className="flex items-center gap-1.5 text-xs text-beroe-amber font-bold">
+                <span className="inline-block w-2 h-2 rounded-full bg-beroe-amber/150 animate-pulse" />
                 Unsaved hand-off changes
               </span>
             )}
@@ -426,7 +426,7 @@ export default function SalesHandoffTab() {
             <button
               onClick={() => sol && setForm(sol)}
               disabled={!dirty || saveSh.isPending}
-              className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-slate-200 text-text-secondary disabled:opacity-50 bg-white"
+              className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary disabled:opacity-50 bg-white"
             >
               Discard
             </button>
@@ -478,7 +478,7 @@ export default function SalesHandoffTab() {
             onClick={() =>
               navigate(`/accounts/${account.id}/success-management/contract-goals`)
             }
-            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-beroe-bg transition-colors"
           >
             <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
               Success Management
@@ -495,7 +495,7 @@ export default function SalesHandoffTab() {
             onClick={() =>
               navigate(`/accounts/${account.id}/success-management/value-tracking`)
             }
-            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-slate-50 transition-colors"
+            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-beroe-bg transition-colors"
           >
             <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
               Value Tracking
@@ -570,10 +570,10 @@ function SigningGateCard({
       className={cn(
         "rounded-card border-2 bg-white p-5",
         isSigned && !gate.gate_unlocked
-          ? "border-green-300"
+          ? "border-beroe-green/40"
           : isSigned && gate.gate_unlocked
-            ? "border-amber-300"
-            : "border-slate-200",
+            ? "border-beroe-amber/50"
+            : "border-beroe-card-border",
       )}
     >
       <div className="flex items-center justify-between mb-4">
@@ -581,24 +581,24 @@ function SigningGateCard({
           CLIENT SIGNED
         </h2>
         {isSigned && !gate.gate_unlocked && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-800">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-beroe-green/20 text-beroe-green">
             ✓ Live
           </span>
         )}
         {isSigned && gate.gate_unlocked && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-beroe-amber/20 text-beroe-amber">
             🔓 Unlocked — needs re-confirm
           </span>
         )}
         {!isSigned && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-text-muted">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-beroe-bg text-text-muted">
             Pending
           </span>
         )}
       </div>
 
       {error && (
-        <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <div className="mb-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
           {error}
         </div>
       )}
@@ -622,7 +622,7 @@ function SigningGateCard({
 
       {/* Sign / re-sign form */}
       {inEdit && gate.can_sign && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 mb-3">
+        <div className="rounded-lg border border-beroe-card-border bg-beroe-bg/50 p-3 mb-3">
           <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold mb-2">
             {isSigned ? "Re-confirm signing" : "Confirm signing"}
           </div>
@@ -830,7 +830,7 @@ function SigningGateCard({
               !gate.gate_platform_tier ||
               !gate.gate_account_segment ||
               !gate.gate_subscribers) && (
-              <div className="text-[10px] text-amber-700 mb-3 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+              <div className="text-[10px] text-beroe-amber mb-3 bg-beroe-amber/15 border border-beroe-amber/40 rounded-md px-2 py-1.5">
                 Some signing-metadata fields are empty. Use{" "}
                 <b>🔓 Unlock for correction</b> below to re-confirm with the
                 missing values.
@@ -879,14 +879,14 @@ function SigningGateCard({
               ? "Unlock is restricted to Admin / CS Director — ask an admin to re-open the signing gate"
               : "Reopen the signing gate to amend signed contract details"
           }
-          className="mt-3 text-xs px-3 py-1 rounded-md border border-amber-300 bg-amber-50 text-amber-900 font-semibold hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="mt-3 text-xs px-3 py-1 rounded-md border border-beroe-amber/50 bg-beroe-amber/15 text-beroe-amber font-semibold hover:bg-beroe-amber/20 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {unlocking ? "Unlocking…" : "🔓 Unlock for correction"}
           {!gate.can_unlock && " (admin only)"}
         </button>
       )}
       {gate.gate_unlocked && gate.gate_unlock_reason && (
-        <div className="mt-2 text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+        <div className="mt-2 text-[11px] text-beroe-amber bg-beroe-amber/15 border border-beroe-amber/40 rounded px-2 py-1">
           Unlocked: <b>{gate.gate_unlock_reason}</b>
         </div>
       )}
@@ -1034,7 +1034,7 @@ function SignedStat({
     <div
       className={cn(
         "rounded-lg border px-3 py-2",
-        warn ? "border-amber-300 bg-amber-50/40" : "border-slate-200 bg-slate-50/40",
+        warn ? "border-beroe-amber/50 bg-beroe-amber/15/40" : "border-beroe-card-border bg-beroe-bg/40",
       )}
     >
       <div className="text-[10px] uppercase tracking-wider text-text-muted font-bold mb-0.5">
@@ -1043,7 +1043,7 @@ function SignedStat({
       <div
         className={cn(
           "text-sm font-bold",
-          warn ? "text-amber-800" : "text-text-primary",
+          warn ? "text-beroe-amber" : "text-text-primary",
         )}
       >
         {value}
@@ -1055,15 +1055,15 @@ function SignedStat({
 
 function inputCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
 function textareaCls(enabled: boolean) {
   return cn(
-    "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-slate-50 text-text-secondary cursor-not-allowed",
+    "w-full px-3 py-2 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
+    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
   );
 }
 
@@ -1148,12 +1148,12 @@ function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
   };
   const dot = (s: Met["status"]) =>
     s === "green"
-      ? "bg-emerald-500"
+      ? "bg-beroe-green/150"
       : s === "amber"
-        ? "bg-amber-500"
+        ? "bg-beroe-amber/150"
         : s === "red"
-          ? "bg-red-500"
-          : "bg-slate-300";
+          ? "bg-beroe-red/100"
+          : "bg-text-subtle";
   return (
     <div className="bg-white border border-beroe-card-border rounded-card p-4">
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -1164,17 +1164,17 @@ function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2 text-[11px]">
-          <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">
+          <span className="px-1.5 py-0.5 rounded bg-beroe-green/15 text-beroe-green font-semibold">
             ✓ {counts.green}
           </span>
-          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">
+          <span className="px-1.5 py-0.5 rounded bg-beroe-amber/15 text-beroe-amber font-semibold">
             ⚠ {counts.amber}
           </span>
-          <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 font-semibold">
+          <span className="px-1.5 py-0.5 rounded bg-beroe-red/10 text-beroe-red font-semibold">
             ✕ {counts.red}
           </span>
           {counts.grey > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-700 font-semibold">
+            <span className="px-1.5 py-0.5 rounded bg-beroe-bg text-text-secondary font-semibold">
               ○ {counts.grey}
             </span>
           )}
@@ -1281,7 +1281,7 @@ function ContractDocSection({
     .slice(0, 3);
 
   return (
-    <div className="border-t border-slate-200 pt-3 mt-3">
+    <div className="border-t border-beroe-card-border pt-3 mt-3">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold">
           Contract document
@@ -1346,7 +1346,7 @@ function ContractDocSection({
                           );
                         }
                       }}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-[12px]"
+                      className="w-full text-left px-3 py-2 hover:bg-beroe-bg flex items-center gap-2 text-[12px]"
                     >
                       <span>📄</span>
                       <span className="flex-1 truncate font-medium">
@@ -1364,7 +1364,7 @@ function ContractDocSection({
         </div>
       </div>
       {uploadErr && (
-        <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mb-2">
+        <div className="text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded px-2 py-1 mb-2">
           {uploadErr}
         </div>
       )}
