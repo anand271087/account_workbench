@@ -668,6 +668,9 @@ function PlayList({
 }) {
   const qc = useQueryClient();
   const conf = MODE_CONF[mode];
+  // 29-May bug 29-45 — Edit modal target + per-row "expanded" view.
+  const [editingPlay, setEditingPlay] = useState<Play | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/api/v1/plays/${id}`),
     onSuccess: () => {
@@ -688,35 +691,39 @@ function PlayList({
       {plays.map((p, i) => {
         const c = stageColor(p.prob);
         const valNum = parseFloat(p.value_usd);
+        const weighted = valNum * (p.prob / 100);
+        const isExpanded = expandedId === p.id;
         return (
           <div
             key={p.id}
             className="flex items-start gap-3 px-3 py-2.5 border rounded-md"
             style={{ background: conf.bg, borderColor: conf.col + "30" }}
           >
+            {/* 29-May bug 29-45 — teal/aqua numbered badge per
+                prototype (regardless of mode tint). */}
             <div
-              className="w-6 h-6 rounded-md text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0"
-              style={{ background: conf.col }}
+              className="w-7 h-7 rounded-md text-white text-[12px] font-bold flex items-center justify-center flex-shrink-0 bg-beroe-teal"
             >
               {i + 1}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[13px] font-bold">{p.title}</span>
-                {showAllPlays &&
-                  p.modes.map((pm) => (
-                    <span
-                      key={pm}
-                      className="text-[9px] px-1.5 py-0.5 rounded-md border"
-                      style={{
-                        background: MODE_CONF[pm].bg,
-                        color: MODE_CONF[pm].col,
-                        borderColor: MODE_CONF[pm].col + "30",
-                      }}
-                    >
-                      {MODE_CONF[pm].icon} {MODE_CONF[pm].label}
-                    </span>
-                  ))}
+                <span className="text-[13px] font-bold underline decoration-1 underline-offset-2">
+                  {p.title}
+                </span>
+                {(showAllPlays ? p.modes : p.modes).map((pm) => (
+                  <span
+                    key={pm}
+                    className="text-[9px] px-1.5 py-0.5 rounded-full border font-semibold"
+                    style={{
+                      background: MODE_CONF[pm].bg,
+                      color: MODE_CONF[pm].col,
+                      borderColor: MODE_CONF[pm].col + "30",
+                    }}
+                  >
+                    {MODE_CONF[pm].icon} {MODE_CONF[pm].label}
+                  </span>
+                ))}
               </div>
               <div className="text-[11px] text-text-muted mt-0.5">
                 {p.when_text ?? "—"} ·{" "}
@@ -724,29 +731,270 @@ function PlayList({
                   {stageName(p.prob)} ({p.prob}%)
                 </b>
                 {p.role && <> · {p.role}</>}
-                {valNum > 0 && <> · {fmtK(valNum)}</>}
               </div>
               {p.trigger_text && (
-                <div className="text-[11px] text-text-secondary mt-1 leading-snug">
+                <div
+                  className={cn(
+                    "text-[11px] text-text-secondary mt-1 leading-snug",
+                    !isExpanded && "line-clamp-2",
+                  )}
+                >
                   {p.trigger_text}
                 </div>
               )}
+              {/* 29-May bug 29-45 — 3-button action row (View / Email
+                  Pitch / Tag Metric). View toggles the description
+                  clamp; Email Pitch opens a mailto with the play
+                  context; Tag Metric is a v1.1 placeholder (would
+                  link the play to a Success Metric server-side). */}
+              <div className="flex items-center gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedId(isExpanded ? null : p.id)
+                  }
+                  className="text-[10px] px-2 py-0.5 rounded-md border border-beroe-card-border bg-white hover:bg-beroe-bg/60 font-semibold"
+                >
+                  {isExpanded ? "Hide" : "View"}
+                </button>
+                <a
+                  href={`mailto:?subject=${encodeURIComponent(
+                    `Play: ${p.title}`,
+                  )}&body=${encodeURIComponent(
+                    [
+                      `Play: ${p.title}`,
+                      `When: ${p.when_text ?? "—"}`,
+                      `Stage: ${stageName(p.prob)} (${p.prob}%)`,
+                      `Value: ${fmtK(valNum)} · Weighted ${fmtK(weighted)}`,
+                      p.trigger_text ? `\nTrigger: ${p.trigger_text}` : "",
+                    ].join("\n"),
+                  )}`}
+                  className="text-[10px] px-2 py-0.5 rounded-md border border-beroe-blue/30 bg-beroe-blue/5 text-beroe-blue hover:bg-beroe-blue/10 font-semibold"
+                >
+                  ✉ Email Pitch
+                </a>
+                <button
+                  type="button"
+                  onClick={() =>
+                    alert(
+                      "Tag Metric ships in v1.1 — links this play to a Success Metric for ARR-attribution.",
+                    )
+                  }
+                  className="text-[10px] px-2 py-0.5 rounded-md border border-beroe-red/30 bg-beroe-red/5 text-beroe-red hover:bg-beroe-red/10 font-semibold"
+                >
+                  🎯 Tag Metric
+                </button>
+              </div>
             </div>
-            {editable && (
-              <button
-                onClick={() => {
-                  if (confirm(`Delete play "${p.title}"?`))
-                    deleteMutation.mutate(p.id);
-                }}
-                className="text-[11px] text-text-muted hover:text-beroe-red px-1"
-              >
-                ✕
-              </button>
-            )}
+            {/* 29-May bug 29-45 — right column: large value + weighted
+                line + per-row action icons (Edit ✎ / Delete ✕). */}
+            <div className="flex items-stretch gap-2 flex-shrink-0 self-start">
+              <div className="text-right">
+                <div
+                  className="text-[14px] font-extrabold"
+                  style={{ color: "#1d6b35" }}
+                >
+                  {fmtK(valNum)}
+                </div>
+                <div className="text-[10px] text-text-muted">
+                  {fmtK(weighted)} wtd
+                </div>
+              </div>
+              {editable && (
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPlay(p)}
+                    className="text-[11px] w-6 h-6 rounded-md border border-beroe-purple/30 text-beroe-purple bg-beroe-purple/5 hover:bg-beroe-purple/15 flex items-center justify-center"
+                    title="Edit play"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Delete play "${p.title}"?`))
+                        deleteMutation.mutate(p.id);
+                    }}
+                    className="text-[11px] w-6 h-6 rounded-md border border-beroe-red/30 text-beroe-red bg-beroe-red/5 hover:bg-beroe-red/15 flex items-center justify-center"
+                    title="Delete play"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         );
       })}
+
+      {/* 29-May bug 29-45 — Edit modal. Reuses AddPlayModal shape but
+          PATCHes /plays/:id with the existing values pre-filled. */}
+      {editingPlay && (
+        <EditPlayModal
+          play={editingPlay}
+          onClose={() => setEditingPlay(null)}
+          onSaved={() => {
+            setEditingPlay(null);
+            qc.invalidateQueries({ queryKey: ["plays", accountId] });
+            qc.invalidateQueries({ queryKey: ["appetite", accountId] });
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// 29-May bug 29-45 — small label/input wrapper used inside EditPlayModal.
+function ModalField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">
+        {label}
+      </label>
+      <div className="mt-0.5">{children}</div>
+    </div>
+  );
+}
+
+// 29-May bug 29-45 — EditPlayModal mirrors AddPlayModal but PATCHes.
+function EditPlayModal({
+  play,
+  onClose,
+  onSaved,
+}: {
+  play: Play;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<PlayCreate>({
+    title: play.title,
+    value_usd: play.value_usd,
+    prob: play.prob,
+    when_text: play.when_text ?? "",
+    trigger_text: play.trigger_text ?? "",
+    modes: play.modes,
+    role: play.role ?? "",
+  });
+  const [err, setErr] = useState<string | null>(null);
+  const m = useMutation({
+    mutationFn: (body: PlayCreate) => api.patch(`/api/v1/plays/${play.id}`, body),
+    onSuccess: () => onSaved(),
+    onError: (e: ApiError) => setErr(e.message),
+  });
+  const toggleMode = (mode: PlayMode) => {
+    const has = (form.modes ?? []).includes(mode);
+    setForm({
+      ...form,
+      modes: has
+        ? (form.modes ?? []).filter((x) => x !== mode)
+        : [...(form.modes ?? []), mode],
+    });
+  };
+  return (
+    <ModalShell onClose={onClose} title="Edit play">
+      <div className="space-y-2.5">
+        <ModalField label="Title">
+          <input
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+          />
+        </ModalField>
+        <div className="grid grid-cols-2 gap-2">
+          <ModalField label="When">
+            <input
+              value={form.when_text ?? ""}
+              onChange={(e) => setForm({ ...form, when_text: e.target.value })}
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            />
+          </ModalField>
+          <ModalField label="Stage / probability">
+            <select
+              value={form.prob}
+              onChange={(e) => setForm({ ...form, prob: parseInt(e.target.value, 10) })}
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            >
+              {SALES_STAGES.map((s) => (
+                <option key={s.prob} value={s.prob}>
+                  {s.label} ({s.prob}%)
+                </option>
+              ))}
+            </select>
+          </ModalField>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <ModalField label="Value (USD)">
+            <input
+              type="number"
+              value={form.value_usd ?? ""}
+              onChange={(e) => setForm({ ...form, value_usd: e.target.value })}
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            />
+          </ModalField>
+          <ModalField label="Owner / role">
+            <input
+              value={form.role ?? ""}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            />
+          </ModalField>
+        </div>
+        <ModalField label="Modes (≥1)">
+          <div className="flex gap-1.5 flex-wrap">
+            {(["rescue", "retain", "expand"] as PlayMode[]).map((mm) => {
+              const c = MODE_CONF[mm];
+              const on = (form.modes ?? []).includes(mm);
+              return (
+                <button
+                  key={mm}
+                  type="button"
+                  onClick={() => toggleMode(mm)}
+                  className="text-[11px] px-2 py-1 rounded-md border-[1.5px]"
+                  style={
+                    on
+                      ? { background: c.bg, color: c.col, borderColor: c.col + "60" }
+                      : { background: "#fff", borderColor: "#e4eaf6", color: "#94a3b8" }
+                  }
+                >
+                  {c.icon} {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </ModalField>
+        <ModalField label="Trigger / context">
+          <textarea
+            rows={3}
+            value={form.trigger_text ?? ""}
+            onChange={(e) => setForm({ ...form, trigger_text: e.target.value })}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+          />
+        </ModalField>
+        {err && <div className="text-[11px] text-beroe-red">{err}</div>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="text-[11px] px-3 py-1.5 rounded-md border border-beroe-card-border hover:bg-beroe-bg/60"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => m.mutate(form)}
+            disabled={m.isPending || !form.title.trim() || (form.modes ?? []).length === 0}
+            className="text-[11px] px-3 py-1.5 rounded-md bg-beroe-navy text-white font-semibold disabled:opacity-50"
+          >
+            {m.isPending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
