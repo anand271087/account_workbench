@@ -848,6 +848,15 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
+// 29-May bug 29-40 — visual icons replacing YES/NO/UNKNOWN text +
+// a Ready / Negotiation-needed banner that derives from the answers.
+// Brand RAG only: green for yes, red for no, slate for unknown.
+const READINESS_ICONS: Record<ReadinessAnswerValue, { icon: string; label: string }> = {
+  yes: { icon: "✓", label: "Yes" },
+  no: { icon: "✕", label: "No" },
+  unknown: { icon: "?", label: "Unknown" },
+};
+
 function ReadinessGrid({
   value,
   editable,
@@ -857,8 +866,40 @@ function ReadinessGrid({
   editable: boolean;
   onChange: (v: Readiness) => void;
 }) {
+  // Derive overall status (29-40): all yes → Ready ✓ ; any no → Negotiation
+  // needed ⚠ ; otherwise → in-progress.
+  const answers = READINESS_QUESTIONS.map((q) => value[q.key]?.answer);
+  const allYes = answers.length > 0 && answers.every((a) => a === "yes");
+  const anyNo = answers.some((a) => a === "no");
+  const status: "ready" | "negotiation" | "in_progress" = allYes
+    ? "ready"
+    : anyNo
+      ? "negotiation"
+      : "in_progress";
+
   return (
     <div className="space-y-3">
+      {/* 29-40 status banner — green ready / red negotiation / amber in-progress */}
+      <div
+        className={cn(
+          "rounded-md px-3 py-2 text-[12px] font-semibold flex items-center gap-2",
+          status === "ready"
+            ? "bg-beroe-green/15 border border-beroe-green/40 text-beroe-green"
+            : status === "negotiation"
+              ? "bg-beroe-red/10 border border-beroe-red/30 text-beroe-red"
+              : "bg-beroe-amber/15 border border-beroe-amber/40 text-beroe-amber",
+        )}
+      >
+        <span className="text-[14px]">
+          {status === "ready" ? "✅" : status === "negotiation" ? "⚠" : "⏳"}
+        </span>
+        {status === "ready"
+          ? "Ready for renewal — all 3 confirmations ticked."
+          : status === "negotiation"
+            ? "Negotiation needed — at least one renewal gate is a no."
+            : "In progress — capture proof for each gate to confirm readiness."}
+      </div>
+
       {READINESS_QUESTIONS.map((q) => {
         const a = value[q.key];
         return (
@@ -902,6 +943,7 @@ function ReadinessGrid({
                               border: "#94a3b830",
                               color: "#475569",
                             };
+                    const { icon, label } = READINESS_ICONS[opt];
                     return (
                       <button
                         key={opt}
@@ -912,18 +954,19 @@ function ReadinessGrid({
                             [q.key]: { ...a, answer: opt },
                           })
                         }
+                        title={label}
+                        aria-label={label}
                         className={cn(
-                          "text-[10px] px-2 py-0.5 rounded-md uppercase font-bold",
+                          "w-7 h-7 rounded-md flex items-center justify-center font-bold text-[14px]",
                           !editable && "cursor-default",
                         )}
                         style={{
                           background: active ? tone.bg : "#fff",
                           border: `1px solid ${active ? tone.border : "#e4eaf6"}`,
                           color: active ? tone.color : "#94a3b8",
-                          letterSpacing: "0.05em",
                         }}
                       >
-                        {opt}
+                        {icon}
                       </button>
                     );
                   },

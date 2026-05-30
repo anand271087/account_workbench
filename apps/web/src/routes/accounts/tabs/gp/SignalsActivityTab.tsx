@@ -501,6 +501,8 @@ function ActivityRow({
   onChange: () => void;
 }) {
   const conf = ACT_CONF[act.type];
+  // 29-May bug 29-50 — Edit affordance + modal pre-filled from this row.
+  const [showEdit, setShowEdit] = useState(false);
   const del = useMutation({
     mutationFn: () => api.delete(`/api/v1/activities/${act.id}`),
     onSuccess: () => onChange(),
@@ -532,16 +534,149 @@ function ActivityRow({
       {editable && (
         <div className="flex gap-1 flex-shrink-0">
           <button
+            onClick={() => setShowEdit(true)}
+            className="text-[10px] font-semibold text-beroe-blue hover:bg-beroe-blue/10 px-1.5 rounded"
+            title="Edit activity"
+          >
+            ✎ Edit
+          </button>
+          <button
             onClick={() => {
               if (confirm(`Delete activity "${act.title}"?`)) del.mutate();
             }}
             className="text-[10px] text-text-muted hover:text-beroe-red px-1"
+            title="Delete activity"
           >
             ✕
           </button>
         </div>
       )}
+      {showEdit && (
+        <EditActivityModal
+          act={act}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => {
+            setShowEdit(false);
+            onChange();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// 29-May bug 29-50 — Edit modal. Pre-fills from the existing activity
+// and PATCHes /api/v1/activities/:id. Shape mirrors LogActivityModal.
+function EditActivityModal({
+  act,
+  onClose,
+  onSaved,
+}: {
+  act: Activity;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<ActivityCreate>({
+    type: act.type,
+    title: act.title,
+    summary: act.summary ?? "",
+    items: act.items ?? "",
+    attendees: act.attendees ?? "",
+    occurred_at: act.occurred_at ?? new Date().toISOString().slice(0, 10),
+    linked_metrics: act.linked_metrics ?? [],
+  });
+  const [err, setErr] = useState<string | null>(null);
+  const m = useMutation({
+    mutationFn: (body: ActivityCreate) =>
+      api.patch(`/api/v1/activities/${act.id}`, body),
+    onSuccess: () => onSaved(),
+    onError: (e: ApiError) => setErr(e.message),
+  });
+  return (
+    <ModalShell onClose={onClose} title="Edit activity">
+      <div className="space-y-2.5">
+        <FormRow label="Type">
+          <div className="flex gap-1 flex-wrap">
+            {ACTIVITY_TYPES.map((t) => {
+              const c = ACT_CONF[t];
+              const on = form.type === t;
+              return (
+                <button
+                  key={t}
+                  onClick={() => setForm({ ...form, type: t })}
+                  className={cn(
+                    "text-[11px] px-2 py-1 rounded-md border-[1.5px]",
+                    on ? "" : "bg-white border-beroe-card-border text-text-muted",
+                  )}
+                  style={on ? { background: c.bg, color: c.col, borderColor: c.col + "60" } : {}}
+                >
+                  {c.ic} {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </FormRow>
+        <div className="grid grid-cols-2 gap-2">
+          <FormRow label="Title">
+            <input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            />
+          </FormRow>
+          <FormRow label="Date">
+            <input
+              type="date"
+              value={form.occurred_at ?? ""}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) =>
+                setForm({ ...form, occurred_at: e.target.value || null })
+              }
+              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+            />
+          </FormRow>
+        </div>
+        <FormRow label="Summary">
+          <textarea
+            value={form.summary ?? ""}
+            onChange={(e) => setForm({ ...form, summary: e.target.value })}
+            rows={3}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+          />
+        </FormRow>
+        <FormRow label="Attendees (optional)">
+          <input
+            value={form.attendees ?? ""}
+            onChange={(e) => setForm({ ...form, attendees: e.target.value })}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+          />
+        </FormRow>
+        <FormRow label="Items / action items (optional)">
+          <textarea
+            value={form.items ?? ""}
+            onChange={(e) => setForm({ ...form, items: e.target.value })}
+            rows={2}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+          />
+        </FormRow>
+        {err && <div className="text-[11px] text-beroe-red">{err}</div>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="text-[11px] px-3 py-1.5 rounded-md border border-beroe-card-border hover:bg-beroe-bg/60"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => m.mutate(form)}
+            disabled={m.isPending || !form.title.trim()}
+            className="text-[11px] px-3 py-1.5 rounded-md bg-beroe-navy text-white font-semibold disabled:opacity-50"
+          >
+            {m.isPending ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
