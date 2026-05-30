@@ -291,15 +291,39 @@ export default function SolutioningTab() {
           />
         </Section>
 
-        <Section title="⭐ Value definition" subtitle="How the value will be measured. Primary deliverable of Solutioning.">
+        {/* 29-May bug 29-11 — Value Definition reframed as the primary
+            Solutioning deliverable. AI-extracted from the latest VPD
+            (existing M7.5 plumbing already populates this field on
+            VPD upload). Visual treatment matches the prototype:
+              ⭐ VALUE DEFINITION   [Solutioning]   [Sales]
+              amber-bordered box around the narrative. */}
+        <div className="bg-white border border-beroe-card-border rounded-card p-4">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <div className="text-[12px] font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
+              <span className="text-beroe-amber">⭐</span>
+              VALUE DEFINITION
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30">
+              Solutioning
+            </span>
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-beroe-purple/10 text-beroe-purple border border-beroe-purple/30">
+              Sales
+            </span>
+            <span className="text-[10px] text-text-muted ml-auto">
+              How the value will be measured · primary Solutioning deliverable.
+            </span>
+          </div>
           <textarea
-            rows={3}
+            rows={4}
             value={form.value_definition ?? ""}
-            onChange={(e) => setForm({ ...form, value_definition: e.target.value })}
+            placeholder="Auto-extracted from the latest VPD upload — review and refine."
+            onChange={(e) =>
+              setForm({ ...form, value_definition: e.target.value })
+            }
             disabled={!form.is_editable}
-            className={inputCls(form.is_editable)}
+            className="w-full text-[13px] leading-relaxed rounded-md px-3 py-2 bg-beroe-amber/10 border border-beroe-amber/40 focus:outline-none focus:border-beroe-amber disabled:bg-beroe-amber/10 disabled:text-text-secondary"
           />
-        </Section>
+        </div>
 
         <Section title="Value themes" subtitle="Short tags — what kinds of value the engagement will deliver.">
           <div className="flex flex-wrap gap-1 mb-2">
