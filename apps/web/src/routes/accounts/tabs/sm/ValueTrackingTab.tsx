@@ -88,10 +88,11 @@ export default function ValueTrackingTab() {
       {metrics.length > 0 && <StatusSummary metrics={metrics} />}
 
       {/* 28-May — "Value Delivered" surfaces moved to the top so the
-          tab opens with the headline value first (matches prototype
-          bMetricsPane line 2964-2979 order: Value Delivered card →
-          metric cards). */}
-      <OverallValueDelivered accountId={account.id} />
+          tab opens with the headline value first.
+          29-May bug 29-32 — card switched to a single full-width
+          progress-bar layout matching the prototype (current / target
+          rollup across all quantitative metrics). */}
+      <OverallValueDelivered accountId={account.id} metrics={metrics} />
 
       {/* 29-May bug 29-34 — "Metric Tracker" (OverallProgressCard) surface
           removed per stakeholder feedback ("This is additional"). The
@@ -216,7 +217,9 @@ function MetricCard({
   const qc = useQueryClient();
   const queryKey = ["metrics", accountId];
   const [logOpen, setLogOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // 29-May bug 29-33 — value log entries default-visible per
+  // prototype screenshot (no more "Show value log" gate).
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const tone = STATUS_COLORS[metric.status];
@@ -779,119 +782,98 @@ function DeleteConfirm({
 // Row 52 (25-May-2026) — VDD 3-bucket value rollup, brand-painted
 // ============================================================
 
-function OverallValueDelivered({ accountId }: { accountId: string }) {
-  type ValueRow = {
-    initiative_name?: string;
-    identified_musd?: number | null;
-    committed_musd?: number | null;
-    implemented_musd?: number | null;
-  };
-  type Vdd = {
-    value_delivered?: ValueRow[];
-    locked_at: string | null;
-    exec_summary: string | null;
-  };
-  const { data, isLoading } = useQuery<Vdd>({
+function OverallValueDelivered({
+  accountId,
+  metrics,
+}: {
+  accountId: string;
+  metrics: SuccessMetric[];
+}) {
+  // 29-May bug 29-32 — rollup is now computed from the per-metric
+  // current/target values rather than the VDD attribution buckets.
+  // Quantitative metrics with a numeric target contribute to the bar;
+  // qualitative metrics are counted in the "metrics tracked" total
+  // but excluded from the % math.
+  const quant = metrics.filter(
+    (m) =>
+      m.metric_type === "quantitative" &&
+      m.target_value &&
+      m.current_value &&
+      m.current_value.trim() !== "",
+  );
+  const sumTarget = quant.reduce((acc, m) => {
+    const v = parseFloat((m.target_value ?? "0").replace(/[^0-9.]/g, ""));
+    return acc + (Number.isFinite(v) ? v : 0);
+  }, 0);
+  const sumCurrent = quant.reduce((acc, m) => {
+    const v = parseFloat((m.current_value ?? "0").replace(/[^0-9.]/g, ""));
+    return acc + (Number.isFinite(v) ? v : 0);
+  }, 0);
+  const pct =
+    sumTarget > 0 ? Math.min(100, Math.round((sumCurrent / sumTarget) * 100)) : 0;
+  const barColor = pct >= 75 ? RISK_GREEN : pct >= 50 ? INDIGO : RISK_AMBER;
+  const fmtUsd = (n: number) =>
+    `$${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+  // Keep VDD lookup intact for the locked-on metadata line at the bottom.
+  type Vdd = { locked_at: string | null; exec_summary: string | null };
+  const { data: vdd } = useQuery<Vdd>({
     queryKey: ["vdd", accountId],
     queryFn: () =>
       api.get<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`),
   });
-  const rows: ValueRow[] = data?.value_delivered ?? [];
-  const sum = (k: keyof ValueRow) =>
-    rows.reduce((acc, r) => {
-      const v = Number(r[k]);
-      return acc + (Number.isFinite(v) ? v : 0);
-    }, 0);
-  const ident = sum("identified_musd");
-  const comm = sum("committed_musd");
-  const impl = sum("implemented_musd");
-  const fmt = (n: number) => `$${n.toFixed(2)}M`;
+  if (metrics.length === 0) {
+    return null;
+  }
   return (
-    <div
-      className="rounded-card p-4"
-      style={{ background: "#fff", border: "1px solid #e4eaf6" }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div
-            className="text-[13px] font-bold"
-            style={{ color: MIDNIGHT }}
-          >
-            💰 Overall Value Delivered
-          </div>
-          <div className="text-[11px] text-text-muted mt-0.5">
-            Three-bucket rollup from the Value Delivery Document.
-          </div>
+    <div className="rounded-card p-4 bg-white border border-beroe-card-border">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[14px] font-bold" style={{ color: MIDNIGHT }}>
+          Value Delivered
         </div>
-        <a
-          href={`/accounts/${accountId}/success-management/vdd`}
-          className="text-[11px] font-semibold hover:underline"
-          style={{ color: INDIGO }}
-        >
-          → Edit in VDD
-        </a>
+        <div className="text-[11px] text-text-muted">
+          {metrics.length} metric{metrics.length === 1 ? "" : "s"} tracked
+        </div>
       </div>
-      {isLoading ? (
-        <div className="text-[12px] text-text-muted italic">Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="text-[12px] text-text-muted italic">
-          No value-delivered entries yet. Add them on the Value Delivery
-          Document.
-        </div>
-      ) : (
+      {sumTarget > 0 ? (
         <>
-          <div className="grid grid-cols-3 gap-2">
-            <RollupTile label="Identified" value={fmt(ident)} color={RISK_AMBER} />
-            <RollupTile label="Committed" value={fmt(comm)} color={INDIGO} />
-            <RollupTile label="Implemented" value={fmt(impl)} color={RISK_GREEN} />
+          <div className="flex items-center gap-3">
+            <div
+              className="flex-1 h-3 rounded-full overflow-hidden"
+              style={{ background: "#EAF1F5" }}
+            >
+              <div
+                className="h-full transition-all"
+                style={{ width: `${pct}%`, background: barColor }}
+              />
+            </div>
+            <span
+              className="text-[18px] font-extrabold"
+              style={{ color: barColor }}
+            >
+              {pct}%
+            </span>
           </div>
-          <div className="mt-3 text-[11px] text-text-muted">
-            Across <b style={{ color: MIDNIGHT }}>{rows.length}</b>{" "}
-            initiative{rows.length === 1 ? "" : "s"}
-            {data?.locked_at && (
-              <>
-                {" "}· 🔒 VDD locked on{" "}
-                <b style={{ color: MIDNIGHT }}>
-                  {new Date(data.locked_at).toLocaleDateString()}
-                </b>
-              </>
-            )}
+          <div className="flex items-center justify-between mt-1.5 text-[11px] text-text-muted">
+            <span>Current: <b style={{ color: MIDNIGHT }}>{fmtUsd(sumCurrent)}</b></span>
+            <span>Target: <b style={{ color: MIDNIGHT }}>{fmtUsd(sumTarget)}</b></span>
           </div>
         </>
+      ) : (
+        <div className="text-[12px] text-text-muted italic">
+          No quantitative metrics with a numeric target yet.
+        </div>
+      )}
+      {vdd?.locked_at && (
+        <div className="mt-2 text-[10px] text-text-muted">
+          🔒 VDD locked on{" "}
+          <b style={{ color: MIDNIGHT }}>
+            {new Date(vdd.locked_at).toLocaleDateString()}
+          </b>
+        </div>
       )}
     </div>
   );
 }
 
-function RollupTile({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div
-      className="rounded-md px-3 py-2"
-      style={{
-        background: `${color}10`,
-        border: `1px solid ${color}30`,
-      }}
-    >
-      <div
-        className="text-[10px] font-bold uppercase"
-        style={{ color, letterSpacing: "0.05em" }}
-      >
-        {label}
-      </div>
-      <div
-        className="text-[18px] font-extrabold mt-0.5"
-        style={{ color }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
+// 29-May bug 29-32 — Legacy VDD-bucket rollup + RollupTile helper
+// deleted. Replaced by the single-bar Value Delivered card above.
