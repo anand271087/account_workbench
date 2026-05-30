@@ -148,6 +148,19 @@ class Account(Base):
         String, nullable=True
     )
 
+    # 28-May bug 28-33 — reason captured when CSM overrides the mode.
+    # Required (≥10 chars) by the route when mode is non-null. Cleared
+    # when mode → Auto.
+    plan_mode_override_reason: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+
+    # 28-May bug 28-33 — append-only history log of mode changes.
+    # Each entry: {at, by, by_name, from, to, reason}. Last 50 retained.
+    plan_mode_history: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'")
+    )
+
     # M29 — Intelligence & Reports · Intelligence section. Per-account
     # platform metrics snapshot powering the 6 Intelligence sub-tabs.
     # Real telemetry ingestion lands in v1.1; for now seeded for demo

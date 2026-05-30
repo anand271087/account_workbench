@@ -188,4 +188,7 @@ def compute_appetite(
             projected_acv_usd=Decimal(str(round(projected_acv, 2))),
             utilization_gate=utilization_gate,
         ),
+        # 28-May bug 28-33 — surface override reason + last 20 history entries.
+        override_reason=getattr(acc, "plan_mode_override_reason", None),
+        history=(getattr(acc, "plan_mode_history", None) or [])[-20:][::-1],
     )

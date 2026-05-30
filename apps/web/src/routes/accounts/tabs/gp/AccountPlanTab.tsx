@@ -257,11 +257,22 @@ function ModeOverrideModal({
   const [picked, setPicked] = useState<PlayMode | null>(
     current.is_overridden ? current.current_mode : null,
   );
+  // 28-May bug 28-33 — reason required (≥10 chars) when picking non-Auto.
+  const [reason, setReason] = useState<string>(
+    current.override_reason ?? "",
+  );
   const [err, setErr] = useState<string | null>(null);
+  const reasonTooShort =
+    picked !== null && reason.trim().length < 10;
 
   const mutation = useMutation({
-    mutationFn: (mode: PlayMode | null) =>
-      api.post(`/api/v1/accounts/${accountId}/plan-mode`, { mode }),
+    mutationFn: ({
+      mode,
+      reason: r,
+    }: {
+      mode: PlayMode | null;
+      reason: string | null;
+    }) => api.post(`/api/v1/accounts/${accountId}/plan-mode`, { mode, reason: r }),
     onSuccess: () => onSaved(),
     onError: (e: ApiError) => setErr(e.message),
   });
@@ -310,6 +321,66 @@ function ModeOverrideModal({
           );
         })}
       </div>
+      {/* 28-May bug 28-33 — reason required when overriding to a
+          non-Auto mode. Skipped/cleared when picking Auto. */}
+      {picked !== null && (
+        <div className="mb-3">
+          <label className="block text-[10px] uppercase tracking-wider font-semibold text-text-secondary mb-1">
+            Reason for override <span className="text-beroe-red">*</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            maxLength={600}
+            placeholder="Why is the system recommendation wrong for this account right now? (min 10 chars)"
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2.5 py-1.5 focus:outline-none focus:border-beroe-blue"
+          />
+          <div
+            className={cn(
+              "text-[10px] mt-0.5",
+              reasonTooShort ? "text-beroe-red" : "text-text-muted",
+            )}
+          >
+            {reason.trim().length}/600 · min 10 chars
+          </div>
+        </div>
+      )}
+
+      {/* 28-May bug 28-33 — Mode History: last 20 entries (newest first). */}
+      {current.history && current.history.length > 0 && (
+        <details className="mb-3 border border-beroe-card-border rounded-md">
+          <summary className="px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary cursor-pointer list-none flex items-center gap-1.5">
+            <span>📜</span>
+            Mode History ({current.history.length})
+          </summary>
+          <ul className="px-2.5 pb-2 max-h-40 overflow-y-auto space-y-1">
+            {current.history.map((h, i) => (
+              <li
+                key={i}
+                className="text-[11px] text-text-secondary flex flex-wrap items-baseline gap-1.5 border-b border-beroe-card-border/60 pb-1 last:border-b-0"
+              >
+                <span className="font-semibold text-text-primary">
+                  {h.from ? MODE_CONF[h.from].label : "Auto"} →{" "}
+                  {h.to ? MODE_CONF[h.to].label : "Auto"}
+                </span>
+                <span className="text-text-muted">
+                  · {h.by_name ?? "—"}
+                </span>
+                <span className="text-text-muted">
+                  · {new Date(h.at).toLocaleString()}
+                </span>
+                {h.reason && (
+                  <div className="basis-full text-[10px] text-text-muted italic mt-0.5">
+                    "{h.reason}"
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {err && <div className="text-[11px] text-beroe-red mb-2">{err}</div>}
       <div className="flex justify-end gap-2">
         <button
@@ -319,8 +390,13 @@ function ModeOverrideModal({
           Cancel
         </button>
         <button
-          onClick={() => mutation.mutate(picked)}
-          disabled={mutation.isPending}
+          onClick={() =>
+            mutation.mutate({
+              mode: picked,
+              reason: picked === null ? null : reason.trim(),
+            })
+          }
+          disabled={mutation.isPending || reasonTooShort}
           className="text-[11px] px-3 py-1.5 rounded-md bg-beroe-navy text-white font-semibold disabled:opacity-50"
         >
           Save

@@ -61,6 +61,8 @@ _FIELDS = (
     "delivery_renewal", "dr_outcome", "dr_outcome_set_at", "dr_outcome_set_by",
     # M26 — Growth & Pipeline · mode override.
     "plan_current_mode",
+    # 28-May bug 28-33 — mode override audit (reason + history).
+    "plan_mode_override_reason", "plan_mode_history",
     # M29 — Intelligence & Reports · Intelligence section snapshot.
     "platform_intel",
     "created_at", "updated_at", "deleted_at",

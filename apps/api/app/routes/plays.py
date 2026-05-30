@@ -248,10 +248,40 @@ async def set_plan_mode(
             status.HTTP_403_FORBIDDEN, "Cannot set play mode on this account"
         )
 
+    # 28-May bug 28-33 — reason required (≥10 chars) when setting an
+    # explicit mode. Clearing the override (mode=None) clears the reason
+    # too.
+    if body.mode is not None:
+        reason = (body.reason or "").strip()
+        if len(reason) < 10:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Reason for override must be at least 10 characters.",
+            )
+    else:
+        reason = None
+
     real = (
         await db.execute(select(Account).where(Account.id == account_id))
     ).scalar_one()
+    prev_mode = real.plan_current_mode
     real.plan_current_mode = body.mode  # None clears override → auto
+    real.plan_mode_override_reason = reason
+    # Append a history entry (oldest pruned past 50).
+    import copy
+
+    hist = copy.deepcopy(real.plan_mode_history or [])
+    hist.append(
+        {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "by": str(user.id),
+            "by_name": user.full_name or user.email,
+            "from": prev_mode,
+            "to": body.mode,
+            "reason": reason,
+        }
+    )
+    real.plan_mode_history = hist[-50:]
     real.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(real)

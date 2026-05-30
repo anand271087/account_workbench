@@ -72,6 +72,18 @@ class ModeBreakdown(BaseModel):
     utilization_gate: bool
 
 
+class ModeHistoryEntry(BaseModel):
+    """28-May bug 28-33 — one row in accounts.plan_mode_history."""
+
+    model_config = ConfigDict(extra="allow")
+    at: datetime
+    by: UUID | None = None
+    by_name: str | None = None
+    from_mode: PlayMode | None = Field(default=None, alias="from")
+    to_mode: PlayMode | None = Field(default=None, alias="to")
+    reason: str | None = None
+
+
 class AppetiteOut(BaseModel):
     """GET /accounts/:id/appetite-score response."""
 
@@ -81,10 +93,18 @@ class AppetiteOut(BaseModel):
     current_mode: PlayMode       # = override if set else recommended
     is_overridden: bool
     breakdown: ModeBreakdown
+    # 28-May bug 28-33 — current override reason + history.
+    override_reason: str | None = None
+    history: list[ModeHistoryEntry] = Field(default_factory=list)
 
 
 class ModeOverrideUpdate(BaseModel):
     """POST /accounts/:id/plan-mode body. Null clears the override and
-    falls back to the auto recommendation."""
+    falls back to the auto recommendation.
+
+    28-May bug 28-33 — reason is required (≥10 chars) when mode is
+    non-null; route returns 422 otherwise.
+    """
 
     mode: PlayMode | None = None
+    reason: str | None = Field(default=None, max_length=600)

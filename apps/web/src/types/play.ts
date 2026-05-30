@@ -57,6 +57,16 @@ export interface ModeBreakdown {
   utilization_gate: boolean;
 }
 
+// 28-May bug 28-33 — one entry in Appetite.history.
+export interface ModeHistoryEntry {
+  at: string;
+  by: string | null;
+  by_name: string | null;
+  from: PlayMode | null;
+  to: PlayMode | null;
+  reason: string | null;
+}
+
 export interface Appetite {
   account_id: string;
   score: number;
@@ -64,6 +74,9 @@ export interface Appetite {
   current_mode: PlayMode;
   is_overridden: boolean;
   breakdown: ModeBreakdown;
+  // 28-May bug 28-33 — current override reason + history (newest first).
+  override_reason: string | null;
+  history: ModeHistoryEntry[];
 }
 
 // Mirrors prototype PLAY_MODES.
