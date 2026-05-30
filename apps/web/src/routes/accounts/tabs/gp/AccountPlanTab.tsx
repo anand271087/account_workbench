@@ -430,9 +430,12 @@ function ScoreBreakdownDetails({ appetite }: { appetite: Appetite }) {
       `Pipeline vs ${bd.arr_target_pct}% target`,
     ],
   ];
+  // 29-May bug 29-43 — "How is this mode determined" panel repainted
+  // from neutral grey to a brand-Indigo tint so the breakdown reads as
+  // a primary explanation, not a secondary note.
   return (
-    <details className="bg-beroe-bg border border-beroe-card-border rounded-md">
-      <summary className="px-3.5 py-2.5 text-[11px] font-semibold text-text-secondary cursor-pointer flex items-center gap-1.5 list-none">
+    <details className="bg-beroe-blue/5 border border-beroe-blue/30 rounded-md">
+      <summary className="px-3.5 py-2.5 text-[11px] font-semibold text-beroe-blue cursor-pointer flex items-center gap-1.5 list-none">
         <span>ℹ️</span> How is this mode determined?
       </summary>
       <div className="px-3.5 pb-3.5">
@@ -1277,19 +1280,42 @@ const PLAY_CATALOG: { mode: string; title: string; trigger: string; value: strin
 ];
 
 function RecommendedPlays({ plays, mode }: { plays: Play[]; mode: PlayMode }) {
+  const account = useAccountFromLayout();
+  const qc = useQueryClient();
   const livePlays = plays.filter((p) => !p.hidden);
   const haveTitles = new Set(livePlays.map((p) => p.title.toLowerCase()));
   const recs = PLAY_CATALOG.filter((r) => r.mode === mode)
     .concat(PLAY_CATALOG.filter((r) => r.mode !== mode))
     .filter((r) => !haveTitles.has(r.title.toLowerCase()))
     .slice(0, 3);
+  // 29-May bug 29-47 — "+ Add to Expansion Plays" button per row that
+  // POSTs to /accounts/:id/plays so the CSM doesn't have to retype.
+  const addPlay = useMutation({
+    mutationFn: (r: PlayCatalogEntry) =>
+      api.post(`/api/v1/accounts/${account.id}/plays`, {
+        title: r.title,
+        value_usd: "0",
+        prob: 50,
+        when_text: null,
+        trigger_text: r.trigger,
+        modes: [r.mode],
+        role: null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plays", account.id] });
+      qc.invalidateQueries({ queryKey: ["appetite", account.id] });
+    },
+  });
   return (
     <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      <div className="text-[13px] font-bold mb-3">
-        ✨ Recommended Plays{" "}
-        <span className="text-[10px] font-normal text-text-muted">
-          · suggestions for {mode} mode
-        </span>
+      <div className="text-[13px] font-bold mb-1">
+        {/* 29-May bug 29-47 — section title updated to make the source
+            of the suggestions explicit ("Similar Accounts"). */}
+        ✨ Recommended Plays from Similar Accounts
+      </div>
+      <div className="text-[10px] text-text-muted mb-3">
+        Drawn from playbooks that worked for accounts in the same
+        industry · suggestions for {mode} mode
       </div>
       {recs.length === 0 ? (
         <div className="text-[12px] text-text-muted italic">
@@ -1304,12 +1330,23 @@ function RecommendedPlays({ plays, mode }: { plays: Play[]; mode: PlayMode }) {
             >
               <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
                 <span className="text-[12px] font-bold">{r.title}</span>
-                <span
-                  className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                  style={{ background: "#f4f3fe", color: "#4A00F8" }}
-                >
-                  {r.mode}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                    style={{ background: "#f4f3fe", color: "#4A00F8" }}
+                  >
+                    {r.mode}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => addPlay.mutate(r)}
+                    disabled={addPlay.isPending}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-beroe-blue text-white hover:opacity-90 disabled:opacity-50"
+                    title="Add this play to Expansion Plays"
+                  >
+                    + Add
+                  </button>
+                </div>
               </div>
               <div className="text-[11px] text-text-secondary leading-snug">
                 {r.trigger}
@@ -1324,6 +1361,8 @@ function RecommendedPlays({ plays, mode }: { plays: Play[]; mode: PlayMode }) {
     </div>
   );
 }
+
+type PlayCatalogEntry = (typeof PLAY_CATALOG)[number];
 
 // ============================================================
 // Plan Inputs — 26-May Row 60
