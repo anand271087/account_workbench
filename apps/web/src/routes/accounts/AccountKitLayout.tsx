@@ -11,7 +11,9 @@
 // user can view.
 
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAccountFromLayout } from "./AccountProfileLayout";
 import type { AccountDetail } from "@/types/account";
@@ -93,23 +95,38 @@ export default function AccountKitLayout() {
 }
 
 function KitCompletion({ account }: { account: AccountDetail }) {
-  // 28-May — Verbatim port of prototype line 5814-5840 (Kit Completion
-  // bar). Multi-segment bar — each step occupies an equal-width segment;
-  // the segment's COLOUR is fixed per-step and its OPACITY = step's
-  // completion percentage (0 → invisible / 1 → fully coloured).
-  //
-  // Prototype uses 6 steps; we have 4 since Row 73 merged Pre-Sales +
-  // Solutioning. The colour palette is taken straight from the prototype
-  // (line 5822) — pick first N colours for our N steps.
+  // 29-May bug 29-05 — Kit Completion now mirrors the prototype's 6
+  // stages (was 4): Pre-Sales · Solutioning · Sales Hand-off · Signed ·
+  // Metrics · VDD. Metrics + VDD completion derives from server data
+  // fetched here as light side queries (count metrics / vdd locked).
+  // The colour palette is the prototype's 6-color set (line 5822).
+  type MetricListResponse = { items: unknown[] };
+  type VddSnapshot = { locked_at: string | null };
+  const { data: metricsData } = useQuery<MetricListResponse>({
+    queryKey: ["metrics", account.id],
+    queryFn: () =>
+      api.get<MetricListResponse>(`/api/v1/accounts/${account.id}/metrics`),
+  });
+  const { data: vddData } = useQuery<VddSnapshot>({
+    queryKey: ["vdd", account.id],
+    queryFn: () =>
+      api.get<VddSnapshot>(
+        `/api/v1/accounts/${account.id}/value-delivery-document`,
+      ),
+  });
+  const metricCount = metricsData?.items?.length ?? 0;
+  const vddLocked = !!vddData?.locked_at;
   const steps: { label: string; done: boolean; col: string }[] = [
+    { label: "Pre-Sales", done: account.handed_off_to_solutioning, col: "#4A00F8" },
+    { label: "Solutioning", done: account.handed_off_to_solutioning, col: "#F0BC41" },
+    { label: "Sales Hand-off", done: account.gate_signed, col: "#C344C7" },
     {
-      label: "Pre-Sales & Solutioning",
-      done: account.handed_off_to_solutioning,
-      col: "#4A00F8", // violet
+      label: "Signed",
+      done: account.gate_signed && !account.gate_unlocked,
+      col: "#35E1D4",
     },
-    { label: "Sales Hand-off", done: account.gate_signed, col: "#F0BC41" }, // orange
-    { label: "CS Onboarding", done: account.cs_entry_type !== null, col: "#C344C7" }, // magenta
-    { label: "Brief", done: account.handed_off_to_solutioning, col: "#35E1D4" }, // teal
+    { label: "Metrics", done: metricCount > 0, col: "#6EC457" },
+    { label: "VDD", done: vddLocked, col: "#CF4548" },
   ];
   const completed = steps.filter((s) => s.done).length;
   const overallPct = Math.round((completed / steps.length) * 100);
