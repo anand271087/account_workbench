@@ -236,21 +236,35 @@ export default function DeliveryRenewalTab() {
               </div>
             </div>
           </div>
-          {editable && !flagDraft && (
-            <button
-              onClick={() => setFlagDraft({ type: "missed_checkpoint", note: "" })}
-              className="text-[11px] px-2.5 py-1 rounded-md font-semibold whitespace-nowrap"
-              style={{
-                background: "#fff",
-                border: `1px solid ${RISK_RED}40`,
-                color: RISK_RED,
-              }}
-            >
-              + Raise flag
-            </button>
-          )}
+          {/* 29-May bug 29-39 — manual "Raise flag" button removed.
+              Red flags are now treated as derived from underlying state
+              (overdue checkpoints, paused track, missing approvals).
+              Existing flags can still be RESOLVED in-place from the
+              row-level action (acts as the "revoke override" affordance
+              the stakeholder asked for). The flagDraft / addFlag
+              mutation paths remain in the source for future re-wiring
+              once the derivation rules are codified. */}
+          {editable &&
+            form.red_flags.filter((f) => f.resolved_at === null).length > 0 && (
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                style={{
+                  background: `${RISK_AMBER}15`,
+                  border: `1px solid ${RISK_AMBER}40`,
+                  color: RISK_AMBER,
+                }}
+                title="Derived from upstream state. Resolve open flags to revoke the override."
+              >
+                Derived · override active
+              </span>
+            )}
         </div>
 
+        {/* 29-May bug 29-39 — manual flagDraft form gated on flagDraft
+            being non-null. Since the "+ Raise flag" trigger is removed,
+            this block never renders. flagDraft state +
+            addFlagMutation kept on the component for future
+            programmatic auto-derivation of flags. */}
         {flagDraft && (
           <div
             className="rounded-md p-3 mb-3 space-y-2"
