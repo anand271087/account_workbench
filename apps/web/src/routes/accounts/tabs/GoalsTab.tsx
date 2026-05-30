@@ -997,12 +997,16 @@ function InitiativeList({
   onChange: (next: Initiative[]) => void;
 }) {
   const stages = VALUE_STAGES[category];
+  // 29-May bug 29-31 — top-3 stages shown as the dot indicator. For
+  // cost_savings these are Identified → Committed → Implemented; for
+  // other categories the first three entries of VALUE_STAGES.
+  const dotStages = stages.slice(0, 3);
   return (
     <div className="space-y-2">
       {items.map((it, i) => (
         <div
           key={i}
-          className="rounded-lg border border-beroe-card-border bg-beroe-bg/30 p-3 relative"
+          className="rounded-lg border border-beroe-card-border bg-white p-3 relative"
         >
           {editable && (
             <button
@@ -1013,7 +1017,9 @@ function InitiativeList({
               ✕
             </button>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+          {/* 29-May bug 29-31 — Name + " — " + description (sub_initiatives)
+              on one line, matching the prototype. */}
+          <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_2fr] gap-2 mb-2 pr-6">
             <input
               type="text"
               maxLength={200}
@@ -1027,8 +1033,40 @@ function InitiativeList({
                 )
               }
               disabled={!editable}
+              className={cn(inputCls(editable), "font-semibold")}
+            />
+            <input
+              type="text"
+              maxLength={400}
+              value={it.sub_initiatives ?? ""}
+              placeholder="One-line description"
+              onChange={(e) =>
+                onChange(
+                  items.map((x, j) =>
+                    j === i ? { ...x, sub_initiatives: e.target.value } : x,
+                  ),
+                )
+              }
+              disabled={!editable}
               className={inputCls(editable)}
             />
+          </div>
+
+          {/* 29-May bug 29-31 — 3-stage dot indicator (Identified /
+              Committed / Implemented for cost_savings) above the inputs.
+              Active stage = current value_stage, past stages = green
+              (delivered), future stages = grey. */}
+          {dotStages.length > 0 && (
+            <StageDotRow
+              stages={dotStages}
+              activeStage={it.value_stage ?? null}
+              status={it.status}
+            />
+          )}
+
+          {/* Status select on the same row as the stage badge for
+              compactness. */}
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-2 mb-2">
             <select
               value={it.status}
               onChange={(e) =>
@@ -1049,6 +1087,28 @@ function InitiativeList({
               <option value="not_started">Not started</option>
               <option value="in_progress">In progress</option>
               <option value="delivered">Delivered</option>
+            </select>
+            {/* Pending / yes / not_yet client ack on the right. */}
+            <select
+              value={it.client_acknowledged ?? "pending"}
+              onChange={(e) =>
+                onChange(
+                  items.map((x, j) =>
+                    j === i
+                      ? {
+                          ...x,
+                          client_acknowledged: e.target.value as Initiative["client_acknowledged"],
+                        }
+                      : x,
+                  ),
+                )
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            >
+              <option value="pending">Pending</option>
+              <option value="yes">Client confirmed</option>
+              <option value="not_yet">Not yet</option>
             </select>
           </div>
           {stages.length > 0 && (
@@ -1182,6 +1242,74 @@ function InitiativeList({
           + Initiative
         </button>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// 29-May bug 29-31 — Stage dot row (3 stages per category).
+// Active stage = filled brand-amber. Past stages = filled brand-green.
+// Future stages = grey outline. Status === "delivered" colours all
+// dots brand-green to signal completion.
+// ============================================================
+
+function StageDotRow({
+  stages,
+  activeStage,
+  status,
+}: {
+  stages: string[];
+  activeStage: string | null;
+  status: Initiative["status"];
+}) {
+  const activeIdx = activeStage ? stages.indexOf(activeStage) : -1;
+  const fullyDone = status === "delivered";
+  return (
+    <div className="flex items-start gap-0 mb-2 mt-1">
+      {stages.map((s, idx) => {
+        const isPast = fullyDone || (activeIdx >= 0 && idx < activeIdx);
+        const isActive = !fullyDone && idx === activeIdx;
+        const dotColor = isPast
+          ? "#6EC457" // Risk Green
+          : isActive
+            ? "#F0BC41" // Risk Amber
+            : "#cbd5e1"; // grey outline
+        const labelColor = isPast || isActive ? "#001137" : "#94a3b8";
+        return (
+          <div
+            key={s}
+            className="flex-1 flex flex-col items-center text-center"
+          >
+            <div className="w-full flex items-center">
+              {/* Connector left (skip on first) */}
+              <div
+                className="flex-1 h-[2px]"
+                style={{ background: idx === 0 ? "transparent" : dotColor }}
+              />
+              <div
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{
+                  background: isPast || isActive ? dotColor : "#fff",
+                  border: `1.5px solid ${dotColor}`,
+                }}
+              />
+              {/* Connector right (skip on last) */}
+              <div
+                className="flex-1 h-[2px]"
+                style={{
+                  background: idx === stages.length - 1 ? "transparent" : "#cbd5e1",
+                }}
+              />
+            </div>
+            <div
+              className="text-[9px] mt-1 font-semibold uppercase tracking-wider"
+              style={{ color: labelColor }}
+            >
+              {s.replace(/_/g, " ")}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
