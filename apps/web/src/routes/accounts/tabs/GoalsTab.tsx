@@ -450,9 +450,26 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
         />
       </PhaseEditor>
 
-      {/* Initiatives */}
+      {/* Initiatives — 29-May bug 29-31: counter renamed to
+          "N INITIATIVES · M DELIVERED" per the prototype screenshot.
+          Delivered = initiatives at the final success stage for the
+          goal's category (implemented / achieved / disruption_avoided
+          / embedded). */}
       <Section
-        title={`Initiatives (${form.initiatives.length})`}
+        title={(() => {
+          // "Delivered" = initiative.status === "delivered" OR
+          // initiative.value_stage matches the category's success
+          // milestone (implemented / achieved / disruption_avoided /
+          // embedded — the third entry of VALUE_STAGES[category]).
+          const stages = VALUE_STAGES[form.category];
+          const deliveredStage = stages[2] ?? null;
+          const delivered = form.initiatives.filter(
+            (it) =>
+              it.status === "delivered" ||
+              (deliveredStage && it.value_stage === deliveredStage),
+          ).length;
+          return `${form.initiatives.length} INITIATIVES · ${delivered} DELIVERED`;
+        })()}
         subtitle="What you'll actually do to hit the target."
       >
         <InitiativeList
