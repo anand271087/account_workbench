@@ -323,8 +323,51 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
         </div>
       )}
 
-      {/* Header — title / category / target / date / owner */}
+      {/* 29-May bug 29-31 — the closed GoalCard button already surfaces
+          title + category + alignment. The expanded editor now opens
+          with the prototype's three-input row (target value / target
+          date / owner) sitting flush at the top, followed by Title +
+          Category as secondary edits below. */}
       <Section title="Goal header">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <Field label="Target value">
+            <input
+              type="text"
+              maxLength={200}
+              value={form.target_value ?? ""}
+              placeholder='e.g. $1M · "40 suppliers → 25" · "80% MAU"'
+              onChange={(e) =>
+                setForm({ ...form, target_value: e.target.value || null })
+              }
+              disabled={!editable}
+              className={cn(inputCls(editable), "font-semibold")}
+            />
+          </Field>
+          <Field label="Target date">
+            <input
+              type="date"
+              value={form.target_date ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, target_date: e.target.value || null })
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            />
+          </Field>
+          <Field label="Owner">
+            <input
+              type="text"
+              maxLength={200}
+              value={form.owner ?? ""}
+              placeholder="Who's accountable"
+              onChange={(e) =>
+                setForm({ ...form, owner: e.target.value || null })
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            />
+          </Field>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Title">
             <input
@@ -351,43 +394,6 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Target value">
-            <input
-              type="text"
-              maxLength={200}
-              value={form.target_value ?? ""}
-              placeholder='e.g. $1M · "40 suppliers → 25" · "80% MAU"'
-              onChange={(e) =>
-                setForm({ ...form, target_value: e.target.value || null })
-              }
-              disabled={!editable}
-              className={inputCls(editable)}
-            />
-          </Field>
-          <Field label="Target date">
-            <input
-              type="date"
-              value={form.target_date ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, target_date: e.target.value || null })
-              }
-              disabled={!editable}
-              className={inputCls(editable)}
-            />
-          </Field>
-          <Field label="Owner">
-            <input
-              type="text"
-              maxLength={200}
-              value={form.owner ?? ""}
-              placeholder="Who's accountable"
-              onChange={(e) =>
-                setForm({ ...form, owner: e.target.value || null })
-              }
-              disabled={!editable}
-              className={inputCls(editable)}
-            />
           </Field>
           <Field label="Alignment status (derived)">
             <input
