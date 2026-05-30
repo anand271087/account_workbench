@@ -1215,16 +1215,51 @@ function EditableShell({
   empty: boolean;
   children: React.ReactNode;
 }) {
+  // 28-May bug 28-15 — the whole card is now a click target with a
+  //   * brand-blue hover ring,
+  //   * bolder title (sm primary instead of micro muted),
+  //   * + Add / Edit pill on the right (more visible than the tiny
+  //     underlined link it replaced),
+  // so the 3 phase blocks (What Does It Mean / Groundwork / Agreed
+  // Target) are unambiguously interactive instead of reading as labels.
   return (
-    <div className="bg-white border border-beroe-card-border rounded-md px-2.5 py-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+    <div
+      className={cn(
+        "bg-white border rounded-md px-3 py-2.5 transition-colors",
+        open
+          ? "border-beroe-blue/50"
+          : "border-beroe-card-border hover:border-beroe-blue/40 hover:bg-beroe-blue/5 cursor-pointer",
+      )}
+      onClick={() => {
+        if (!open) setOpen(true);
+      }}
+      role={open ? undefined : "button"}
+      tabIndex={open ? undefined : 0}
+      onKeyDown={(e) => {
+        if (!open && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          setOpen(true);
+        }
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[12px] font-bold text-text-primary">
           {title}
         </div>
         <button
           type="button"
-          onClick={() => setOpen(!open)}
-          className="text-[10px] text-beroe-blue font-semibold hover:underline"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(!open);
+          }}
+          className={cn(
+            "text-[10px] font-semibold px-2 py-0.5 rounded-md border transition-colors",
+            open
+              ? "border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
+              : empty
+                ? "border-beroe-blue/40 text-beroe-blue bg-beroe-blue/5 hover:bg-beroe-blue/15"
+                : "border-beroe-blue/40 text-beroe-blue hover:bg-beroe-blue/10",
+          )}
         >
           {open ? "Close" : empty ? "+ Add" : "Edit"}
         </button>
@@ -1232,15 +1267,18 @@ function EditableShell({
       {!open && (
         <div
           className={cn(
-            "text-[12px] mt-1 leading-snug cursor-pointer",
+            "text-[12px] mt-1 leading-snug",
             empty ? "text-text-muted italic" : "text-text-primary",
           )}
-          onClick={() => setOpen(true)}
         >
           {summary}
         </div>
       )}
-      {open && <div className="mt-2">{children}</div>}
+      {open && (
+        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
