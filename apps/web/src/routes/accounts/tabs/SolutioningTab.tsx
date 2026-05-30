@@ -163,8 +163,8 @@ export default function SolutioningTab() {
     return <div className="text-sm text-beroe-red">Failed to load solutioning data.</div>;
   }
 
-  const aiExtracted = !!form.ai_extracted_at;
-  const showAiBadge = aiExtracted && form.is_editable;
+  // 28-May bug 28-06 — showAiBadge derived state removed with the
+  // AI-generated callout. ai_extracted_at flag still on the schema.
   const isLocked = !!form.locked_at;
   // Whether *role* allows writes, regardless of lock — needed so the Unlock
   // button can show in the Sales Hand-off card while is_editable is false.
@@ -224,20 +224,11 @@ export default function SolutioningTab() {
             </div>
           </div>
         )}
-        {showAiBadge && (
-          <div className={cn(
-            "rounded-xl border p-3 text-xs",
-            form.ai_edited
-              ? "bg-beroe-purple/10 border-beroe-purple/30 text-beroe-purple"
-              : "bg-beroe-teal/10 border-beroe-teal/30 text-beroe-teal",
-          )}>
-            <span className="font-bold">
-              {form.ai_edited ? "AI-assisted" : "AI-generated"}
-            </span>{" "}
-            · last extracted {form.ai_extracted_at && new Date(form.ai_extracted_at).toLocaleString()}
-            {!form.ai_edited && " — edits will mark it AI-assisted."}
-          </div>
-        )}
+        {/* 28-May bug 28-06 — "AI-generated / AI-assisted" badge card
+            removed per stakeholder feedback ("delete section - Value
+            Proposition Deck (1)"). The tag's value is now expressed
+            inline by the VPD description text + the per-doc badge
+            inside KindUploadCard; the standalone callout is gone. */}
 
         {/* 27-May Row 82 — section sequence rewritten to match the
             stakeholder's exact order:

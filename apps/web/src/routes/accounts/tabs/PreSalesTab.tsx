@@ -247,28 +247,10 @@ export default function PreSalesTab() {
         emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt, .vtt or .eml onto the card above."
       />
 
-      {/* 27-May Row 75 — Pre-Meeting Brief now opens INLINE on Pre-Sales
-          via a collapsible <details> disclosure. Stakeholder didn't
-          want users redirected away to a separate tab; the standalone
-          /brief route is kept for deep-links but the primary entry
-          point is here next to the MoM upload area. */}
-      <details className="group bg-white rounded-card border border-beroe-card-border overflow-hidden">
-        <summary className="px-5 py-3 cursor-pointer list-none flex items-center gap-2 hover:bg-beroe-bg transition-colors">
-          <span className="text-sm font-bold text-text-primary">
-            🗓 Pre-Meeting Brief
-          </span>
-          <span className="text-[11px] text-text-muted">
-            · Call info, attendees, objectives, minefields, cheat sheet
-          </span>
-          <span className="ml-auto text-xs text-beroe-blue font-semibold flex items-center gap-1">
-            <span className="group-open:hidden">▾ Open inline</span>
-            <span className="hidden group-open:inline">▴ Collapse</span>
-          </span>
-        </summary>
-        <div className="border-t border-beroe-card-border p-4 bg-beroe-bg/50">
-          <PreMeetingBriefInline accountId={account.id} />
-        </div>
-      </details>
+      {/* 29-May bug 29-07 — Pre-Meeting Brief moved to the END of the
+          Pre-Sales tab (was here right after the MoM upload). The
+          original inline expander lives further down so the brief
+          renders as the LAST section before the sticky save bar. */}
 
       {/* 28-May — Wrap all Pre-Sales fields inside the prototype's outer
           A) Pre-Sales & Discovery card (line 5848-5912). Single white
@@ -590,6 +572,28 @@ export default function PreSalesTab() {
           </div>
         </div>
       )}
+
+      {/* 29-May bug 29-07 — Pre-Meeting Brief as the LAST section of
+          Pre-Sales (was previously rendered right after the MoM
+          upload card). Collapsible <details> kept so the brief is
+          discoverable without dominating the layout. */}
+      <details className="lg:col-span-3 group bg-white rounded-card border border-beroe-card-border overflow-hidden">
+        <summary className="px-5 py-3 cursor-pointer list-none flex items-center gap-2 hover:bg-beroe-bg transition-colors">
+          <span className="text-sm font-bold text-text-primary">
+            🗓 Pre-Meeting Brief
+          </span>
+          <span className="text-[11px] text-text-muted">
+            · Call info, attendees, objectives, minefields, cheat sheet
+          </span>
+          <span className="ml-auto text-xs text-beroe-blue font-semibold flex items-center gap-1">
+            <span className="group-open:hidden">▾ Open inline</span>
+            <span className="hidden group-open:inline">▴ Collapse</span>
+          </span>
+        </summary>
+        <div className="border-t border-beroe-card-border p-4 bg-beroe-bg/50">
+          <PreMeetingBriefInline accountId={account.id} />
+        </div>
+      </details>
 
       {/* Sticky save bar — pulses when dirty */}
       {form.is_editable && (

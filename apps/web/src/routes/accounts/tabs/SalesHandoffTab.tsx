@@ -235,6 +235,14 @@ export default function SalesHandoffTab() {
           watch-outs before the signing event.
         </p>
 
+        {/* 29-May bug 29-14 — "Value Definition Validation" group
+            heading now sits ABOVE the violet From-Solutioning box per
+            the screenshot, so the Sales reader sees "what they're
+            validating" labelled before reading the content. */}
+        <div className="text-[12px] uppercase tracking-wider font-bold text-text-secondary mt-1 mb-1.5">
+          Value Definition Validation
+        </div>
+
         {/* 27-May Row 85 — Value Definition (received) + Value Themes
             merged into ONE violet box so Sales sees the full Solutioning
             output at a glance instead of two separate fields. */}
@@ -272,8 +280,11 @@ export default function SalesHandoffTab() {
           )}
         </div>
 
-        {/* GROUP 1 — Value Definition Validation (prototype line 5985). */}
-        <Section variant="group" title="Value Definition Validation">
+        {/* GROUP 1 — Value Definition Validation form fields.
+            29-May bug 29-14 — the section title now lives above the
+            violet box (added directly under the Sales Hand-off intro).
+            This inner Section keeps the form rendering. */}
+        <Section variant="group" title="">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Sales validation">
               <select
