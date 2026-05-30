@@ -1019,172 +1019,88 @@ function AttachmentsRow({
 
 // ============================================================
 // Reference — What Must Be Shown at Each Checkpoint
+// 29-May bug 29-35 — single-list format per stakeholder screenshot
+// (4-column grid, default-visible).
 // ============================================================
 
-const CHECKPOINT_GUIDE: Record<
-  CheckpointType,
-  { tagline: string; review: string[]; decide: string[]; signoff: string[] }
-> = {
-  Kickoff: {
-    tagline: "Set scope, success metrics, owners, cadence.",
-    review: [
-      "Engagement scope + categories in play",
-      "Stakeholder map (sponsor, champion, budget owner)",
-      "Baseline data + starting metrics",
-    ],
-    decide: [
-      "Primary success metric + measurement method",
-      "Cadence (MBR/QBR dates, monthly check-ins)",
-      "Engagement plan + first 90-day initiatives",
-    ],
-    signoff: [
-      "Success contract (3 locks)",
-      "Initiatives committed for first quarter",
-      "Client acknowledgement of scope + cadence",
-    ],
-  },
-  MBR: {
-    tagline: "Usage trajectory + early wins after first 90 days.",
-    review: [
-      "Logins, active users, module adoption vs target",
-      "Initiatives in flight + blockers",
-      "Early value identified (savings, risk avoided, time saved)",
-    ],
-    decide: [
-      "Course-correct stalled initiatives",
-      "Onboard new users / categories if usage lagging",
-      "Confirm QBR agenda + invitees",
-    ],
-    signoff: [
-      "Updated success metrics with current vs target",
-      "Next-90-day initiative list",
-      "Client acknowledgement on usage trend",
-    ],
-  },
-  QBR: {
-    tagline: "Value delivered + commercial signal half-way through term.",
-    review: [
-      "All success metrics with green/amber/red status",
-      "Value delivered ($ identified / committed / implemented)",
-      "Adoption + super-user roster",
-      "Soft signals (positive + risk) since Kickoff",
-    ],
-    decide: [
-      "Renewal posture (expand / retain / at-risk)",
-      "Expansion plays to pitch (modules, categories, geos)",
-      "Renewal Readiness gaps to close before T−14d",
-    ],
-    signoff: [
-      "Value Delivery Document checkpoint snapshot",
-      "Initiatives for next 90 days + expansion proposal",
-      "Client acknowledgement on renewal direction",
-    ],
-  },
-  Renewal: {
-    tagline: "Lock the outcome — renewed / at-risk / not renewed.",
-    review: [
-      "Full-term Value Delivery Document (all 4 sections)",
-      "Final ARR delivered vs committed",
-      "Outstanding red flags + resolution status",
-      "Renewal Readiness 3-question grid",
-    ],
-    decide: [
-      "Renewal terms (ACV, modules, duration)",
-      "Outcome: renewed / at-risk / not renewed",
-      "Hand-off plan if not renewing",
-    ],
-    signoff: [
-      "Signed renewal contract OR documented exit",
-      "Final VDD locked",
-      "Outcome stamped on Delivery & Renewal",
-    ],
-  },
+const CHECKPOINT_MUST_SHOW: Record<CheckpointType, string[]> = {
+  Kickoff: [
+    "Success contract presented",
+    "Stakeholder map confirmed",
+    "Initiatives agreed",
+    "Client signs off on measurement method",
+  ],
+  MBR: [
+    "Progress vs success metric (not activities)",
+    "At least one initiative with measurable output",
+    "Early value signal surfaced",
+  ],
+  QBR: [
+    "CSM-attributed value with data",
+    "Client acknowledgement",
+    "Gap to goal quantified",
+    "Expansion opportunity surfaced if Track 1 is green",
+  ],
+  Renewal: [
+    "All 3 renewal readiness questions answered with proof",
+    "VDD updated",
+    "Next cycle goals agreed before contract is signed",
+  ],
 };
 
 function CheckpointReferenceCard() {
-  const [open, setOpen] = useState(false);
+  // 29-May bug 29-35 — default-visible reference panel matching the
+  // prototype screenshot: a 4-column grid (lg breakpoint) with one
+  // tinted card per checkpoint type, each listing the must-show
+  // bullets. On smaller screens collapses to single column.
   return (
     <div
-      className="rounded-card"
+      className="rounded-card p-3.5"
       style={{ background: "#fff", border: "1px solid #e4eaf6" }}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left"
-      >
-        <div>
-          <div
-            className="text-[12px] font-bold"
-            style={{ color: MIDNIGHT }}
-          >
-            What must be shown at each checkpoint
-          </div>
-          <p className="text-[10px] text-text-muted">
-            Stakeholder reference — what to review, decide, and sign off at
-            Kickoff · MBR · QBR · Renewal.
-          </p>
-        </div>
-        <span className="text-[11px] text-text-muted">
-          {open ? "▴ Hide" : "▾ Show"}
-        </span>
-      </button>
-      {open && (
-        <div
-          className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3"
-          style={{ borderTop: "1px solid #e4eaf6" }}
-        >
-          {TYPES.map((type) => {
-            const g = CHECKPOINT_GUIDE[type];
-            const col = TYPE_COLORS[type];
-            return (
-              <div
-                key={type}
-                className="rounded-lg p-3"
-                style={{
-                  background: `${col}08`,
-                  border: `1px solid ${col}30`,
-                }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[14px]">{TYPE_ICONS[type]}</span>
-                  <span
-                    className="text-[12px] font-bold"
-                    style={{ color: col }}
-                  >
-                    {type}
-                  </span>
-                </div>
-                <p className="text-[10px] text-text-muted mb-2 italic">
-                  {g.tagline}
-                </p>
-                <div className="space-y-1.5">
-                  <ReferenceList label="Review" items={g.review} />
-                  <ReferenceList label="Decide" items={g.decide} />
-                  <ReferenceList label="Sign off" items={g.signoff} />
-                </div>
+      <div className="text-[12px] font-bold mb-2.5" style={{ color: MIDNIGHT }}>
+        What Must Be Shown at Each Checkpoint
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {TYPES.map((type) => {
+          const col = TYPE_COLORS[type];
+          return (
+            <div
+              key={type}
+              className="rounded-lg p-3"
+              style={{
+                background: `${col}08`,
+                border: `1px solid ${col}30`,
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[14px]">{TYPE_ICONS[type]}</span>
+                <span
+                  className="text-[12px] font-bold"
+                  style={{ color: col }}
+                >
+                  {type}
+                </span>
               </div>
-            );
-          })}
-        </div>
-      )}
+              <ul className="space-y-1">
+                {CHECKPOINT_MUST_SHOW[type].map((bullet, i) => (
+                  <li
+                    key={i}
+                    className="text-[11px] leading-snug"
+                    style={{ color: MIDNIGHT + "cc" }}
+                  >
+                    • {bullet}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function ReferenceList({ label, items }: { label: string; items: string[] }) {
-  return (
-    <div>
-      <div className="text-[9px] uppercase tracking-wide font-semibold text-text-muted">
-        {label}
-      </div>
-      <ul className="mt-0.5 space-y-0.5">
-        {items.map((it, i) => (
-          <li key={i} className="text-[11px] text-text-secondary leading-snug">
-            • {it}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+// 29-May bug 29-35 — legacy CheckpointReferenceCard body + ReferenceList
+// helper deleted. The bucket data (Review / Decide / Sign off) is no
+// longer surfaced here per stakeholder feedback.
