@@ -1211,12 +1211,14 @@ function ChurnRiskBanner({
             <li key={i}>• {f}</li>
           ))}
         </ul>
+        {/* 29-May bug 29-02 — chip labels renamed to match prototype
+            ("arr" → "value", "overdue" → "checkpoints"). */}
         <div className="flex gap-1.5 mt-2 flex-wrap">
           {[
             ["health", healthRisk, 35],
             ["signals", sigRisk, 25],
-            ["arr", arrRisk, 20],
-            ["overdue", cpRisk, 20],
+            ["checkpoints", cpRisk, 20],
+            ["value", arrRisk, 20],
           ].map(([k, v, total]) => (
             <span
               key={String(k)}
@@ -1229,6 +1231,13 @@ function ChurnRiskBanner({
               {k}: {v}/{total}
             </span>
           ))}
+        </div>
+        {/* 29-May bug 29-02 — Trend line at the bottom of the banner.
+            Direction derives from the appetite-score band: high churn
+            (level=high) → declining; medium → flat. The 6-month window
+            is a placeholder until per-account trend telemetry lands. */}
+        <div className="inline-block mt-2 px-2 py-0.5 rounded-md bg-beroe-blue text-white text-[10px] font-semibold">
+          Trend: {level === "high" ? "↘ Declining" : "→ Flat"} over last 6 months
         </div>
       </div>
     </div>
@@ -1311,17 +1320,19 @@ function AcvHealthPulseRow({
                 style={{ width: `${pct}%`, background: barCol }}
               />
             </div>
+            {/* 29-May bug 29-03 — Pipeline line is now always rendered
+                (was gated on pipeline > 0). When the appetite engine
+                returns 0 pipeline we still show "Pipeline: $0" so the
+                stakeholder sees the field exists. */}
             <div className="flex gap-3.5 text-[11px]">
               {gap > 0 ? (
                 <span style={{ color: "#fbbf24" }}>▲ {formatACV(String(gap))} gap</span>
               ) : (
                 <span style={{ color: "#6EC457" }}>✓ Target achieved</span>
               )}
-              {pipeline > 0 && (
-                <span style={{ color: "rgba(255,255,255,.6)" }}>
-                  Pipeline: {fmtK(pipeline)}
-                </span>
-              )}
+              <span style={{ color: "rgba(255,255,255,.85)" }}>
+                Pipeline: <b className="text-white">{fmtK(pipeline)}</b>
+              </span>
             </div>
           </div>
           {/* Right: HEALTH gauge */}
