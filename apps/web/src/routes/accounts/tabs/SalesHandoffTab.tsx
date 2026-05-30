@@ -16,6 +16,8 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+// 29-May bug 29-16 — Sales Handoff Documents upload card.
+import { KindUploadCard } from "@/components/KindUploadCard";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   SH_VALIDATION_LABELS,
@@ -291,19 +293,10 @@ export default function SalesHandoffTab() {
                 ))}
               </select>
             </Field>
-            <Field label="Stakeholder sign-off">
-              <input
-                type="text"
-                maxLength={600}
-                value={form.sh_stakeholder_signoff ?? ""}
-                placeholder="Who on the client side approved"
-                onChange={(e) =>
-                  setForm({ ...form, sh_stakeholder_signoff: e.target.value || null })
-                }
-                disabled={!editable}
-                className={inputCls(editable)}
-              />
-            </Field>
+            {/* 29-May bug 29-15 — Stakeholder sign-off relocated from
+                here (Sales Validation group) to Engagement Timeline,
+                placed after First checkpoint per the prototype
+                screenshot. */}
           </div>
 
           <Field label="Validation notes">
@@ -321,7 +314,10 @@ export default function SalesHandoffTab() {
           </Field>
         </Section>
 
-        {/* GROUP 2 — Engagement Timeline (prototype line 6015). */}
+        {/* GROUP 2 — Engagement Timeline (prototype line 6015).
+            29-May bug 29-15 — First checkpoint reinstated (was removed
+            in 28-08; the newer 29-May spec keeps it) and Stakeholder
+            sign-off relocated here, placed under the timeline. */}
         <Section variant="group" title="Engagement Timeline">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Go-live date">
@@ -335,8 +331,32 @@ export default function SalesHandoffTab() {
               className={inputCls(editable)}
             />
           </Field>
-          {/* 28-May bug 28-08 — First checkpoint field removed. */}
+          <Field label="First checkpoint">
+            <input
+              type="date"
+              value={form.sh_first_checkpoint ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, sh_first_checkpoint: e.target.value || null })
+              }
+              disabled={!editable}
+              className={inputCls(editable)}
+            />
+          </Field>
         </div>
+
+        <Field label="Stakeholder sign-off">
+          <input
+            type="text"
+            maxLength={600}
+            value={form.sh_stakeholder_signoff ?? ""}
+            placeholder="Who on the client side approved (e.g. Jordan Mills, Dave Kowalski)"
+            onChange={(e) =>
+              setForm({ ...form, sh_stakeholder_signoff: e.target.value || null })
+            }
+            disabled={!editable}
+            className={inputCls(editable)}
+          />
+        </Field>
 
         {/* 28-May bug 28-08 — Commercial context field removed. */}
 
@@ -354,7 +374,19 @@ export default function SalesHandoffTab() {
           />
         </Field>
 
-        {/* 28-May bug 28-08 — Handoff document filename field removed. */}
+        {/* 29-May bug 29-16 — actual file upload affordance for the
+            handoff document (was just a filename text input). Files
+            land under the existing "contract" doc kind and surface in
+            the Account Kit → Documents grid. */}
+        <div className="mt-3">
+          <KindUploadCard
+            accountId={account.id}
+            kind="contract"
+            title="Sales handoff documents"
+            description="Upload the signed handoff doc, ROI deck, commercial brief, or any other artefact Sales is passing to CS."
+            emptyHint="No handoff documents yet. Drag a .docx, .pdf or .pptx onto the card above."
+          />
+        </div>
 
         </Section>
 
