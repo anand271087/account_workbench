@@ -883,6 +883,29 @@ function GoalAlignmentSurface({ accountId }: { accountId: string }) {
           ))}
         </ul>
       )}
+
+      {/* 29-May bug 29-25 — Small VDD shortcut card at the end of the
+          goals list linking to Delivery & Renewal. Lets the CSM jump
+          straight to the VDD evidence panel from the goal-alignment
+          workflow they just completed. */}
+      <a
+        href={`/accounts/${accountId}/success-management/delivery-renewal`}
+        className="mt-3 flex items-center gap-2.5 rounded-md border border-beroe-blue/30 bg-beroe-blue/5 hover:bg-beroe-blue/10 px-3 py-2.5 transition-colors"
+      >
+        <span className="text-[16px]">📄</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-semibold text-beroe-blue">
+            Value Delivery Document
+          </div>
+          <div className="text-[10px] text-text-muted">
+            Once goals + initiatives are aligned, capture the evidence in
+            Delivery & Renewal.
+          </div>
+        </div>
+        <span className="text-[12px] text-beroe-blue font-semibold flex-shrink-0">
+          →
+        </span>
+      </a>
     </NumberedCard>
   );
 }
