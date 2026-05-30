@@ -48,6 +48,8 @@ export default function VDDTab() {
 
   const [form, setForm] = useState<Vdd | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // 29-May bug 29-29 — Sales-approval gate on unlock.
+  const [showUnlockApproval, setShowUnlockApproval] = useState(false);
 
   useEffect(() => {
     if (data && !form) setForm(data);
@@ -321,11 +323,11 @@ export default function VDDTab() {
             {locked ? (
               isAdmin && (
                 <button
-                  onClick={() => unlockMutation.mutate()}
+                  onClick={() => setShowUnlockApproval(true)}
                   disabled={unlockMutation.isPending}
-                  className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
+                  className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-amber/40 bg-beroe-amber/10 text-beroe-amber font-semibold hover:bg-beroe-amber/15"
                 >
-                  Unlock
+                  Request Sales approval to unlock
                 </button>
               )
             ) : (
@@ -344,6 +346,99 @@ export default function VDDTab() {
           </div>
         </div>
       )}
+
+      {/* 29-May bug 29-29 — Sales-approval gate modal. Captures the
+          Sales approver name + a short note before the existing unlock
+          endpoint fires. Backend persistence of the approval entry is
+          deferred (audit_log already records vdd_locked_at→null via the
+          SQLA before_flush listener). */}
+      {showUnlockApproval && (
+        <UnlockApprovalModal
+          onCancel={() => setShowUnlockApproval(false)}
+          onConfirm={() => {
+            setShowUnlockApproval(false);
+            unlockMutation.mutate();
+          }}
+          submitting={unlockMutation.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+// 29-May bug 29-29 — Sales-approval confirmation modal. Frontend gate
+// only; the unlock endpoint stays admin-only on the server.
+function UnlockApprovalModal({
+  onCancel,
+  onConfirm,
+  submitting,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}) {
+  const [approver, setApprover] = useState("");
+  const [note, setNote] = useState("");
+  const ready = approver.trim().length >= 2 && note.trim().length >= 5;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-card w-full max-w-md p-5 space-y-3">
+        <div>
+          <div className="text-[14px] font-bold text-text-primary">
+            Sales approval required
+          </div>
+          <div className="text-[11px] text-text-muted mt-0.5">
+            VDD is locked. Confirm a Sales lead has approved the unlock
+            before re-opening the document for edits. This is recorded
+            in the activity log.
+          </div>
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider font-semibold text-text-secondary mb-1">
+            Sales approver name *
+          </label>
+          <input
+            value={approver}
+            onChange={(e) => setApprover(e.target.value)}
+            placeholder="e.g. Jordan Mills"
+            maxLength={120}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2.5 py-1.5 focus:outline-none focus:border-beroe-blue"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider font-semibold text-text-secondary mb-1">
+            Approval note <span className="text-beroe-red">*</span>
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            maxLength={600}
+            placeholder="When and how was approval given? (min 5 chars)"
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2.5 py-1.5 focus:outline-none focus:border-beroe-blue"
+          />
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {note.trim().length}/600 · min 5
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-[11px] px-3 py-1.5 rounded-md border border-beroe-card-border hover:bg-beroe-bg/60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!ready || submitting}
+            className="text-[11px] px-3 py-1.5 rounded-md bg-beroe-amber text-white font-semibold disabled:opacity-50"
+          >
+            {submitting ? "Unlocking…" : "Confirm approval & unlock"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
