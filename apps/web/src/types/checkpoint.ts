@@ -91,7 +91,9 @@ export const STATUS_TONES: Record<
   CheckpointStatus,
   { dot: string; bg: string; border: string; text: string }
 > = {
-  not_held:   { dot: "#94a3b8", bg: "#94a3b815", border: "#94a3b830", text: "#475569" },
+  // 29-May bug 29-38 — "Not Held" surfaces in brand-red so unfilled
+  // checkpoints visually demand attention (was grey).
+  not_held:   { dot: "#CF4548", bg: "#CF454810", border: "#CF454830", text: "#CF4548" },
   held:       { dot: "#4A00F8", bg: "#4A00F810", border: "#4A00F830", text: "#4A00F8" },
   signed_off: { dot: "#6EC457", bg: "#6EC45715", border: "#6EC45740", text: "#1d6b35" },
 };

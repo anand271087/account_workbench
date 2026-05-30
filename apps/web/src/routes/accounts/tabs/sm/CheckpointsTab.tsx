@@ -305,25 +305,36 @@ function CheckpointCard({
           </div>
         </div>
         {editable && !isSignedOff && (
-          <div className="flex gap-1.5 flex-shrink-0">
-            {cp.status === "not_held" && (
-              <button
-                onClick={() =>
-                  patchMutation.mutate({
-                    status: "held",
-                    held_date: new Date().toISOString().slice(0, 10),
-                  })
+          <div className="flex flex-col gap-1.5 flex-shrink-0 items-end">
+            {/* 29-May bug 29-38 — free status changer (Not Held / Held /
+                Signed off). Picking "Signed off" routes through the
+                existing SignOffModal so the permanent snapshot still
+                gets captured; picking Not Held / Held PATCHes directly. */}
+            <select
+              value={cp.status}
+              onChange={(e) => {
+                const next = e.target.value as typeof cp.status;
+                if (next === "signed_off") {
+                  onSignOff();
+                  return;
                 }
-                className="text-[11px] px-2.5 py-1 rounded-md font-semibold"
-                style={{
-                  background: "#fff",
-                  border: `1px solid ${INDIGO}40`,
-                  color: INDIGO,
-                }}
-              >
-                Mark held
-              </button>
-            )}
+                patchMutation.mutate(
+                  next === "held"
+                    ? {
+                        status: "held",
+                        held_date:
+                          cp.held_date ?? new Date().toISOString().slice(0, 10),
+                      }
+                    : { status: "not_held", held_date: null },
+                );
+              }}
+              className="text-[11px] px-2 py-1 rounded-md font-semibold border border-beroe-card-border bg-white"
+              title="Change checkpoint status"
+            >
+              <option value="not_held">Not held</option>
+              <option value="held">Held</option>
+              <option value="signed_off">Signed off →</option>
+            </select>
             {cp.status === "held" && (
               <button
                 onClick={onSignOff}
@@ -735,8 +746,31 @@ function SignOffModal({
 
         {/* Client acknowledgement */}
         <div>
-          <div className="text-[11px] font-bold uppercase tracking-wide text-text-secondary mb-1">
-            Client acknowledgement
+          <div className="text-[11px] font-bold uppercase tracking-wide text-text-secondary mb-1 flex items-center justify-between">
+            <span>Client acknowledgement</span>
+            {/* 29-May bug 29-36 — AI bulb suggestion. Copies a
+                checkpoint-context prompt to clipboard so the CSM can
+                paste into Claude for a defensible 1-line ack. */}
+            <button
+              type="button"
+              onClick={async () => {
+                const prompt = `Draft a 1-sentence client acknowledgement we can record for the ${checkpoint.type} checkpoint. Initiatives reviewed: ${initiativeText || "none captured"}. Focus on a concrete commitment or confirmation made by the client. Plain prose, ≤200 chars.`;
+                try {
+                  await navigator.clipboard.writeText(prompt);
+                  setClientAck((prev) =>
+                    prev
+                      ? prev
+                      : "[Prompt copied to clipboard — paste into Claude / AI panel and paste the response back here.]",
+                  );
+                } catch {
+                  // ignore
+                }
+              }}
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-md border border-beroe-blue/30 text-beroe-blue hover:bg-beroe-blue/10 normal-case tracking-normal"
+              title="Copy an AI prompt to clipboard"
+            >
+              💡 AI suggest
+            </button>
           </div>
           <textarea
             rows={2}
