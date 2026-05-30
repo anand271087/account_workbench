@@ -817,6 +817,7 @@ type GoalRow = {
   title: string;
   category: string;
   alignment_status: "not_started" | "partial" | "aligned";
+  target_value?: string | null;
   phase_a?: Record<string, unknown> | null;
   phase_b?: Record<string, unknown> | null;
   phase_c?: Record<string, unknown> | null;
@@ -951,9 +952,11 @@ function GoalAlignmentRow({
         <div className="px-3 py-2 grid grid-cols-1 md:grid-cols-3 gap-2 bg-beroe-bg/40">
           <PhaseAEditableBlock
             title="What does it mean?"
+            category={g.category}
             phase={phaseA}
             saving={patch.isPending}
             onSave={(next) => patch.mutate({ phase_a: next })}
+            askClaudePrompt={`I am validating a ${g.category} goal titled "${g.title}". Target: ${g.target_value ?? "TBD"}. Help me: 1) Is this realistic for this sector? 2) What questions should I ask the client? 3) What would a reasonable target look like?`}
           />
           <PhaseBEditableBlock
             title="Groundwork"
@@ -961,12 +964,15 @@ function GoalAlignmentRow({
             phase={phaseB}
             saving={patch.isPending}
             onSave={(next) => patch.mutate({ phase_b: next })}
+            askClaudePrompt={`For this ${g.category} goal (${g.title}): 1) What does typical Spend Analytics show at this scale? 2) Any recent market trends affecting the baseline? 3) Realistic savings range if groundwork hasn't been done?`}
           />
           <PhaseCEditableBlock
             title="Agreed target"
+            category={g.category}
             phase={phaseC}
             saving={patch.isPending}
             onSave={(next) => patch.mutate({ phase_c: next })}
+            askClaudePrompt={`Goal: ${g.title} with target ${g.target_value ?? "TBD"}. Is this realistic? What does industry benchmarking say? What is the most defensible measurement method?`}
           />
         </div>
       </details>
@@ -975,61 +981,169 @@ function GoalAlignmentRow({
 }
 
 // ---- Phase A editable block (validation note + goal type) ----
+// 29-May bugs 29-22/23/24 — Phase A/B/C editor enrichments.
+// Vocabulary mirrors prototype/beroe_awb_v20.html lines 6286-6296.
+
+const PHASE_A_GOAL_TYPE_OPTIONS_BY_CATEGORY: Record<string, { v: string; l: string }[]> = {
+  cost_savings: [
+    { v: "cost_savings", l: "💰 Cost savings — reduce what we currently pay" },
+    { v: "cost_avoidance", l: "🛡️ Cost avoidance — prevent a price increase" },
+    { v: "spend_reduction", l: "📉 Spend reduction — reduce volume / tail spend" },
+    { v: "cost_efficiency", l: "⚡ Cost efficiency — same spend, more output" },
+  ],
+  base_rationalization: [
+    { v: "confirmed", l: "✅ Supplier count confirmed per category" },
+    { v: "partial", l: "〰️ Partial visibility" },
+    { v: "no", l: "❌ No baseline" },
+  ],
+  risk_mitigation: [
+    { v: "supply_disruption", l: "🚧 Supply disruption" },
+    { v: "regulatory", l: "📜 Regulatory" },
+    { v: "geopolitical", l: "🌍 Geopolitical" },
+    { v: "financial", l: "💱 Financial" },
+    { v: "all", l: "🌀 All of the above" },
+  ],
+};
+
+const CATEGORY_CLARITY_OPTIONS = [
+  { v: "", l: "— Select —" },
+  { v: "confirmed", l: "✅ Confirmed" },
+  { v: "partial", l: "〰️ Partial" },
+  { v: "not_discussed", l: "❓ Not discussed" },
+];
+const TARGET_ORIGIN_OPTIONS = [
+  { v: "", l: "— Select —" },
+  { v: "analysis_backed", l: "📊 Analysis-backed" },
+  { v: "finance_set", l: "📋 Finance-set" },
+  { v: "joint_estimate", l: "🤝 Joint estimate" },
+  { v: "unknown", l: "❓ Unknown" },
+];
+
 function PhaseAEditableBlock({
   title,
+  category,
   phase,
   saving,
   onSave,
+  askClaudePrompt,
 }: {
   title: string;
+  category?: string;
   phase: Record<string, unknown>;
   saving: boolean;
   onSave: (next: Record<string, unknown>) => void;
+  askClaudePrompt?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({
     goal_type: String(phase.goal_type ?? ""),
+    category_clarity: String(phase.category_clarity ?? ""),
+    target_origin: String(phase.target_origin ?? ""),
     validation_note: String(phase.validation_note ?? ""),
   });
-  const empty = !phase.goal_type && !phase.validation_note;
+  const empty =
+    !phase.goal_type &&
+    !phase.category_clarity &&
+    !phase.target_origin &&
+    !phase.validation_note;
   const summary = empty
     ? "Not yet captured. Click to add."
-    : [phase.goal_type ? `Type: ${String(phase.goal_type).replace(/_/g, " ")}` : null, phase.validation_note]
+    : [
+        phase.goal_type ? `Type: ${String(phase.goal_type).replace(/_/g, " ")}` : null,
+        phase.category_clarity
+          ? `Categories: ${String(phase.category_clarity).replace(/_/g, " ")}`
+          : null,
+        phase.validation_note,
+      ]
         .filter(Boolean)
         .join(" · ");
+  const goalTypeOpts =
+    (category && PHASE_A_GOAL_TYPE_OPTIONS_BY_CATEGORY[category]) || null;
   return (
     <EditableShell title={title} open={open} setOpen={setOpen} summary={summary} empty={empty}>
-      <input
-        type="text"
-        value={draft.goal_type}
-        placeholder="Goal type (e.g. cost_savings, base_rationalization)"
-        onChange={(e) => setDraft({ ...draft, goal_type: e.target.value })}
-        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
-      />
+      <FieldLabel>Goal framing</FieldLabel>
+      {goalTypeOpts ? (
+        <select
+          value={draft.goal_type}
+          onChange={(e) => setDraft({ ...draft, goal_type: e.target.value })}
+          className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2 bg-white"
+        >
+          <option value="">— Select —</option>
+          {goalTypeOpts.map((o) => (
+            <option key={o.v} value={o.v}>
+              {o.l}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="text"
+          value={draft.goal_type}
+          placeholder="Describe what success looks like"
+          onChange={(e) => setDraft({ ...draft, goal_type: e.target.value })}
+          className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2"
+        />
+      )}
+
+      <FieldLabel>Does the client know which categories to focus on?</FieldLabel>
+      <select
+        value={draft.category_clarity}
+        onChange={(e) => setDraft({ ...draft, category_clarity: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2 bg-white"
+      >
+        {CATEGORY_CLARITY_OPTIONS.map((o) => (
+          <option key={o.v} value={o.v}>
+            {o.l}
+          </option>
+        ))}
+      </select>
+
+      <FieldLabel>Where did the target come from?</FieldLabel>
+      <select
+        value={draft.target_origin}
+        onChange={(e) => setDraft({ ...draft, target_origin: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2 bg-white"
+      >
+        {TARGET_ORIGIN_OPTIONS.map((o) => (
+          <option key={o.v} value={o.v}>
+            {o.l}
+          </option>
+        ))}
+      </select>
+
+      <FieldLabel>What did you confirm with the client?</FieldLabel>
       <textarea
         rows={3}
         value={draft.validation_note}
-        placeholder="What does this goal mean to the client?"
+        placeholder="e.g. Confirmed this is cost savings not avoidance. The target was set by Finance. Categories are packaging and cocoa but no baseline yet."
         onChange={(e) => setDraft({ ...draft, validation_note: e.target.value })}
         className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1"
       />
-      <EditableActions
-        saving={saving}
-        onSave={() => {
-          onSave({
-            goal_type: draft.goal_type || null,
-            validation_note: draft.validation_note || null,
-          });
-          setOpen(false);
-        }}
-        onCancel={() => {
-          setDraft({
-            goal_type: String(phase.goal_type ?? ""),
-            validation_note: String(phase.validation_note ?? ""),
-          });
-          setOpen(false);
-        }}
-      />
+
+      <div className="flex items-center gap-3 mt-2">
+        <EditableActions
+          saving={saving}
+          onSave={() => {
+            onSave({
+              goal_type: draft.goal_type || null,
+              category_clarity: draft.category_clarity || null,
+              target_origin: draft.target_origin || null,
+              validation_note: draft.validation_note || null,
+            });
+            setOpen(false);
+          }}
+          onCancel={() => {
+            setDraft({
+              goal_type: String(phase.goal_type ?? ""),
+              category_clarity: String(phase.category_clarity ?? ""),
+              target_origin: String(phase.target_origin ?? ""),
+              validation_note: String(phase.validation_note ?? ""),
+            });
+            setOpen(false);
+          }}
+        />
+        {askClaudePrompt && <AskClaudeButton prompt={askClaudePrompt} />}
+      </div>
     </EditableShell>
   );
 }
@@ -1063,12 +1177,15 @@ const GROUNDWORK_ITEMS_BY_CATEGORY: Record<string, { key: string; label: string 
   ],
 };
 
+// 29-May bug 29-23 — tick/cross icons in the Groundwork status dropdown.
+// Emoji prefixes render in every browser <option> without needing
+// custom rendering.
 const GROUNDWORK_OPTIONS = [
   { v: "", l: "— Select —" },
-  { v: "done_current", l: "Done — current" },
-  { v: "done_outdated", l: "Done — outdated" },
-  { v: "not_done", l: "Not done" },
-  { v: "unknown", l: "Unknown" },
+  { v: "done_current", l: "✅ Done — current" },
+  { v: "done_outdated", l: "⚠️ Done — outdated" },
+  { v: "not_done", l: "❌ Not done" },
+  { v: "unknown", l: "❓ Unknown" },
 ];
 
 function PhaseBEditableBlock({
@@ -1077,12 +1194,14 @@ function PhaseBEditableBlock({
   phase,
   saving,
   onSave,
+  askClaudePrompt,
 }: {
   title: string;
   category: string;
   phase: Record<string, unknown>;
   saving: boolean;
   onSave: (next: Record<string, unknown>) => void;
+  askClaudePrompt?: string;
 }) {
   const items =
     GROUNDWORK_ITEMS_BY_CATEGORY[category] ?? GROUNDWORK_ITEMS_BY_CATEGORY.other;
@@ -1117,91 +1236,125 @@ function PhaseBEditableBlock({
           </select>
         </div>
       ))}
-      <EditableActions
-        saving={saving}
-        onSave={() => {
-          const payload: Record<string, unknown> = {};
-          for (const it of items) {
-            payload[it.key] = draft[it.key] || null;
-          }
-          onSave(payload);
-          setOpen(false);
-        }}
-        onCancel={() => {
-          const reset: Record<string, string> = {};
-          items.forEach((it) => {
-            reset[it.key] = String(phase[it.key] ?? "");
-          });
-          setDraft(reset);
-          setOpen(false);
-        }}
-      />
+      <div className="flex items-center gap-3 mt-2">
+        <EditableActions
+          saving={saving}
+          onSave={() => {
+            const payload: Record<string, unknown> = {};
+            for (const it of items) {
+              payload[it.key] = draft[it.key] || null;
+            }
+            onSave(payload);
+            setOpen(false);
+          }}
+          onCancel={() => {
+            const reset: Record<string, string> = {};
+            items.forEach((it) => {
+              reset[it.key] = String(phase[it.key] ?? "");
+            });
+            setDraft(reset);
+            setOpen(false);
+          }}
+        />
+        {askClaudePrompt && <AskClaudeButton prompt={askClaudePrompt} />}
+      </div>
     </EditableShell>
   );
 }
 
-// ---- Phase C editable block (agreed target / measure / timeline) ----
+// ---- Phase C editable block (categories + baseline + target + measure + timeline) ----
 function PhaseCEditableBlock({
   title,
+  category,
   phase,
   saving,
   onSave,
+  askClaudePrompt,
 }: {
   title: string;
+  category?: string;
   phase: Record<string, unknown>;
   saving: boolean;
   onSave: (next: Record<string, unknown>) => void;
+  askClaudePrompt?: string;
 }) {
+  void category; // reserved for category-aware AI prompts; consumed by parent
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({
+    category_focus: String(phase.category_focus ?? ""),
+    baseline: String(phase.baseline ?? ""),
     agreed_target: String(phase.agreed_target ?? ""),
     measure_method: String(phase.measure_method ?? ""),
     timeline: String(phase.timeline ?? ""),
-    baseline: String(phase.baseline ?? ""),
   });
-  const empty = !phase.agreed_target && !phase.measure_method && !phase.timeline;
+  const empty =
+    !phase.category_focus &&
+    !phase.agreed_target &&
+    !phase.measure_method &&
+    !phase.timeline &&
+    !phase.baseline;
   const summary = empty
     ? "Not yet captured. Click to fill."
     : [
+        phase.category_focus
+          ? `Categories: ${String(phase.category_focus).slice(0, 30)}`
+          : null,
         phase.agreed_target ? `Target: ${String(phase.agreed_target)}` : null,
-        phase.measure_method ? `Measure: ${String(phase.measure_method)}` : null,
         phase.timeline ? `Due ${String(phase.timeline)}` : null,
       ]
         .filter(Boolean)
         .join(" · ");
   return (
     <EditableShell title={title} open={open} setOpen={setOpen} summary={summary} empty={empty}>
+      <FieldLabel>Which specific categories?</FieldLabel>
+      <textarea
+        rows={2}
+        value={draft.category_focus}
+        placeholder="e.g. MRO ($100K spend), Flexible Packaging ($800K spend)"
+        onChange={(e) => setDraft({ ...draft, category_focus: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2"
+      />
+
+      <FieldLabel>Current state (baseline)</FieldLabel>
+      <input
+        type="text"
+        value={draft.baseline}
+        placeholder="e.g. $900K annual MRO spend across 47 suppliers"
+        onChange={(e) => setDraft({ ...draft, baseline: e.target.value })}
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2"
+      />
+
+      <FieldLabel>Agreed target — the number, not the aspiration</FieldLabel>
       <input
         type="text"
         value={draft.agreed_target}
-        placeholder="Agreed target (e.g. 5% savings on indirect spend)"
+        placeholder="e.g. $40K savings on MRO (4% on $1M spend) — jointly agreed"
         onChange={(e) => setDraft({ ...draft, agreed_target: e.target.value })}
-        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2"
       />
+
+      <FieldLabel>How will both parties confirm achievement?</FieldLabel>
       <input
         type="text"
         value={draft.measure_method}
-        placeholder="How will it be measured?"
+        placeholder="e.g. PO actuals vs Beroe benchmark — reviewed quarterly"
         onChange={(e) => setDraft({ ...draft, measure_method: e.target.value })}
-        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-2"
       />
+
+      <FieldLabel>Timeline</FieldLabel>
       <input
         type="date"
         value={draft.timeline}
         onChange={(e) => setDraft({ ...draft, timeline: e.target.value })}
-        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1.5"
+        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1 mb-1"
       />
-      <input
-        type="text"
-        value={draft.baseline}
-        placeholder="Baseline (optional)"
-        onChange={(e) => setDraft({ ...draft, baseline: e.target.value })}
-        className="w-full text-[12px] border border-beroe-card-border rounded px-2 py-1"
-      />
+      <div className="flex items-center gap-3 mt-2">
       <EditableActions
         saving={saving}
         onSave={() => {
           onSave({
+            category_focus: draft.category_focus || null,
             agreed_target: draft.agreed_target || null,
             measure_method: draft.measure_method || null,
             timeline: draft.timeline || null,
@@ -1211,6 +1364,7 @@ function PhaseCEditableBlock({
         }}
         onCancel={() => {
           setDraft({
+            category_focus: String(phase.category_focus ?? ""),
             agreed_target: String(phase.agreed_target ?? ""),
             measure_method: String(phase.measure_method ?? ""),
             timeline: String(phase.timeline ?? ""),
@@ -1219,6 +1373,8 @@ function PhaseCEditableBlock({
           setOpen(false);
         }}
       />
+        {askClaudePrompt && <AskClaudeButton prompt={askClaudePrompt} />}
+      </div>
     </EditableShell>
   );
 }
@@ -1333,5 +1489,51 @@ function EditableActions({
         Cancel
       </button>
     </div>
+  );
+}
+
+// 29-May bugs 29-22/23/24 — small label + AI-prompt helpers used inside
+// the Phase A/B/C editor blocks. AskClaudeButton copies a context-aware
+// prompt to the clipboard and flashes a "copied" confirmation — gives
+// CSMs a one-click way to ask Claude (or any LLM) for help without
+// rebuilding the full inline chat panel from the prototype.
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[10px] uppercase tracking-wider font-semibold text-text-secondary mb-1">
+      {children}
+    </div>
+  );
+}
+
+function AskClaudeButton({
+  prompt,
+  label = "💡 Ask Claude",
+}: {
+  prompt: string;
+  label?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(prompt);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          // ignore
+        }
+      }}
+      className={cn(
+        "text-[10px] font-semibold px-2 py-0.5 rounded-md border transition-colors",
+        copied
+          ? "border-beroe-green text-beroe-green bg-beroe-green/10"
+          : "border-beroe-blue/30 text-beroe-blue hover:bg-beroe-blue/10",
+      )}
+      title={prompt}
+    >
+      {copied ? "✓ Prompt copied" : label}
+    </button>
   );
 }
