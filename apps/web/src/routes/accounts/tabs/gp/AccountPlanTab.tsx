@@ -150,10 +150,16 @@ export default function AccountPlanTab() {
         />
       </div>
 
-      {/* Row 51 — three missing prototype sections added below the Plays:
-          Retain Checklist · Product & Services Saturation · Recommended Plays.
-          Pure-frontend reads, derived from data already in scope. */}
-      <RetainChecklist plays={allPlays} appetite={appetite} />
+      {/* Row 51 — three prototype sections below the Plays:
+          Retain/Expand Checklist · Product & Services Saturation · Recommended Plays.
+          28-May bug 28-36 — Expand Checklist added; the checklist now
+          mode-swaps: expand mode shows Expand Checklist, all others
+          show Retain Checklist. Pure-frontend, derived from data in scope. */}
+      {mode === "expand" ? (
+        <ExpandChecklist plays={allPlays} appetite={appetite} />
+      ) : (
+        <RetainChecklist plays={allPlays} appetite={appetite} />
+      )}
       <ProductSaturation accountId={account.id} />
       <RecommendedPlays plays={allPlays} mode={mode} />
 
@@ -1018,6 +1024,95 @@ function RetainChecklist({
               {it.label}
               {!it.done && it.hint && (
                 <span className="text-text-muted italic ml-2">
+                  — {it.hint}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// 1b. Expand Checklist — 6 expansion-readiness items derived from the
+//     existing appetite + plays. Mirrors RetainChecklist shape. Surfaces
+//     when mode === "expand" so the CSM sees expansion-specific hygiene
+//     instead of the retention list. (28-May bug 28-36.)
+function ExpandChecklist({
+  plays,
+  appetite,
+}: {
+  plays: Play[];
+  appetite: Appetite;
+}) {
+  const livePlays = plays.filter((p) => !p.hidden);
+  const expandPlays = livePlays.filter((p) => p.modes.includes("expand"));
+  const items: { label: string; done: boolean; hint?: string }[] = [
+    {
+      label: "≥1 expand play in motion",
+      done: expandPlays.length > 0,
+      hint:
+        expandPlays.length === 0
+          ? "Add at least one expand-tagged play below"
+          : undefined,
+    },
+    {
+      label: "≥1 high-probability expand play (≥60%)",
+      done: expandPlays.some((p) => p.prob >= 60),
+      hint: "Bring an expand play above 60% confidence",
+    },
+    {
+      label: "Pipeline meets ARR-growth target",
+      done: appetite.breakdown.arr_status === "on_track",
+      hint: "Pipeline below target — add value to expand plays",
+    },
+    {
+      label: "Health ≥70 (expand-ready band)",
+      done: appetite.breakdown.health_pts >= 28, // health_pts is health*0.4
+      hint: "Stabilise health before pushing expand",
+    },
+    {
+      label: "Signal mix tilted positive / neutral",
+      done: appetite.breakdown.sig_pts >= 20,
+      hint: "Resolve open risks before pushing expand",
+    },
+    {
+      label: "Mode confirmed (auto or manual)",
+      done: true,
+    },
+  ];
+  const done = items.filter((i) => i.done).length;
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[13px] font-bold">🚀 Expand Checklist</div>
+        <span
+          className={cn(
+            "text-[11px] font-bold px-2 py-0.5 rounded-full",
+            done === items.length
+              ? "bg-beroe-green/20 text-beroe-green"
+              : done >= items.length - 2
+                ? "bg-beroe-amber/20 text-beroe-amber"
+                : "bg-beroe-red/15 text-beroe-red",
+          )}
+        >
+          {done} / {items.length} ready
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((it) => (
+          <li
+            key={it.label}
+            className="flex items-start gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
+          >
+            <span className={it.done ? "text-beroe-green" : "text-beroe-amber"}>
+              {it.done ? "✓" : "⚠"}
+            </span>
+            <span className="flex-1">
+              {it.label}
+              {!it.done && it.hint && (
+                <span className="text-text-muted text-[11px] ml-1.5">
                   — {it.hint}
                 </span>
               )}
