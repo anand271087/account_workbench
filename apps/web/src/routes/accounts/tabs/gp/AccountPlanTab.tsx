@@ -79,89 +79,102 @@ export default function AccountPlanTab() {
 
   return (
     <div className="space-y-3">
-      {/* Mode banner */}
+      {/* Mode banner — full-width top per prototype screenshot
+          (29-May bug 29-46). */}
       <ModeBanner
         appetite={appetite}
         editable={editable}
         onChangeMode={() => setShowModeModal(true)}
       />
 
-      {/* How is this calculated? */}
+      {/* How is this calculated? — full-width directly under mode
+          banner so the explanation is immediately accessible. */}
       <ScoreBreakdownDetails appetite={appetite} />
 
-      {/* 26-May Row 60 — "Plan inputs" sidebar (mirrors prototype bPlan
-          right-rail card). Shows the 6 core inputs feeding the appetite
-          mode at a glance, beside the current mode + its description. */}
-      <PlanInputs accountId={account.id} accountHealth={account.health_score} appetite={appetite} mode={mode} />
-
-      {/* Header + Add play */}
-      <div className="flex items-center justify-between">
-        <div className="text-[16px] font-bold text-text-primary">
-          Account Plan
-        </div>
-        {editable && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white hover:bg-beroe-bg/60 font-semibold"
-          >
-            + Add play
-          </button>
-        )}
-      </div>
-
-      {/* ACV growth tile (mode-adaptive) */}
-      <AcvTile appetite={appetite} account={account} mode={mode} />
-
-      {/* ARR Growth Tracker — 27-May Row 61: always render. When the
-          status is 'n/a' (fresh account / zero target) the tile shows
-          an empty state instead of hiding so stakeholders see the
-          section name they expect. */}
-      <ArrBurnDown appetite={appetite} account={account} />
-
-      {/* Plays section — 27-May Row 61: render "Expansion Plays" as a
-          stable literal heading so stakeholders can locate it
-          regardless of current mode. The mode-aware title (rescue /
-          retain / expand naming) becomes a subtitle. */}
-      <div className="bg-white border border-beroe-card-border rounded-card p-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
-            <div className="text-[13px] font-bold">Expansion Plays</div>
-            <div className="text-[10px] text-text-muted mt-0.5">
-              {mode === "expand"
-                ? "Showing expand-mode plays"
-                : `Mode-aware view: ${MODE_TITLES[mode]} (toggle "Show all plays" to see expansion plays here)`}
+      {/* 29-May bugs 29-44/29-46/29-48 — Two-column body. LEFT carries
+          the main Account Plan content (ACV / ARR / Expansion Plays /
+          Saturation / Recommended Plays). RIGHT carries the sidebar
+          (Plan inputs · Mode description · Mode-aware Checklist) —
+          sticky so it stays visible while the main column scrolls. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-3 items-start">
+        {/* LEFT — main content */}
+        <div className="space-y-3 min-w-0">
+          {/* Header + Add play */}
+          <div className="flex items-center justify-between">
+            <div className="text-[16px] font-bold text-text-primary">
+              Account Plan
             </div>
+            {editable && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white hover:bg-beroe-bg/60 font-semibold"
+              >
+                + Add play
+              </button>
+            )}
           </div>
-          <label className="text-[11px] text-text-muted flex items-center gap-1 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showAllPlays}
-              onChange={(e) => setShowAllPlays(e.target.checked)}
-            />
-            Show all plays
-          </label>
-        </div>
-        <PlayList
-          plays={visiblePlays}
-          mode={mode}
-          editable={editable}
-          accountId={account.id}
-          showAllPlays={showAllPlays}
-        />
-      </div>
 
-      {/* Row 51 — three prototype sections below the Plays:
-          Retain/Expand Checklist · Product & Services Saturation · Recommended Plays.
-          28-May bug 28-36 — Expand Checklist added; the checklist now
-          mode-swaps: expand mode shows Expand Checklist, all others
-          show Retain Checklist. Pure-frontend, derived from data in scope. */}
-      {mode === "expand" ? (
-        <ExpandChecklist plays={allPlays} appetite={appetite} />
-      ) : (
-        <RetainChecklist plays={allPlays} appetite={appetite} />
-      )}
-      <ProductSaturation accountId={account.id} />
-      <RecommendedPlays plays={allPlays} mode={mode} />
+          {/* ACV growth tile (mode-adaptive) */}
+          <AcvTile appetite={appetite} account={account} mode={mode} />
+
+          {/* ARR Growth Tracker — 27-May Row 61: always render. */}
+          <ArrBurnDown appetite={appetite} account={account} />
+
+          {/* Plays section — 27-May Row 61: stable literal "Expansion Plays" heading. */}
+          <div className="bg-white border border-beroe-card-border rounded-card p-4">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div>
+                <div className="text-[13px] font-bold">Expansion Plays</div>
+                <div className="text-[10px] text-text-muted mt-0.5">
+                  {mode === "expand"
+                    ? "Showing expand-mode plays"
+                    : `Mode-aware view: ${MODE_TITLES[mode]} (toggle "Show all plays" to see expansion plays here)`}
+                </div>
+              </div>
+              <label className="text-[11px] text-text-muted flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAllPlays}
+                  onChange={(e) => setShowAllPlays(e.target.checked)}
+                />
+                Show all plays
+              </label>
+            </div>
+            <PlayList
+              plays={visiblePlays}
+              mode={mode}
+              editable={editable}
+              accountId={account.id}
+              showAllPlays={showAllPlays}
+            />
+          </div>
+
+          {/* Product & Services Saturation */}
+          <ProductSaturation accountId={account.id} />
+
+          {/* Recommended Plays from Similar Accounts */}
+          <RecommendedPlays plays={allPlays} mode={mode} />
+        </div>
+
+        {/* RIGHT — sticky sidebar */}
+        <aside className="space-y-3 lg:sticky lg:top-2">
+          {/* 26-May Row 60 — Plan inputs at the top of the sidebar
+              (29-May bug 29-44). */}
+          <PlanInputs
+            accountId={account.id}
+            accountHealth={account.health_score}
+            appetite={appetite}
+            mode={mode}
+          />
+
+          {/* Mode-aware checklist — Expand / Retain (29-May bug 29-48). */}
+          {mode === "expand" ? (
+            <ExpandChecklist plays={allPlays} appetite={appetite} />
+          ) : (
+            <RetainChecklist plays={allPlays} appetite={appetite} />
+          )}
+        </aside>
+      </div>
 
       {showAddModal && (
         <AddPlayModal
