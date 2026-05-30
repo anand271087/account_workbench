@@ -207,32 +207,25 @@ export default function SalesHandoffTab() {
           </span>
         </div>
 
-        {/* "Before starting" blue checklist banner (prototype line 5981-5983)
-            when NOT yet locked at signing. When locked, surface the
-            "Locked at signing on DATE" muted hint instead. */}
-        {gate?.gate_signed && !gate?.gate_unlocked ? (
+        {/* 29-May bug 29-13 — "Before starting" must be the FIRST field
+            on the Sales Hand-off section regardless of signing state.
+            The lock chip now renders ABOVE it (small, muted) when the
+            account is locked. */}
+        {gate?.gate_signed && !gate?.gate_unlocked && (
           <div className="text-[10px] text-text-muted mb-2 flex items-center gap-1.5">
             🔒 Locked at signing
             {gate.gate_signed_date && (
               <> · {new Date(gate.gate_signed_date).toLocaleDateString()}</>
             )}
           </div>
-        ) : (
-          <div
-            className="rounded-lg px-3.5 py-2.5 mb-3 text-[11px] leading-relaxed"
-            style={{
-              background: "#EBF3FB",
-              border: "1px solid #4A00F830",
-              color: "#185FA5",
-            }}
-          >
-            <b>Before starting</b> — make sure you have from Sales: (1)
-            contract value and ACV, (2) at least one named stakeholder,
-            (3) the agreed category list, (4) a stated savings target or
-            success metric. Missing any of these? Resolve with Sales
-            before proceeding.
-          </div>
         )}
+        <div className="rounded-lg px-3.5 py-2.5 mb-3 text-[11px] leading-relaxed bg-beroe-blue/5 border border-beroe-blue/30 text-beroe-blue">
+          <b>Before starting</b> — make sure you have from Sales: (1)
+          contract value and ACV, (2) at least one named stakeholder,
+          (3) the agreed category list, (4) a stated savings target or
+          success metric. Missing any of these? Resolve with Sales
+          before proceeding.
+        </div>
 
         <p className="text-xs text-text-muted mb-3">
           Continues from the Solutioning lock. Sales validates the value

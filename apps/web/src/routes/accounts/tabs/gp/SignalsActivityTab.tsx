@@ -375,6 +375,22 @@ function AddSignalModal({
             className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
           />
         </FormRow>
+        {/* 29-May bug 29-49 — Category required + dropdown (was optional
+            free-text); order rearranged so Category sits above Impact /
+            Valid Until. */}
+        <FormRow label="Category *">
+          <select
+            value={form.category ?? ""}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5 bg-white"
+          >
+            <option value="">— Select —</option>
+            <option value="commercial">💰 Commercial</option>
+            <option value="product">📦 Product</option>
+            <option value="strategic">🎯 Strategic</option>
+            <option value="relationship">🤝 Relationship</option>
+          </select>
+        </FormRow>
         <div className="grid grid-cols-2 gap-2">
           <FormRow label="Impact">
             <select
@@ -391,11 +407,12 @@ function AddSignalModal({
               ))}
             </select>
           </FormRow>
-          <FormRow label="Date noticed">
+          {/* 29-May bug 29-49 — "Date noticed" renamed to "Valid until"
+              per stakeholder feedback. Same date column under the hood. */}
+          <FormRow label="Valid until">
             <input
               type="date"
               value={form.occurred_at ?? ""}
-              max={new Date().toISOString().slice(0, 10)}
               onChange={(e) =>
                 setForm({ ...form, occurred_at: e.target.value || null })
               }
@@ -403,14 +420,6 @@ function AddSignalModal({
             />
           </FormRow>
         </div>
-        <FormRow label="Category (optional)">
-          <input
-            value={form.category ?? ""}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-            placeholder="commercial / product / strategic / relationship"
-            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
-          />
-        </FormRow>
         {err && <div className="text-[11px] text-beroe-red">{err}</div>}
         <div className="flex justify-end gap-2 pt-1">
           <button
@@ -421,7 +430,7 @@ function AddSignalModal({
           </button>
           <button
             onClick={() => m.mutate(form)}
-            disabled={m.isPending || !form.signal.trim()}
+            disabled={m.isPending || !form.signal.trim() || !(form.category ?? "").trim()}
             className="text-[11px] px-3 py-1.5 rounded-md bg-beroe-navy text-white font-semibold disabled:opacity-50"
           >
             Add signal
