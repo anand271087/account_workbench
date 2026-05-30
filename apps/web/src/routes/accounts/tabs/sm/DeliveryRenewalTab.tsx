@@ -1051,6 +1051,11 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
     exec_summary?: string | null;
     is_editable?: boolean;
   };
+  // 29-May bug 29-41 — surface the Success Contract value narrative
+  // as the prototype's amber italic quote block under the VDD title.
+  type SuccessContract = {
+    value_narrative?: string | null;
+  };
 
   const queryKey = ["vdd", accountId];
   const { data: vdd, isLoading } = useQuery<Vdd>({
@@ -1058,6 +1063,16 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
     queryFn: () =>
       api.get<Vdd>(`/api/v1/accounts/${accountId}/value-delivery-document`),
   });
+  // 29-May bug 29-41 — separate query so the narrative box renders even
+  // if the VDD object itself is empty.
+  const { data: contract } = useQuery<SuccessContract>({
+    queryKey: ["success-contract", accountId],
+    queryFn: () =>
+      api.get<SuccessContract>(
+        `/api/v1/accounts/${accountId}/success-contract`,
+      ),
+  });
+  const narrative = (contract?.value_narrative ?? vdd?.exec_summary ?? "").trim();
   const editable = !!vdd?.is_editable && !vdd?.locked_at;
   const priorities = vdd?.client_strategic_priorities ?? [];
   const metrics = vdd?.agreed_success_metrics ?? [];
@@ -1138,11 +1153,17 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
         borderLeft: `3px solid ${AQUA}`,
       }}
     >
-      {/* Header — prototype line 3568-3574 */}
+      {/* Header — prototype line 3568-3574.
+          29-May bug 29-41 — title gets a brand-teal underline highlight
+          to match the prototype screenshot. */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div
-          className="text-[13px] font-bold"
-          style={{ color: MIDNIGHT }}
+          className="text-[13px] font-bold inline-block px-1.5 py-0.5 rounded"
+          style={{
+            color: MIDNIGHT,
+            background: `${AQUA}25`,
+            borderBottom: `2px solid ${AQUA}`,
+          }}
         >
           📄 Value Delivery Document
         </div>
@@ -1189,6 +1210,26 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
 
       {isLoading && (
         <div className="text-[12px] text-text-muted italic">Loading…</div>
+      )}
+
+      {/* 29-May bug 29-41 — Value narrative quote box (amber italic)
+          right under the header. Source preference: success_contract
+          value_narrative, fallback to vdd.exec_summary. */}
+      {!isLoading && narrative && (
+        <div
+          className="rounded-md px-3 py-2 mb-3"
+          style={{
+            background: `${RISK_AMBER}15`,
+            border: `1px solid ${RISK_AMBER}40`,
+          }}
+        >
+          <div
+            className="text-[11px] italic leading-snug"
+            style={{ color: "#854F0B" }}
+          >
+            &ldquo;{narrative}&rdquo;
+          </div>
+        </div>
       )}
 
       {/* Four named sections — prototype line 3577-3579. */}
