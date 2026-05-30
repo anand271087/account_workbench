@@ -93,11 +93,10 @@ export default function ValueTrackingTab() {
           metric cards). */}
       <OverallValueDelivered accountId={account.id} />
 
-      {/* Prototype line 2964-2979 — overall progress bar of the primary
-          quantitative metric. */}
-      {metrics.length > 0 && (
-        <OverallProgressCard metrics={metrics} />
-      )}
+      {/* 29-May bug 29-34 — "Metric Tracker" (OverallProgressCard) surface
+          removed per stakeholder feedback ("This is additional"). The
+          component definition stays in this file for future reinstatement
+          but is no longer rendered. */}
 
       {isLoading && (
         <div className="text-sm text-text-muted">Loading metrics…</div>
@@ -196,71 +195,10 @@ function StatusSummary({ metrics }: { metrics: SuccessMetric[] }) {
   );
 }
 
-// ============================================================
-// Overall progress card — verbatim port of prototype line 2964-2979
-// ============================================================
-
-function OverallProgressCard({ metrics }: { metrics: SuccessMetric[] }) {
-  // Take the first quantitative metric that has a non-empty current value.
-  const top = metrics.find(
-    (m) =>
-      m.metric_type === "quantitative" &&
-      m.target_value &&
-      m.current_value &&
-      m.current_value.trim() !== "",
-  );
-  if (!top) return null;
-  const t = parseFloat((top.target_value ?? "0").replace(/[^0-9.]/g, ""));
-  const c = parseFloat((top.current_value ?? "0").replace(/[^0-9.]/g, ""));
-  if (!t || !Number.isFinite(c)) return null;
-  const pct = Math.min(100, Math.round((c / t) * 100));
-  // Brand RAG by completion band, matching prototype line 2971 logic.
-  const color = pct >= 75 ? RISK_GREEN : pct >= 50 ? INDIGO : RISK_AMBER;
-  const fmt = (v: number) => {
-    const unit = top.unit ?? "";
-    const isCurrency = unit === "$" || unit === "€";
-    const num = v.toLocaleString();
-    return isCurrency ? `${unit}${num}` : `${num}${unit ? unit : ""}`;
-  };
-  return (
-    <div
-      className="rounded-card px-4 py-3.5"
-      style={{ background: "#fff", border: "1px solid #e4eaf6" }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span
-          className="text-[14px] font-bold"
-          style={{ color: MIDNIGHT }}
-        >
-          Value Delivered
-        </span>
-        <span className="text-[11px] text-text-muted">
-          {metrics.length} metric{metrics.length === 1 ? "" : "s"} tracked
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
-          <div
-            className="h-3.5 rounded-full overflow-hidden"
-            style={{ background: "#EAF1F5" }}
-          >
-            <div
-              className="h-full transition-all"
-              style={{ width: `${pct}%`, background: color }}
-            />
-          </div>
-        </div>
-        <span className="text-[18px] font-extrabold" style={{ color }}>
-          {pct}%
-        </span>
-      </div>
-      <div className="flex items-center justify-between text-[10px] text-text-muted mt-1.5">
-        <span>Current: {fmt(c)}</span>
-        <span>Target: {fmt(t)}</span>
-      </div>
-    </div>
-  );
-}
+// 29-May bug 29-34 — OverallProgressCard removed entirely per
+// stakeholder feedback ("Metric Tracker — This is additional"). The
+// "Value Delivered" rollup is now surfaced via OverallValueDelivered
+// at the top of the tab; per-metric progress lives on each MetricCard.
 
 // ============================================================
 // Metric card — verbatim port of prototype line 2995-3033
