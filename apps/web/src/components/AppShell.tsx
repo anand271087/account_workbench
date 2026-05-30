@@ -108,7 +108,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
             <>
               <SbSection>Leadership</SbSection>
               <SbBtn href="/leadership" icon="📈" active={isPath("/leadership")}>
-                Portfolio view
+                Leadership View
               </SbBtn>
             </>
           )}

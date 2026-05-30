@@ -476,10 +476,29 @@ export default function HomeTab() {
         )}
       </Card>
 
-      {/* Health bar — Track 2 paused surface only.
-          28-May bug 28-04 — overdue checkpoint summary removed from Home
-          per stakeholder feedback. Overdue counts still live on the
-          Success Management → Checkpoints page. */}
+      {/* 29-May bug 29-04 — Overdue Checkpoints surfaced at the END of
+          Home (reverses the partial 28-04 trim which removed them
+          mid-page). Renders only when count > 0. Track 2 paused
+          surface kept below it. */}
+      {overdueCp > 0 && (
+        <Card className="bg-beroe-amber/15 border-beroe-amber/40">
+          <div className="flex items-center gap-3">
+            <span className="text-[20px]">⏰</span>
+            <div className="flex-1 text-[12px]">
+              <b className="text-beroe-amber">{overdueCp}</b> overdue
+              checkpoint{overdueCp === 1 ? "" : "s"} — fix in{" "}
+              <Link
+                to={`/accounts/${aid}/success-management/checkpoints`}
+                className="text-beroe-blue hover:underline font-semibold"
+              >
+                Checkpoints →
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Track 2 paused surface. */}
       {dr && dr.expand_paused && (
         <Card className="bg-beroe-amber/15 border-beroe-amber/40">
           <div className="flex items-center gap-3">

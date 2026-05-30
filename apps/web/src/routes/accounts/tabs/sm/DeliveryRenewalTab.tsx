@@ -34,13 +34,12 @@ import {
   OUTCOME_LABELS,
   OUTCOME_TONES,
   READINESS_QUESTIONS,
-  STAGES,
-  STAGE_COL_KEYS,
-  STAGE_LABELS,
+  // 29-May bug 29-42 — STAGES / STAGE_COL_KEYS / STAGE_LABELS /
+  // ExpandItem / ExpandStage all unused now that the Track 2 kanban
+  // is hidden. Types live on in @/types/delivery_renewal for the
+  // server contract (DeliveryRenewal still carries expand_stages).
   type DeliveryRenewal,
   type DeliveryRenewalUpdate,
-  type ExpandItem,
-  type ExpandStage,
   type Outcome,
   type Readiness,
   type ReadinessAnswerValue,
@@ -341,36 +340,11 @@ export default function DeliveryRenewalTab() {
         />
       </div>
 
-      {/* Track 2 Kanban */}
-      <Card>
-        <div className="grid grid-cols-4 gap-3">
-          {STAGES.map((s) => (
-            <KanbanColumn
-              key={s}
-              stage={s}
-              items={form[STAGE_COL_KEYS[s]] ?? []}
-              editable={editable}
-              paused={form.expand_paused}
-              onChange={(next) =>
-                setForm({ ...form, [STAGE_COL_KEYS[s]]: next })
-              }
-            />
-          ))}
-        </div>
-        {form.expand_paused && (
-          <div
-            className="mt-3 text-[11px] rounded-md px-3 py-2"
-            style={{
-              background: `${RISK_AMBER}15`,
-              border: `1px solid ${RISK_AMBER}40`,
-              color: "#854F0B",
-            }}
-          >
-            Track 2 is paused — resolve all open red flags to resume the
-            expand pipeline.
-          </div>
-        )}
-      </Card>
+      {/* 29-May bug 29-42 — "Value Proof / Expand Ask / New Scope / Close"
+          4-column kanban removed per stakeholder feedback (no intent
+          shared for this section; deferred to a future scope-clarification
+          pass). The expand_stages columns remain on the schema but are
+          no longer surfaced on the UI. */}
 
       {/* Renewal Readiness */}
       <Card>
@@ -755,106 +729,10 @@ function Stage({
   );
 }
 
-function KanbanColumn({
-  stage,
-  items,
-  editable,
-  paused,
-  onChange,
-}: {
-  stage: ExpandStage;
-  items: ExpandItem[];
-  editable: boolean;
-  paused: boolean;
-  onChange: (v: ExpandItem[]) => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const update = (i: number, patch: Partial<ExpandItem>) => {
-    const next = [...items];
-    next[i] = { ...next[i], ...patch };
-    onChange(next);
-  };
-  return (
-    <div
-      className={cn(
-        "rounded-md border p-2.5 min-h-[120px]",
-        paused
-          ? "border-slate-200 bg-slate-50/50 opacity-70"
-          : "border-beroe-card-border bg-beroe-bg/30",
-      )}
-    >
-      <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted mb-2">
-        {STAGE_LABELS[stage]} · {items.length}
-      </div>
-      <div className="space-y-2">
-        {items.map((it, i) => (
-          <div
-            key={i}
-            className="bg-white border border-beroe-card-border rounded-md p-2 text-[12px]"
-          >
-            {editable ? (
-              <>
-                <input
-                  value={it.name}
-                  onChange={(e) => update(i, { name: e.target.value })}
-                  className="w-full text-[12px] font-medium border-0 p-0 focus:outline-none"
-                />
-                <div className="flex gap-2 mt-1">
-                  <input
-                    value={it.amount_musd ?? ""}
-                    onChange={(e) =>
-                      update(i, {
-                        amount_musd: e.target.value === ""
-                          ? null
-                          : parseFloat(e.target.value),
-                      })
-                    }
-                    placeholder="$M"
-                    className="flex-1 text-[11px] border border-beroe-card-border rounded px-1.5 py-0.5"
-                  />
-                  <button
-                    onClick={() => onChange(items.filter((_, j) => j !== i))}
-                    className="text-[11px] text-text-muted hover:text-beroe-red px-1"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="font-medium text-text-primary">{it.name}</div>
-                {typeof it.amount_musd === "number" && (
-                  <div className="text-[11px] text-text-muted">
-                    ${it.amount_musd.toFixed(2)}M
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ))}
-        {editable && (
-          <div className="flex gap-1.5">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="+ add"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && draft.trim()) {
-                  onChange([
-                    ...items,
-                    { name: draft.trim(), stage } as ExpandItem,
-                  ]);
-                  setDraft("");
-                }
-              }}
-              className="flex-1 text-[11px] border border-beroe-card-border rounded px-1.5 py-0.5"
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// 29-May bug 29-42 — KanbanColumn component removed along with the
+// Track 2 "Value Proof / Expand Ask / New Scope / Close" surface.
+// The expand_stages columns + STAGE_LABELS / STAGES / STAGE_COL_KEYS
+// remain on the type system in case the column is reinstated later.
 
 function RedFlagList({
   flags,

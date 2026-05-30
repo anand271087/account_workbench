@@ -191,12 +191,15 @@ export default function SolutioningTab() {
       )}
 
       {/* VPD uploads — first thing on Solutioning so the doc that drives
-          the structured fields below is the most visible action. */}
+          the structured fields below is the most visible action.
+          29-May bug 29-10 — the old "How this works" card was folded
+          into this description so the explanation lives on the VPD
+          upload itself (consolidated, no extra surface). */}
       <KindUploadCard
         accountId={account.id}
         kind="vpd"
         title="Value Proposition Deck (VPD)"
-        description="Upload the latest VPD. Claude reads it and proposes values for the structured Solutioning fields below — review and save to keep them."
+        description="Upload the latest VPD. Claude reads it and proposes values for the structured Solutioning fields below — review and edit anything that's off. Saving flips the badge to AI-assisted. Re-uploading won't overwrite fields you've already edited."
         emptyHint="No VPDs yet. Drag a .docx, .pdf or .txt onto the card above."
       />
 
