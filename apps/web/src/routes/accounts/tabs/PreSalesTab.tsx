@@ -599,7 +599,7 @@ export default function PreSalesTab() {
       {form.is_editable && (
         <div
           className={cn(
-            "lg:col-span-3 sticky bottom-0 -mx-6 px-6 py-3 flex items-center gap-3 border-t z-30 transition-colors",
+            "lg:col-span-3 sticky bottom-0 -mx-4 px-4 py-3 flex items-center gap-3 border-t z-30 transition-colors rounded-b-card",
             dirty
               ? "bg-beroe-amber/15 border-beroe-amber/50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
               : "bg-white border-beroe-card-border",
