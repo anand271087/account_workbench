@@ -205,6 +205,43 @@ export default function VDDTab() {
           Section 4 ("Value delivered") above the per-initiative list,
           and only when at least one of the 3 totals is > 0. */}
 
+      {/* 29-May bug 29-27 — VDD definition box (violet, brand-purple)
+          with verbatim copy from the stakeholder feedback. Sits
+          directly under the header card per the 29-30 reorder spec. */}
+      <div className="rounded-card px-4 py-3 bg-beroe-purple/10 border-2 border-beroe-purple/40">
+        <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-purple mb-1">
+          VDD definition
+        </div>
+        <div className="text-[12px] leading-relaxed text-text-primary">
+          The VDD is the single source of truth for what Beroe committed
+          to and what was delivered. It is reviewed at every checkpoint
+          and is the primary input to the renewal conversation.
+        </div>
+      </div>
+
+      {/* 29-May bug 29-27 — Notes box (brand-amber). Lightweight
+          standing-instructions panel under the definition. */}
+      <div className="rounded-card px-4 py-3 bg-beroe-amber/15 border border-beroe-amber/40">
+        <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-amber mb-1">
+          Notes
+        </div>
+        <ul className="text-[12px] leading-relaxed text-text-primary list-disc pl-5 space-y-0.5">
+          <li>
+            Keep client strategic priorities short — one line per pillar
+            the client invested in.
+          </li>
+          <li>
+            Agreed success metrics auto-fill from Value Tracking when
+            available; override only if the renewal conversation needs a
+            different framing.
+          </li>
+          <li>
+            Pick at least one Savings Lever per initiative — Cost / Risk
+            / Adoption — so the value rollup attributes correctly.
+          </li>
+        </ul>
+      </div>
+
       {/* Section 1 — Client strategic priorities */}
       <Card>
         <SectionHeader title="Client strategic priorities" hint="Pillars / themes the client invested in" />
