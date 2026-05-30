@@ -432,7 +432,29 @@ function IntelCard({
               )}
             </div>
           )}
+          {/* 29-May bug 29-51 — action row reordered + relabelled to
+              match the prototype screenshot:
+                [Read Full Article]  [Generate Alert/Pitch Email]
+                [→ Push as Soft Signal]                              */}
           <div className="flex gap-1.5 mt-2 flex-wrap">
+            {item.source_url && (
+              <a
+                href={item.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
+                title="Open the original source in a new tab"
+              >
+                Read Full Article
+              </a>
+            )}
+            <button
+              onClick={handleEmail}
+              className="text-[10px] px-2 py-0.5 rounded border border-beroe-blue/30 bg-beroe-blue/5 text-beroe-blue hover:bg-beroe-blue/10"
+              title="Compose an alert / pitch email pre-filled with this intel item"
+            >
+              ✉ Generate Alert/Pitch Email
+            </button>
             {item.signal_created ? (
               <span className="text-[10px] text-beroe-green inline-flex items-center gap-1 px-1.5 py-0.5">
                 ✓ Signal created
@@ -442,7 +464,7 @@ function IntelCard({
                 <button
                   onClick={() => push.mutate()}
                   disabled={push.isPending}
-                  className="text-[10px] px-2 py-0.5 rounded border border-beroe-green/30 bg-beroe-green/15 text-beroe-green hover:bg-beroe-green/20 disabled:opacity-50"
+                  className="text-[10px] px-2 py-0.5 rounded bg-beroe-blue text-white hover:opacity-90 disabled:opacity-50 font-semibold"
                   title="Promote this intel to a Soft Signal (drives the appetite score)"
                 >
                   → Push as Soft Signal
@@ -451,17 +473,10 @@ function IntelCard({
             )}
             <button
               onClick={handleDownload}
-              className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
+              className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-muted hover:bg-beroe-bg/60"
               title="Download this intel item as a text file"
             >
               ⬇ Download
-            </button>
-            <button
-              onClick={handleEmail}
-              className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-secondary hover:bg-beroe-bg/60"
-              title="Copy as email to clipboard and try to launch your mail client"
-            >
-              ✉ Email to team
             </button>
             {emailToast && (
               <span className="text-[10px] text-beroe-green bg-beroe-green/15 border border-beroe-green/30 rounded px-1.5 py-0.5">
