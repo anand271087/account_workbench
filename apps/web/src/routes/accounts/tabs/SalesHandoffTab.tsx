@@ -432,7 +432,10 @@ export default function SalesHandoffTab() {
         )}
       </div>
 
-      {/* ---------- Card 2: CLIENT SIGNED stage gate ---------- */}
+      {/* ---------- Card 2: CLIENT SIGNED stage gate ----------
+          29-May bug 29-18 — Handover Quality Check now lives inside
+          this card as the `handoverQualityCheck` slot. Renders only
+          when signed (no checklist to show on a pending account). */}
       <SigningGateCard
         gate={gate}
         signForm={signForm}
@@ -445,14 +448,16 @@ export default function SalesHandoffTab() {
         onContractDoc={(filename) =>
           contractDoc.mutate({ gate_contract_doc: filename })
         }
-      />
-
-      {/* ---------- Card 3: Handover Quality Check ---------- */}
-      <HandoverQualityCheck
-        account={account}
-        gate={gate}
-        onSet={(items) => checklist.mutate({ items })}
-        saving={checklist.isPending}
+        handoverQualityCheck={
+          gate.gate_signed && !gate.gate_unlocked ? (
+            <HandoverQualityCheck
+              account={account}
+              gate={gate}
+              onSet={(items) => checklist.mutate({ items })}
+              saving={checklist.isPending}
+            />
+          ) : undefined
+        }
       />
 
       {/* H40 — Success Metrics live INSIDE Sales Handoff after signing
@@ -538,6 +543,7 @@ function SigningGateCard({
   unlocking,
   error,
   onContractDoc,
+  handoverQualityCheck,
 }: {
   gate: SigningGate;
   signForm: SignAccountBody;
@@ -548,6 +554,11 @@ function SigningGateCard({
   unlocking: boolean;
   error: string | null;
   onContractDoc: (filename: string | null) => void;
+  // 29-May bug 29-18 — Handover Quality Check now lives inside the
+  // CLIENT SIGNED card. The standalone slot at the parent level is
+  // removed in favour of this children-style prop so the visual
+  // grouping matches the prototype screenshot.
+  handoverQualityCheck?: React.ReactNode;
 }) {
   const isSigned = gate.gate_signed;
   const inEdit = !isSigned || gate.gate_unlocked;
@@ -610,6 +621,12 @@ function SigningGateCard({
           value={gate.gate_confirmed_at ? fmtDateTime(gate.gate_confirmed_at) : "—"}
         />
       </div>
+
+      {/* 29-May bug 29-18 — Handover Quality Check rendered inline
+          inside CLIENT SIGNED card. */}
+      {handoverQualityCheck && (
+        <div className="mb-3">{handoverQualityCheck}</div>
+      )}
 
       {/* Sign / re-sign form */}
       {inEdit && gate.can_sign && (
