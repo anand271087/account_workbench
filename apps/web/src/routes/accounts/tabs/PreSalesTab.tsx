@@ -1164,14 +1164,9 @@ const DECISION_LABELS: Record<string, string> = {
   detractor: "Detractor",
   unknown: "Unknown",
 };
-const FUNCTION_LABELS: Record<string, string> = {
-  procurement: "Procurement",
-  supply_chain: "Supply Chain",
-  finance: "Finance",
-  operations: "Operations",
-  it: "IT",
-  other: "Other",
-};
+// 29-May bug 29-08 — FUNCTION_LABELS deleted; the new tabular roster
+// doesn't surface contact.function. Labels still live in
+// types/contact.ts if needed elsewhere.
 
 function ClientContactsInline({ accountId }: { accountId: string }) {
   const { data, isLoading, isError } = useQuery<{
@@ -1210,115 +1205,116 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
     (c) => !c.is_spoc && !c.is_sponsor && c.decision_power !== "executive_sponsor",
   );
 
-  const renderContact = (c: ContactRow) => (
-    <div
-      key={c.id}
-      className="flex items-start gap-2 py-1.5 border-b border-beroe-card-border/40 last:border-b-0 text-[12px]"
-    >
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold text-text-primary truncate">
-          {c.name}
-          {c.title && (
-            <span className="font-normal text-text-secondary">
-              {" · "}{c.title}
-            </span>
-          )}
-        </div>
-        <div className="text-[11px] text-text-muted flex items-center gap-1.5 flex-wrap">
-          {c.function && (
-            <span>{FUNCTION_LABELS[c.function] ?? c.function}</span>
-          )}
-          {c.decision_power && (
-            <span className="px-1.5 py-0.5 rounded bg-beroe-purple/10 text-beroe-purple border border-beroe-purple/30 font-semibold">
-              {DECISION_LABELS[c.decision_power] ?? c.decision_power}
-            </span>
-          )}
-          {c.email && (
-            <a
-              href={`mailto:${c.email}`}
-              className="text-beroe-blue hover:underline"
-            >
-              {c.email}
-            </a>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  // 29-May bug 29-08 — renderContact + sectionStyle helpers removed.
+  // The 3-card layout is replaced by a top role-summary row + flat
+  // tabular roster (see below).
 
-  const sectionStyle = (count: number) =>
-    cn(
-      "rounded-md border px-3 py-2",
-      count > 0
-        ? "bg-white border-beroe-card-border"
-        : "bg-beroe-bg border-beroe-card-border/60",
-    );
+  // 29-May bug 29-08 — derived summary strings for the top "named roles"
+  // row. Comma-joined name lists fit the prototype's text-input look.
+  const fmtNames = (xs: typeof spoc) =>
+    xs.map((c) => c.name).filter(Boolean).join(", ") || "—";
+  const spocSummary = fmtNames(spoc);
+  const sponsorSummary = fmtNames(sponsor);
+  const powerSummary = fmtNames(power);
+  const allContacts = [...spoc, ...sponsor, ...power];
 
   return (
     <div className="bg-white rounded-card border border-beroe-card-border p-4">
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-        <div>
-          <div className="text-[14px] font-bold text-text-primary">
-            Client Contacts
-          </div>
-          <div className="text-[11px] text-text-muted">
-            SPOC · Executive Sponsor · Power Users · contact details
-          </div>
+        <div className="text-[12px] font-bold uppercase tracking-wider text-text-muted">
+          Client Contacts
         </div>
         <button
           type="button"
           onClick={() => navigate(`/accounts/${accountId}/contacts`)}
-          className="text-[11px] text-beroe-blue font-semibold hover:underline"
+          className="text-[11px] px-3 py-1 rounded-md border border-beroe-blue/30 bg-beroe-blue/5 text-beroe-blue font-semibold hover:bg-beroe-blue/10"
         >
-          + Add / Edit Contacts →
+          + Add Contact
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className={sectionStyle(spoc.length)}>
-          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-green mb-1.5">
-            ⭐ SPOC ({spoc.length})
+      {/* 29-May bug 29-08 — top role-summary row (3 columns):
+          SPOC · Executive Sponsor · Power Users — names as read-only
+          text inputs sourced from the contacts list. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        {[
+          { label: "SPOC", value: spocSummary, count: spoc.length },
+          { label: "Executive Sponsor", value: sponsorSummary, count: sponsor.length },
+          { label: "Power Users", value: powerSummary, count: power.length },
+        ].map(({ label, value, count }) => (
+          <div key={label}>
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-text-muted mb-1">
+              {label}
+            </div>
+            <div
+              className={cn(
+                "text-[12px] rounded-md border px-2.5 py-1.5",
+                count > 0
+                  ? "bg-white border-beroe-card-border text-text-primary"
+                  : "bg-beroe-bg/40 border-beroe-card-border/60 text-text-muted italic",
+              )}
+            >
+              {value}
+            </div>
           </div>
-          {spoc.length === 0 ? (
-            <div className="text-[11px] text-text-muted italic">
-              No SPOC marked — mark a contact as SPOC from the Contacts page.
-            </div>
-          ) : (
-            spoc.map(renderContact)
-          )}
-        </div>
-
-        <div className={sectionStyle(sponsor.length)}>
-          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-purple mb-1.5">
-            👤 Executive Sponsor ({sponsor.length})
-          </div>
-          {sponsor.length === 0 ? (
-            <div className="text-[11px] text-text-muted italic">
-              No exec sponsor marked yet.
-            </div>
-          ) : (
-            sponsor.map(renderContact)
-          )}
-        </div>
-
-        <div className={sectionStyle(power.length)}>
-          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-amber mb-1.5">
-            ⚡ Power Users ({power.length})
-          </div>
-          {power.length === 0 ? (
-            <div className="text-[11px] text-text-muted italic">
-              No other contacts captured.
-            </div>
-          ) : (
-            <div>{power.slice(0, 6).map(renderContact)}</div>
-          )}
-          {power.length > 6 && (
-            <div className="text-[10px] italic text-text-muted mt-1">
-              + {power.length - 6} more on the Contacts page
-            </div>
-          )}
-        </div>
+        ))}
       </div>
+
+      {/* 29-May bug 29-08 — tabular contact roster (Name | Title |
+          Role | Influence). Read-only here; full edit lives on the
+          Contacts page (+ Add Contact link above). */}
+      {allContacts.length === 0 ? (
+        <div className="text-[11px] text-text-muted italic px-1 py-2">
+          No contacts captured yet — click "+ Add Contact" to add one.
+        </div>
+      ) : (
+        <div>
+          <div className="hidden md:grid grid-cols-[2fr_2fr_1.2fr_1fr] gap-2 px-2 pb-1 text-[10px] uppercase tracking-wider font-semibold text-text-muted">
+            <div>Name</div>
+            <div>Title</div>
+            <div>Role</div>
+            <div>Influence</div>
+          </div>
+          <ul className="space-y-1.5">
+            {allContacts.map((c) => (
+              <li
+                key={c.id}
+                className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.2fr_1fr] gap-2 items-center rounded-md border border-beroe-card-border bg-white px-2.5 py-1.5"
+              >
+                <div className="text-[12px] font-semibold text-text-primary">
+                  {c.name}
+                </div>
+                <div className="text-[11px] text-text-secondary">
+                  {c.title ?? "—"}
+                </div>
+                <div className="text-[11px] text-text-secondary">
+                  {c.decision_power
+                    ? (DECISION_LABELS[c.decision_power] ?? c.decision_power)
+                    : "—"}
+                </div>
+                <div>
+                  <span
+                    className={cn(
+                      "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                      c.seniority === "cxo" || c.seniority === "vp"
+                        ? "bg-beroe-green/15 text-beroe-green"
+                        : c.seniority === "director"
+                          ? "bg-beroe-blue/10 text-beroe-blue"
+                          : "bg-beroe-amber/15 text-beroe-amber",
+                    )}
+                  >
+                    {(c.seniority === "cxo" || c.seniority === "vp")
+                      ? "High"
+                      : c.seniority === "director"
+                        ? "Medium"
+                        : "Low"}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
