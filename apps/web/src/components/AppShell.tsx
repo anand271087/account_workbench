@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "./AuthProvider";
@@ -149,14 +150,80 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
 
       {/* Main */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {title && (
-          <div className="bg-white border-b border-beroe-card-border px-6 py-3">
-            <h1 className="text-base font-bold text-text-primary">{title}</h1>
-          </div>
-        )}
+        {/* Top bar — title (left) + global search (right).
+            Matches prototype/beroe_awb_v20.html line 2363: "Search
+            accounts, signals, contacts..." with cmd-K shortcut. */}
+        <div className="bg-white border-b border-beroe-card-border px-6 py-2.5 flex items-center justify-between gap-4">
+          <h1 className="text-base font-bold text-text-primary whitespace-nowrap">
+            {title ?? "Account Work Bench"}
+          </h1>
+          <GlobalSearch />
+        </div>
         <div className="flex-1 overflow-auto">{children}</div>
       </main>
     </div>
+  );
+}
+
+// ============================================================
+// Global search input — top-right of every page.
+// Matches prototype line 2363: "Search accounts, signals, contacts..."
+// with a ⌘K keyboard shortcut. Submitting navigates to the Account
+// List filtered by `?q=<query>`; the existing list page already
+// supports searching across name / slug / industry / country / CSM
+// email / primary contact name.
+// ============================================================
+
+function GlobalSearch() {
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const ref = useRef<HTMLInputElement | null>(null);
+
+  // Keyboard shortcut: ⌘K (mac) / Ctrl+K (else) focuses the input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        ref.current?.focus();
+        ref.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const isMac =
+    typeof navigator !== "undefined" &&
+    navigator.platform.toUpperCase().includes("MAC");
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const term = q.trim();
+        if (!term) return;
+        navigate(`/accounts?q=${encodeURIComponent(term)}`);
+      }}
+      className="relative flex items-center"
+    >
+      <span className="absolute left-2.5 text-text-muted text-[12px] pointer-events-none">
+        🔎
+      </span>
+      <input
+        ref={ref}
+        type="search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search accounts, signals, contacts…"
+        className="text-[12px] rounded-md border border-beroe-card-border bg-beroe-bg/50 hover:bg-white focus:bg-white pl-7 pr-12 py-1.5 w-[280px] sm:w-[340px] focus:outline-none focus:border-beroe-blue focus:ring-1 focus:ring-beroe-blue/30 transition-colors"
+      />
+      <span
+        className="absolute right-2 text-[10px] font-bold text-text-muted bg-white border border-beroe-card-border rounded px-1.5 py-0.5 leading-none pointer-events-none"
+        title={isMac ? "⌘K to focus" : "Ctrl+K to focus"}
+      >
+        {isMac ? "⌘K" : "Ctrl K"}
+      </span>
+    </form>
   );
 }
 
