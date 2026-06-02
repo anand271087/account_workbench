@@ -63,16 +63,25 @@ export interface AccountRow {
   top_play_title: string | null;
   top_play_value_usd: number;
   top_play_prob: number | null;
+  last_activity_at: string | null;
+  activity_days_ago: number | null;
+  sc_status: "pending" | "ack" | "warn" | "done";
+  next_checkpoint_signoff_pending: boolean;
 }
 
 export interface LeaderKPIs {
   accounts_total: number;
+  healthy_count: number;
+  at_risk_band_count: number;
+  attention_count: number;
+  critical_signals: number;
+  renewal_pipeline_weighted_usd: number;
+  expansion_pipeline_weighted_usd: number;
+  // Legacy fields kept for backwards compatibility.
   current_acv_total_usd: number;
   at_risk_acv_usd: number;
   not_renewed_acv_usd: number;
-  critical_signals: number;
   overdue_checkpoints_total: number;
-  expand_weighted_pipeline_usd: number;
 }
 
 export interface PipelinePlay {

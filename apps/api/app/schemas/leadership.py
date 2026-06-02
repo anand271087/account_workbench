@@ -87,18 +87,34 @@ class AccountRow(BaseModel):
     top_play_title: str | None = None
     top_play_value_usd: float = 0.0
     top_play_prob: int | None = None
+    # Prototype additions for the screenshot match.
+    last_activity_at: datetime | None = None
+    activity_days_ago: int | None = None
+    sc_status: str = "pending"   # "pending" | "ack" | "done" | "warn"
+    next_checkpoint_signoff_pending: bool = False
 
 
 class LeaderKPIs(BaseModel):
-    """4-KPI strip at the top of the Leadership View."""
+    """7-KPI strip at the top of the Leadership View (prototype match).
+
+    Tiles, in display order:
+        Accounts · Healthy (≥65) · At Risk (48-64) ·
+        Attention (DTR ≤90) · Critical Signals ·
+        Renewal Pipeline (weighted) · Expansion Pipeline (weighted)
+    """
 
     accounts_total: int = 0
+    healthy_count: int = 0                # health_score ≥ 65
+    at_risk_band_count: int = 0           # 48 ≤ health < 65 (the visual band, not dr_outcome)
+    attention_count: int = 0              # days_to_renewal ≤ 90 (urgency surface)
+    critical_signals: int = 0
+    renewal_pipeline_weighted_usd: float = 0.0   # Σ weighted for rescue + retain plays
+    expansion_pipeline_weighted_usd: float = 0.0 # Σ weighted for expand plays
+    # Kept for backwards-compatibility with earlier consumers.
     current_acv_total_usd: float = 0.0
-    at_risk_acv_usd: float = 0.0          # ACV of dr_outcome='at_risk' accounts
-    not_renewed_acv_usd: float = 0.0      # ACV of dr_outcome='not_renewed'
-    critical_signals: int = 0             # count of impact='critical' signals across portfolio
+    at_risk_acv_usd: float = 0.0
+    not_renewed_acv_usd: float = 0.0
     overdue_checkpoints_total: int = 0
-    expand_weighted_pipeline_usd: float = 0.0  # Σ(play.value × play.prob/100) for expand-mode plays
 
 
 class PipelinePlay(BaseModel):

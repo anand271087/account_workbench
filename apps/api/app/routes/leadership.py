@@ -20,7 +20,7 @@ from app.db.session import get_db
 from app.models.account import Account
 from app.models.checkpoint import Checkpoint
 from app.models.play import AccountPlay
-from app.models.signal import SoftSignal
+from app.models.signal import AccountActivity, SoftSignal
 from app.models.user import User
 from app.schemas.leadership import (
     AccountRow,
@@ -312,13 +312,57 @@ async def get_leadership_portfolio(
         if n:
             open_flag_by_acct[aid] = n
 
-    # Build per-account rows.
+    # Last-activity timestamps per account — MAX(occurred_at) over
+    # account_activities, falling back to created_at.
+    last_activity_by_acct: dict = {}
+    act_rows = (
+        await db.execute(
+            select(
+                AccountActivity.account_id,
+                func.max(
+                    func.coalesce(
+                        AccountActivity.occurred_at,
+                        AccountActivity.created_at,
+                    )
+                ).label("last"),
+            )
+            .where(AccountActivity.hidden.is_(False))
+            .group_by(AccountActivity.account_id)
+        )
+    ).all()
+    for aid, last_at in act_rows:
+        last_activity_by_acct[aid] = last_at
+
+    # Held-but-not-signed-off checkpoints per account (drives the
+    # "🏆 sign-off pending" indicator on the Renewal column).
+    held_no_sign_by_acct: dict = {}
+    held_rows = (
+        await db.execute(
+            select(Checkpoint.account_id, func.count())
+            .where(
+                and_(
+                    Checkpoint.status == "held",
+                    Checkpoint.signed_off_at.is_(None),
+                )
+            )
+            .group_by(Checkpoint.account_id)
+        )
+    ).all()
+    for aid, n in held_rows:
+        held_no_sign_by_acct[aid] = n
+
+    # Build per-account rows + accumulate the 7 KPI counters in one pass.
     accounts: list[AccountRow] = []
     kpi_current_acv = 0.0
     kpi_at_risk_acv = 0.0
     kpi_not_renewed_acv = 0.0
     kpi_critical_signals = 0
     kpi_expand_weighted = 0.0
+    kpi_renewal_weighted = 0.0
+    kpi_healthy = 0          # health >= 65
+    kpi_at_risk_band = 0     # 48 <= health < 65
+    kpi_attention = 0        # days_to_renewal <= 90
+    now_utc = datetime.now(timezone.utc)
     for row in acct_rows:
         acv = float(row.current_acv or 0)
         tgt = float(row.target_acv or 0)
@@ -338,15 +382,57 @@ async def get_leadership_portfolio(
         elif row.dr_outcome == "not_renewed":
             kpi_not_renewed_acv += acv
 
+        h = row.health_score
+        if h is not None:
+            if h >= 65:
+                kpi_healthy += 1
+            elif h >= 48:
+                kpi_at_risk_band += 1
+        if dtr is not None and 0 <= dtr <= 90:
+            kpi_attention += 1
+
         for p in plays_by_acct.get(row.id, []):
             modes = p.modes or []
+            try:
+                weighted = float(p.value_usd or 0) * (
+                    float(p.prob or 0) / 100.0
+                )
+            except (TypeError, ValueError):
+                weighted = 0.0
             if "expand" in modes:
-                try:
-                    kpi_expand_weighted += float(p.value_usd or 0) * (
-                        float(p.prob or 0) / 100.0
-                    )
-                except (TypeError, ValueError):
-                    pass
+                kpi_expand_weighted += weighted
+            # Rescue + retain plays defend the renewal — count toward renewal pipeline.
+            if "rescue" in modes or "retain" in modes:
+                kpi_renewal_weighted += weighted
+
+        # last_activity_at — convert date → datetime if necessary.
+        raw_last = last_activity_by_acct.get(row.id)
+        last_dt: datetime | None = None
+        days_ago: int | None = None
+        if raw_last is not None:
+            if isinstance(raw_last, datetime):
+                last_dt = raw_last if raw_last.tzinfo else raw_last.replace(tzinfo=timezone.utc)
+            else:
+                # date — promote to datetime at midnight UTC
+                last_dt = datetime.combine(raw_last, datetime.min.time(), tzinfo=timezone.utc)
+            days_ago = max(0, (now_utc - last_dt).days)
+
+        # SC status pill state:
+        #   "done"    — success_contract_locked
+        #   "ack"     — vdd_locked  (locked downstream artifact)
+        #   "warn"    — gate_signed but contract not locked yet (the
+        #               typical post-handover state needing CS action)
+        #   "pending" — nothing yet
+        sc_status = "pending"
+        if row.success_contract_locked_at is not None:
+            sc_status = "done"
+        elif row.vdd_locked_at is not None:
+            sc_status = "ack"
+        elif row.dr_outcome is not None:
+            sc_status = "ack"
+        # Always show warn when contract incomplete and renewal is near.
+        if sc_status != "done" and dtr is not None and dtr <= 180:
+            sc_status = "warn"
 
         accounts.append(
             AccountRow(
@@ -372,6 +458,10 @@ async def get_leadership_portfolio(
                 top_play_title=top_title,
                 top_play_value_usd=top_val,
                 top_play_prob=top_prob,
+                last_activity_at=last_dt,
+                activity_days_ago=days_ago,
+                sc_status=sc_status,
+                next_checkpoint_signoff_pending=held_no_sign_by_acct.get(row.id, 0) > 0,
             )
         )
 
@@ -380,12 +470,16 @@ async def get_leadership_portfolio(
 
     kpis = LeaderKPIs(
         accounts_total=len(accounts),
+        healthy_count=kpi_healthy,
+        at_risk_band_count=kpi_at_risk_band,
+        attention_count=kpi_attention,
+        critical_signals=kpi_critical_signals,
+        renewal_pipeline_weighted_usd=round(kpi_renewal_weighted, 2),
+        expansion_pipeline_weighted_usd=round(kpi_expand_weighted, 2),
         current_acv_total_usd=round(kpi_current_acv, 2),
         at_risk_acv_usd=round(kpi_at_risk_acv, 2),
         not_renewed_acv_usd=round(kpi_not_renewed_acv, 2),
-        critical_signals=kpi_critical_signals,
         overdue_checkpoints_total=overdue.total_overdue,
-        expand_weighted_pipeline_usd=round(kpi_expand_weighted, 2),
     )
 
     # ----- Pipeline by CO grouping -----
