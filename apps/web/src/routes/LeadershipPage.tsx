@@ -225,13 +225,13 @@ export default function LeadershipPage() {
             rows={filteredAccounts}
             search={search}
             setSearch={setSearch}
-            onOpen={(a) => navigate(`/accounts/${a.slug}`)}
+            onOpen={(a) => navigate(`/accounts/${a.account_id}`)}
           />
         )}
         {view === "by_csm" && (
           <ByCsmView
             rows={filteredAccounts}
-            onOpen={(a) => navigate(`/accounts/${a.slug}`)}
+            onOpen={(a) => navigate(`/accounts/${a.account_id}`)}
           />
         )}
         {view === "pipeline" && (
