@@ -56,6 +56,73 @@ class OpenRedFlag(BaseModel):
     raised_at: datetime | None
 
 
+# ============================================================
+# Prototype-style additions: per-account list + KPI strip + Pipeline view.
+# Matches prototype/beroe_awb_v20.html line 2491+ "Leadership View".
+# ============================================================
+
+
+class AccountRow(BaseModel):
+    """One row of the Leadership portfolio table."""
+
+    account_id: UUID
+    name: str
+    slug: str
+    csm_name: str | None = None
+    co_name: str | None = None
+    current_acv_usd: float = 0.0
+    target_acv_usd: float = 0.0
+    health_score: int | None = None
+    mode: str | None = None  # rescue / retain / expand
+    tier: str | None = None
+    account_type: str | None = None
+    dr_outcome: str | None = None  # renewed / at_risk / not_renewed / undecided
+    renewal_date: date | None = None
+    days_to_renewal: int | None = None
+    success_contract_locked: bool = False
+    vdd_locked: bool = False
+    overdue_checkpoint_count: int = 0
+    open_red_flag_count: int = 0
+    critical_signal_count: int = 0
+    top_play_title: str | None = None
+    top_play_value_usd: float = 0.0
+    top_play_prob: int | None = None
+
+
+class LeaderKPIs(BaseModel):
+    """4-KPI strip at the top of the Leadership View."""
+
+    accounts_total: int = 0
+    current_acv_total_usd: float = 0.0
+    at_risk_acv_usd: float = 0.0          # ACV of dr_outcome='at_risk' accounts
+    not_renewed_acv_usd: float = 0.0      # ACV of dr_outcome='not_renewed'
+    critical_signals: int = 0             # count of impact='critical' signals across portfolio
+    overdue_checkpoints_total: int = 0
+    expand_weighted_pipeline_usd: float = 0.0  # Σ(play.value × play.prob/100) for expand-mode plays
+
+
+class PipelinePlay(BaseModel):
+    account_id: UUID
+    account_name: str
+    title: str
+    value_usd: float
+    prob: int
+    weighted_usd: float
+    when_text: str | None = None
+    role: str | None = None
+    added_by_name: str | None = None
+
+
+class PipelineCO(BaseModel):
+    """One Commercial Owner card on the Pipeline view."""
+
+    co_name: str
+    co_initials: str
+    accounts: list[str]
+    total_weighted_usd: float = 0.0
+    plays: list[PipelinePlay] = []
+
+
 class LeadershipPortfolio(BaseModel):
     """Single aggregated payload behind /leadership/portfolio."""
 
@@ -64,3 +131,7 @@ class LeadershipPortfolio(BaseModel):
     overdue_checkpoints: OverdueCheckpoints
     open_red_flags: list[OpenRedFlag]
     generated_at: datetime
+    # Prototype-style additions.
+    kpis: LeaderKPIs = LeaderKPIs()
+    accounts: list[AccountRow] = []
+    pipeline_by_co: list[PipelineCO] = []
