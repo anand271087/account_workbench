@@ -157,6 +157,23 @@ async def _process(job_id: UUID) -> dict:
             except Exception:
                 logger.exception("MoM field extraction failed (non-fatal)")
 
+        # Contract (Sales Handoff) field extraction. Persists the
+        # structured Client Signed payload on the document row; the
+        # frontend KindUploadCard polls + one-shot applies it as a
+        # dirty draft on the Sales Hand-off → Client Signed form.
+        if doc.kind == "contract":
+            try:
+                from app.services.extract_handoff import extract_handoff
+
+                ho_result = await extract_handoff(str(doc.id), text)
+                doc.handoff_extracted_fields = ho_result.model_dump(mode="json")
+                doc.handoff_extracted_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                logger.exception(
+                    "Handoff field extraction failed (non-fatal)"
+                )
+
         # aggregate regen for the account
         await _regenerate_aggregate(db, doc.account_id, job.id)
 

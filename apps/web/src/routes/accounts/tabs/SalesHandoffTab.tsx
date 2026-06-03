@@ -18,6 +18,12 @@ import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 // 29-May bug 29-16 — Sales Handoff Documents upload card.
 import { KindUploadCard } from "@/components/KindUploadCard";
+// Auto-populate Client Signed from handoff doc (KindUploadCard saves a
+// "handoff" slice in localStorage; we consume it here).
+import {
+  EXTRACTION_APPLIED_EVENT,
+  consumeHandoffSlice,
+} from "@/lib/extractionDraft";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   SH_VALIDATION_LABELS,
@@ -143,6 +149,65 @@ export default function SalesHandoffTab() {
     gate_account_segment: "",
     gate_subscribers: "",
   });
+
+  // Auto-populate Client Signed from a Sales-Handoff doc upload.
+  // KindUploadCard saves the structured fields in localStorage as a
+  // "handoff" slice; we consume + merge into signForm (fill-blank-only
+  // so user edits never get clobbered by a re-upload).
+  const [handoffNote, setHandoffNote] = useState<string | null>(null);
+  useEffect(() => {
+    const applyDraft = () => {
+      const slice = consumeHandoffSlice(account.id);
+      if (!slice) return;
+      setSignForm((prev) => ({
+        gate_signed_date:
+          slice.gate_signed_date && !prev.gate_signed_date
+            ? slice.gate_signed_date
+            : prev.gate_signed_date,
+        gate_contract_acv:
+          slice.gate_contract_acv_usd != null && !prev.gate_contract_acv
+            ? String(slice.gate_contract_acv_usd)
+            : prev.gate_contract_acv,
+        gate_contract_term:
+          slice.gate_contract_term && !prev.gate_contract_term
+            ? slice.gate_contract_term
+            : prev.gate_contract_term,
+        gate_contract_modules:
+          slice.gate_contract_modules && slice.gate_contract_modules.length > 0
+            ? Array.from(
+                new Set([
+                  ...(prev.gate_contract_modules ?? []),
+                  ...slice.gate_contract_modules,
+                ]),
+              )
+            : prev.gate_contract_modules,
+        gate_platform_tier:
+          slice.gate_platform_tier && !prev.gate_platform_tier
+            ? slice.gate_platform_tier
+            : prev.gate_platform_tier,
+        gate_account_segment:
+          slice.gate_account_segment && !prev.gate_account_segment
+            ? slice.gate_account_segment
+            : prev.gate_account_segment,
+        gate_subscribers:
+          slice.gate_subscribers && !prev.gate_subscribers
+            ? slice.gate_subscribers
+            : prev.gate_subscribers,
+      }));
+      setHandoffNote(
+        slice.is_stub
+          ? "Pre-filled from the uploaded handoff doc (heuristic extract — please verify)."
+          : "Pre-filled from the uploaded handoff doc — please verify and click Sign.",
+      );
+    };
+    applyDraft();
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail || detail.accountId === account.id) applyDraft();
+    };
+    window.addEventListener(EXTRACTION_APPLIED_EVENT, handler);
+    return () => window.removeEventListener(EXTRACTION_APPLIED_EVENT, handler);
+  }, [account.id]);
 
   if (gateLoading || solLoading || !form || !gate) {
     return <div className="text-sm text-text-muted">Loading sales hand-off…</div>;
@@ -456,6 +521,8 @@ export default function SalesHandoffTab() {
         signing={sign.isPending}
         unlocking={unlock.isPending}
         error={signError}
+        handoffNote={handoffNote}
+        onDismissHandoffNote={() => setHandoffNote(null)}
         onContractDoc={(filename) =>
           contractDoc.mutate({ gate_contract_doc: filename })
         }
@@ -555,6 +622,8 @@ function SigningGateCard({
   error,
   onContractDoc,
   handoverQualityCheck,
+  handoffNote,
+  onDismissHandoffNote,
 }: {
   gate: SigningGate;
   signForm: SignAccountBody;
@@ -570,6 +639,10 @@ function SigningGateCard({
   // removed in favour of this children-style prop so the visual
   // grouping matches the prototype screenshot.
   handoverQualityCheck?: React.ReactNode;
+  // Auto-populate banner: shown when KindUploadCard's handoff slice
+  // pre-filled the sign form from an uploaded contract doc.
+  handoffNote?: string | null;
+  onDismissHandoffNote?: () => void;
 }) {
   const isSigned = gate.gate_signed;
   const inEdit = !isSigned || gate.gate_unlocked;
@@ -637,6 +710,25 @@ function SigningGateCard({
           inside CLIENT SIGNED card. */}
       {handoverQualityCheck && (
         <div className="mb-3">{handoverQualityCheck}</div>
+      )}
+
+      {/* Handoff auto-fill banner — surfaces only when the upload
+          card pre-filled the sign form. Dismiss to clear. */}
+      {handoffNote && inEdit && (
+        <div className="mb-3 rounded-md bg-beroe-blue/5 border border-beroe-blue/30 px-3 py-2 flex items-start gap-2">
+          <span className="text-[14px]">✨</span>
+          <div className="flex-1 text-[11px] text-beroe-blue leading-snug">
+            {handoffNote}
+          </div>
+          <button
+            type="button"
+            onClick={() => onDismissHandoffNote?.()}
+            className="text-[11px] text-beroe-blue/60 hover:text-beroe-blue px-1"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {/* Sign / re-sign form */}

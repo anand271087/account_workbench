@@ -57,6 +57,14 @@ class Document(Base):
     vpd_extracted_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     vpd_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Sales Handoff (contract) field extraction — populated by the worker
+    # only when kind='contract'. Migration 0056. The frontend's
+    # KindUploadCard polls and one-shot applies these fields as a dirty
+    # draft on the Client Signed form so the CSM doesn't have to retype
+    # the ACV / term / modules etc. that are already in the handoff doc.
+    handoff_extracted_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    handoff_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # M15.1 — candidate-goals extraction (kind='vpd' only). The frontend
     # surfaces a review modal when this column lands; user confirms a
     # subset → fan-out POST /accounts/:id/cs-goals.

@@ -28,6 +28,7 @@ import {
 import type { ContactCreate } from "@/types/contact";
 import type { ExtractedContact, MomExtractionResult } from "@/types/mom_extraction";
 import type { ExtractedVpd } from "@/types/vpd_extraction";
+import type { HandoffExtractionResult } from "@/types/handoff_extraction";
 import type { CsGoalsExtractionResult, ExtractedGoal } from "@/types/cs_goals_extraction";
 import { VpdGoalsExtractionReview } from "@/components/VpdGoalsExtractionReview";
 
@@ -177,6 +178,42 @@ export function KindUploadCard({
         `Populated Solutioning fields from "${d.filename}". Review on the Solutioning tab and click Save.`,
       );
       qc.invalidateQueries({ queryKey: ["solutioning", accountId] });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.items, kind, accountId]);
+
+  // Auto-apply Handoff extraction (kind='contract'): when the worker
+  // lands handoff_extracted_fields on a contract upload, stash the
+  // structured fields as the "handoff" slice. SalesHandoffTab consumes
+  // it on mount (or via EXTRACTION_APPLIED_EVENT) and merges into
+  // signForm — the sticky save bar pulses, the CSM reviews + signs.
+  useEffect(() => {
+    if (kind !== "contract" || !data?.items) return;
+    const pending = data.items.filter(
+      (d) =>
+        !d.deleted_at &&
+        d.handoff_extracted_fields &&
+        !sessionStorage.getItem(appliedKey(d.id)) &&
+        !localStorage.getItem(appliedKey(d.id)),
+    );
+    if (pending.length === 0) return;
+    pending.forEach((d) => sessionStorage.setItem(appliedKey(d.id), "1"));
+    pending.forEach((d) => {
+      const h = d.handoff_extracted_fields as unknown as HandoffExtractionResult;
+      if (!hasAnyHandoff(h)) {
+        localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+        return;
+      }
+      saveExtractionDraft(accountId, {
+        filename: d.filename,
+        appliedAt: new Date().toISOString(),
+        handoff: h,
+      });
+      localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+      setExtractionToast(
+        `Populated Client Signed fields from "${d.filename}". Review on Sales Hand-off and click Save.`,
+      );
+      qc.invalidateQueries({ queryKey: ["signing-gate", accountId] });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.items, kind, accountId]);
@@ -783,6 +820,19 @@ function hasAnyVpd(v: ExtractedVpd | undefined): boolean {
     v.proposed_solution || v.engagement_type || v.engagement_duration_months ||
     v.value_definition || v.estimated_value_musd !== null ||
     (v.value_themes?.length ?? 0) > 0,
+  );
+}
+
+function hasAnyHandoff(h: HandoffExtractionResult | undefined): boolean {
+  if (!h) return false;
+  return Boolean(
+    h.gate_signed_date ||
+      h.gate_contract_acv_usd ||
+      h.gate_contract_term ||
+      h.gate_platform_tier ||
+      h.gate_account_segment ||
+      h.gate_subscribers ||
+      (h.gate_contract_modules?.length ?? 0) > 0,
   );
 }
 

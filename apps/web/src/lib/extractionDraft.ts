@@ -20,6 +20,7 @@ import type {
   ExtractedEngagement,
 } from "@/types/mom_extraction";
 import type { ExtractedVpd } from "@/types/vpd_extraction";
+import type { HandoffExtractionResult } from "@/types/handoff_extraction";
 
 const PREFIX = "awb:extraction-draft";
 export const EXTRACTION_APPLIED_EVENT = "awb:extraction-applied";
@@ -30,6 +31,7 @@ export interface ExtractionDraft {
   engagement?: ExtractedEngagement;
   brief?: ExtractedBrief;
   solutioning?: ExtractedVpd;
+  handoff?: HandoffExtractionResult;
 }
 
 function key(accountId: string): string {
@@ -114,7 +116,7 @@ export function consumeSolutioningSlice(accountId: string): ExtractedVpd | null 
   const remaining: ExtractionDraft = { ...draft };
   delete remaining.solutioning;
   try {
-    if (remaining.engagement || remaining.brief) {
+    if (remaining.engagement || remaining.brief || remaining.handoff) {
       localStorage.setItem(key(accountId), JSON.stringify(remaining));
     } else {
       localStorage.removeItem(key(accountId));
@@ -123,4 +125,24 @@ export function consumeSolutioningSlice(accountId: string): ExtractedVpd | null 
     /* swallow */
   }
   return draft.solutioning;
+}
+
+/** Read + clear ONLY the handoff slice (Client Signed auto-populate). */
+export function consumeHandoffSlice(
+  accountId: string,
+): HandoffExtractionResult | null {
+  const draft = peekExtractionDraft(accountId);
+  if (!draft?.handoff) return null;
+  const remaining: ExtractionDraft = { ...draft };
+  delete remaining.handoff;
+  try {
+    if (remaining.engagement || remaining.brief || remaining.solutioning) {
+      localStorage.setItem(key(accountId), JSON.stringify(remaining));
+    } else {
+      localStorage.removeItem(key(accountId));
+    }
+  } catch {
+    /* swallow */
+  }
+  return draft.handoff;
 }
