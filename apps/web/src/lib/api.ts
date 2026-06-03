@@ -19,6 +19,49 @@ export class ApiError extends Error {
   }
 }
 
+// FastAPI returns 422 validation errors as { detail: [{loc, msg, type}, ...] }
+// — coerce that (or any other shape) into a readable single-line string so the
+// frontend toasts never display "[object Object]".
+function formatDetail(d: unknown): string | null {
+  if (d == null) return null;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    const parts = d
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const o = item as { loc?: unknown[]; msg?: string; type?: string };
+          const field = Array.isArray(o.loc)
+            ? o.loc
+                .filter((x) => x !== "body" && typeof x !== "number")
+                .join(".")
+            : "";
+          const msg = o.msg || o.type || "invalid";
+          return field ? `${field}: ${msg}` : msg;
+        }
+        try {
+          return JSON.stringify(item);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join("; ") : null;
+  }
+  if (typeof d === "object") {
+    const o = d as { msg?: string; message?: string; detail?: unknown };
+    if (typeof o.msg === "string") return o.msg;
+    if (typeof o.message === "string") return o.message;
+    if (o.detail !== undefined) return formatDetail(o.detail);
+    try {
+      return JSON.stringify(d);
+    } catch {
+      return null;
+    }
+  }
+  return String(d);
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit & { isFormData?: boolean },
@@ -41,8 +84,8 @@ async function request<T>(
     } catch {
       /* swallow */
     }
-    const detail =
-      (body as { detail?: string } | null)?.detail || `HTTP ${r.status}`;
+    const rawDetail = (body as { detail?: unknown } | null)?.detail;
+    const detail = formatDetail(rawDetail) || `HTTP ${r.status}`;
     // BRD §3.2 — RBAC denials must land on the access-denied page.
     // We don't redirect on every 403 (modals etc. handle their own state),
     // only when the path looks like a top-level navigation away from the

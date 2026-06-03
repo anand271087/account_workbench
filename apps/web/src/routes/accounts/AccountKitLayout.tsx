@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useNotify } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "./AccountProfileLayout";
 import type { AccountDetail } from "@/types/account";
 
@@ -95,6 +96,7 @@ export default function AccountKitLayout() {
 }
 
 function KitCompletion({ account }: { account: AccountDetail }) {
+  const notify = useNotify();
   // 29-May bug 29-05 — Kit Completion now mirrors the prototype's 6
   // stages (was 4): Pre-Sales · Solutioning · Sales Hand-off · Signed ·
   // Metrics · VDD. Metrics + VDD completion derives from server data
@@ -187,7 +189,16 @@ function KitCompletion({ account }: { account: AccountDetail }) {
         {/* 27-May Row 74 — Download Kit button. */}
         <button
           type="button"
-          onClick={() => downloadAccountKit(account)}
+          onClick={() => {
+            const r = downloadAccountKit(account);
+            if (!r.ok) {
+              notify({
+                title: "Pop-up blocked",
+                body: r.reason,
+                tone: "warning",
+              });
+            }
+          }}
           className="text-[10px] px-2.5 py-1 rounded border border-beroe-blue/40 bg-beroe-blue/5 text-beroe-blue font-semibold hover:bg-beroe-blue/10 whitespace-nowrap"
           title="Open a printable summary in a new window"
         >
@@ -201,14 +212,13 @@ function KitCompletion({ account }: { account: AccountDetail }) {
 // Row 74 — open a printable Account-Kit summary in a new window.
 // Pure-frontend: walks the AccountDetail props already on the layout
 // context. User saves as PDF via the browser's Print → Save dialog.
-function downloadAccountKit(account: AccountDetail) {
+function downloadAccountKit(account: AccountDetail): { ok: true } | { ok: false; reason: string } {
   const fmt = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
   const fmtMoney = (v: string | null) =>
     !v ? "—" : Number.isFinite(Number(v)) ? `$${Number(v).toLocaleString()}` : v;
   const w = window.open("", "_blank");
   if (!w) {
-    alert("Pop-up was blocked. Allow pop-ups for this site to download the kit.");
-    return;
+    return { ok: false, reason: "Pop-up was blocked. Allow pop-ups for this site to download the kit." };
   }
   const html = `<!doctype html>
 <html><head><meta charset="utf-8" /><title>Account Kit — ${account.name}</title>
@@ -255,4 +265,5 @@ function downloadAccountKit(account: AccountDetail) {
 </body></html>`;
   w.document.write(html);
   w.document.close();
+  return { ok: true };
 }

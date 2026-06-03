@@ -9,6 +9,14 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 MaturityLevel = Literal["low", "medium", "high"]
 
+# ISO-4217-style currency codes accepted by the procurement-spend field.
+# Mirrors the CHECK constraint in migration 0057. Keep in sync.
+SpendCurrency = Literal[
+    "USD", "EUR", "GBP", "INR", "JPY", "CNY", "AUD", "CAD", "CHF",
+    "SGD", "AED", "SAR", "HKD", "BRL", "MXN", "ZAR", "SEK", "NOK",
+    "DKK", "NZD", "KRW", "THB", "MYR", "IDR", "PHP", "TRY", "RUB",
+]
+
 _BEROE_DOMAIN = "@beroe-inc.com"
 
 
@@ -57,6 +65,7 @@ class EngagementOut(BaseModel):
     procurement_maturity: MaturityLevel | None
     ai_penetration: MaturityLevel | None
     procurement_spend_musd: Decimal | None
+    procurement_spend_currency: SpendCurrency | None = None
     geographies: list[str] = Field(default_factory=list)
 
     spoc_text: str | None
@@ -95,8 +104,9 @@ class EngagementUpdate(BaseModel):
     # Procurement spend in million USD — non-negative.
     procurement_spend_musd: Decimal | None = Field(
         None, ge=0, le=Decimal("999999.99"),
-        description="Total procurement spend in millions of USD (≥ 0)",
+        description="Total procurement spend in millions of the chosen currency (≥ 0)",
     )
+    procurement_spend_currency: SpendCurrency | None = None
     geographies: list[str] | None = None
 
     spoc_text: str | None = None

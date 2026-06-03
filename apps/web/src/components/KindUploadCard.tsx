@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { authProvider } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/DialogProvider";
 import { saveExtractionDraft } from "@/lib/extractionDraft";
 import {
   AI_STATUS_LABELS,
@@ -52,6 +53,7 @@ export function KindUploadCard({
   emptyHint: string;
 }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -386,8 +388,25 @@ export function KindUploadCard({
               await handleFiles([file]);
             }}
           />
-          <span className="text-[10px] text-text-muted">
-            Drag files anywhere on this card · {ALLOWED_EXT.replaceAll(",", " · ")} · max {MAX_MB} MB
+          <span className="text-[10px] text-text-muted inline-flex items-center gap-1">
+            Drag files anywhere on this card · max {MAX_MB} MB
+            <span className="relative inline-flex group">
+              <span
+                tabIndex={0}
+                role="button"
+                aria-label="Show supported file types"
+                className="cursor-help w-3.5 h-3.5 inline-flex items-center justify-center rounded-full border border-beroe-card-border text-[9px] leading-none text-text-muted hover:text-beroe-blue hover:border-beroe-blue/40 focus:outline-none focus:ring-1 focus:ring-beroe-blue/40"
+              >
+                ?
+              </span>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[140%] z-20 whitespace-nowrap rounded-md bg-beroe-navy text-white text-[10px] leading-tight px-2 py-1.5 shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+              >
+                Supported: {ALLOWED_EXT.replaceAll(",", " · ")}
+                <span className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-beroe-navy" />
+              </span>
+            </span>
           </span>
         </div>
         {uploadStatus && (
@@ -439,13 +458,23 @@ export function KindUploadCard({
                 key={d.id}
                 doc={d}
                 accountId={accountId}
-                onDelete={() => {
-                  if (confirm(`Soft-delete "${d.filename}"?`)) deleteMutation.mutate(d.id);
+                onDelete={async () => {
+                  const ok = await confirm({
+                    title: "Delete this document?",
+                    body: `Soft-delete "${d.filename}". Admins can restore within 30 days.`,
+                    confirmLabel: "Delete",
+                    danger: true,
+                  });
+                  if (ok) deleteMutation.mutate(d.id);
                 }}
-                onRerun={() => {
-                  if (confirm(`Re-run AI on "${d.filename}"? Existing summary will be replaced.`)) {
-                    rerunMutation.mutate(d.id);
-                  }
+                onRerun={async () => {
+                  const ok = await confirm({
+                    title: "Re-run AI summary?",
+                    body: `Existing summary for "${d.filename}" will be replaced.`,
+                    confirmLabel: "Re-run AI",
+                    tone: "info",
+                  });
+                  if (ok) rerunMutation.mutate(d.id);
                 }}
               />
             ))}

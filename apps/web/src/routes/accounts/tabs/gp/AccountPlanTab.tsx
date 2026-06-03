@@ -21,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   fmtK,
@@ -667,6 +668,8 @@ function PlayList({
   showAllPlays: boolean;
 }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
+  const notify = useNotify();
   const conf = MODE_CONF[mode];
   // 29-May bug 29-45 — Edit modal target + per-row "expanded" view.
   const [editingPlay, setEditingPlay] = useState<Play | null>(null);
@@ -776,9 +779,11 @@ function PlayList({
                 <button
                   type="button"
                   onClick={() =>
-                    alert(
-                      "Tag Metric ships in v1.1 — links this play to a Success Metric for ARR-attribution.",
-                    )
+                    notify({
+                      title: "Tag Metric — ships in v1.1",
+                      body: "Links this play to a Success Metric for ARR-attribution.",
+                      tone: "info",
+                    })
                   }
                   className="text-[10px] px-2 py-0.5 rounded-md border border-beroe-red/30 bg-beroe-red/5 text-beroe-red hover:bg-beroe-red/10 font-semibold"
                 >
@@ -812,9 +817,14 @@ function PlayList({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Delete play "${p.title}"?`))
-                        deleteMutation.mutate(p.id);
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: `Delete play "${p.title}"?`,
+                        body: "This removes the play from the account plan permanently.",
+                        confirmLabel: "Delete",
+                        danger: true,
+                      });
+                      if (ok) deleteMutation.mutate(p.id);
                     }}
                     className="text-[11px] w-6 h-6 rounded-md border border-beroe-red/30 text-beroe-red bg-beroe-red/5 hover:bg-beroe-red/15 flex items-center justify-center"
                     title="Delete play"

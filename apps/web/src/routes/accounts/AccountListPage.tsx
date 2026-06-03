@@ -9,6 +9,7 @@ import { StarButton } from "@/components/StarButton";
 import { api } from "@/lib/api";
 import { useFavoriteAccounts } from "@/lib/use-favorites";
 import { cn } from "@/lib/utils";
+import { useNotify } from "@/components/DialogProvider";
 import {
   formatACV,
   formatRelativeDate,
@@ -44,6 +45,7 @@ export default function AccountListPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { me } = useAuth();
+  const notify = useNotify();
   // Bug 7 — reassign-owner widened to admin / CS Director / VP CSM / VP Sales.
   const canReassign = !!me && [
     "admin",
@@ -191,7 +193,11 @@ export default function AccountListPage() {
             </button>
           )}
           <button
-            onClick={() => downloadCsv(params)}
+            onClick={() =>
+              downloadCsv(params).catch((e: Error) =>
+                notify({ title: "CSV export failed", body: e.message, tone: "error" }),
+              )
+            }
             className="ml-auto text-xs px-3 py-2 rounded-lg border border-beroe-card-border text-text-secondary hover:bg-beroe-bg"
             title="Export the current filtered list as CSV"
           >
@@ -803,8 +809,7 @@ async function downloadCsv(params: URLSearchParams): Promise<void> {
     headers: access ? { Authorization: `Bearer ${access}` } : {},
   });
   if (!r.ok) {
-    alert(`Export failed (${r.status})`);
-    return;
+    throw new Error(`Export failed (HTTP ${r.status})`);
   }
   const blob = await r.blob();
   const a = document.createElement("a");
@@ -829,6 +834,7 @@ function BulkReassignModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const notify = useNotify();
   const [users, setUsers] = useState<UserOpt[] | null>(null);
   const [target, setTarget] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -849,7 +855,10 @@ function BulkReassignModal({
         account_ids: ids,
         csm_user_id: target,
       });
-      alert(`Reassigned ${r.updated} account${r.updated === 1 ? "" : "s"}.`);
+      notify({
+        title: `Reassigned ${r.updated} account${r.updated === 1 ? "" : "s"}`,
+        tone: "success",
+      });
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Bulk reassign failed.");

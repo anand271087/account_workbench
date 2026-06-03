@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { useConfirm } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
 import { MeetingBriefEditor } from "@/components/MeetingBriefEditor";
 import {
@@ -18,7 +19,9 @@ import type {
   EngagementUpdate,
   MaturityLevel,
   QualityCheckResponse,
+  SpendCurrency,
 } from "@/types/engagement";
+import { SPEND_CURRENCIES } from "@/types/engagement";
 import type { ExtractedEngagement } from "@/types/mom_extraction";
 import type { Category, Geography } from "@/types/lookup";
 
@@ -28,6 +31,7 @@ export default function PreSalesTab() {
   const account = useAccountFromLayout();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const confirm = useConfirm();
 
   const handoverMutation = useMutation({
     mutationFn: () =>
@@ -451,25 +455,41 @@ export default function PreSalesTab() {
               onChange={(v) => setForm({ ...form, ai_penetration: v })}
               disabled={!form.is_editable}
             />
-            <Field label="Procurement spend ($M)">
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                value={form.procurement_spend_musd ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  // Strip a leading minus on the fly so users can't even type
-                  // negatives (server enforces ge=0 too as belt-and-braces).
-                  const cleaned = v.replace(/^-/, "");
-                  setForm({
-                    ...form,
-                    procurement_spend_musd: cleaned === "" ? null : cleaned,
-                  });
-                }}
-                disabled={!form.is_editable}
-                className={inputCls(form.is_editable)}
-              />
+            <Field
+              label={`Procurement spend (M ${form.procurement_spend_currency ?? "USD"})`}
+            >
+              <div className="flex gap-1.5">
+                <CurrencyPicker
+                  value={form.procurement_spend_currency ?? "USD"}
+                  onChange={(code) =>
+                    setForm({ ...form, procurement_spend_currency: code })
+                  }
+                  disabled={!form.is_editable}
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={form.procurement_spend_musd ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    // Strip a leading minus on the fly so users can't even type
+                    // negatives (server enforces ge=0 too as belt-and-braces).
+                    const cleaned = v.replace(/^-/, "");
+                    setForm({
+                      ...form,
+                      procurement_spend_musd: cleaned === "" ? null : cleaned,
+                      // Default currency to USD if the user enters an amount
+                      // before picking a currency, so the server gets a code.
+                      procurement_spend_currency:
+                        form.procurement_spend_currency ?? "USD",
+                    });
+                  }}
+                  disabled={!form.is_editable}
+                  className={cn(inputCls(form.is_editable), "flex-1 min-w-0")}
+                  placeholder="0"
+                />
+              </div>
             </Field>
           </div>
         </Section>
@@ -503,14 +523,14 @@ export default function PreSalesTab() {
         >
           <button
             type="button"
-            onClick={() => {
-              if (
-                confirm(
-                  "Hand this account over to Solutioning? This is recorded in the activity log.",
-                )
-              ) {
-                handoverMutation.mutate();
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Hand over to Solutioning?",
+                body: "Pre-Sales will be marked complete, the Solutioning team will be notified, and the action is recorded in the activity log.",
+                confirmLabel: "Hand off",
+                tone: "info",
+              });
+              if (ok) handoverMutation.mutate();
             }}
             disabled={handoverMutation.isPending || dirty}
             className="w-full px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-opacity"
@@ -849,23 +869,18 @@ function CategoryPicker({
               placeholder={`🔍 Search ${all.length.toLocaleString()} categories…`}
               className="flex-1 px-2 py-1.5 text-[12px] rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
             />
-            <select
+            <SpendPoolPicker
               value={domainFilter}
-              onChange={(e) => setDomainFilter(e.target.value)}
-              className="text-[12px] rounded-md border border-beroe-card-border px-2 py-1.5 focus:outline-none focus:border-beroe-blue bg-white sm:max-w-[200px]"
-            >
-              <option value="">All domains ({domains.length})</option>
-              {domains.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+              options={domains}
+              onChange={setDomainFilter}
+            />
           </div>
 
           {/* Hint when nothing is being filtered yet */}
           {!search && !domainFilter && (
             <div className="text-[11px] text-text-muted mb-2 bg-beroe-bg border border-beroe-card-border rounded-md px-2 py-1.5">
               💡 Type to search ({all.length.toLocaleString()} categories) or pick
-              a domain to narrow down. Showing first {RENDER_CAP} alphabetically.
+              a Spend Pool to narrow down. Showing first {RENDER_CAP} alphabetically.
             </div>
           )}
 
@@ -948,38 +963,210 @@ function GeographyPicker({
   onChange: (next: string[]) => void;
   disabled: boolean;
 }) {
+  // 1-June bug 01-04/05 — "Geographies / Target Countries" needs a
+  // searchable picker, not a flat pill-grid. Backend lookup carries
+  // ~5 regions + ~38 countries (migration 0053); typeahead lets users
+  // pick any of them without scrolling a wall of pills.
   const { data: geos } = useQuery<Geography[]>({
     queryKey: ["geographies"],
     queryFn: () => api.get<Geography[]>("/api/v1/lookups/geographies"),
+    staleTime: 60_000,
   });
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    setTimeout(() => inputRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const all = useMemo(() => geos ?? [], [geos]);
+
+  // Group entries by region for the unfiltered view. Regions land
+  // under their own header; country-only entries (no region) sink
+  // into "Other".
+  const grouped = useMemo(() => {
+    const out: Record<string, Geography[]> = {};
+    for (const g of all) {
+      const isRegion = !g.region || g.region === g.name;
+      const bucket = isRegion ? "Regions" : g.region || "Other";
+      (out[bucket] ??= []).push(g);
+    }
+    // Sort bucket keys: Regions first, then alphabetical.
+    return Object.entries(out).sort(([a], [b]) => {
+      if (a === "Regions") return -1;
+      if (b === "Regions") return 1;
+      return a.localeCompare(b);
+    });
+  }, [all]);
+
+  const q = query.trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!q) return null; // null → use grouped view
+    return all.filter(
+      (g) =>
+        g.name.toLowerCase().includes(q) ||
+        (g.region ?? "").toLowerCase().includes(q),
+    );
+  }, [q, all]);
+
+  const isPicked = (name: string) => selected.includes(name);
+  const toggle = (name: string) => {
+    if (isPicked(name)) {
+      onChange(selected.filter((s) => s !== name));
+    } else {
+      onChange([...selected, name]);
+    }
+  };
+
   return (
-    <div>
+    <div ref={wrapRef} className="relative">
       <div className="flex flex-wrap gap-1 mb-2">
         {selected.map((name) => (
-          <Pill key={name} onRemove={disabled ? undefined : () => onChange(selected.filter((n) => n !== name))}>
+          <Pill
+            key={name}
+            onRemove={
+              disabled ? undefined : () => onChange(selected.filter((n) => n !== name))
+            }
+          >
             {name}
           </Pill>
         ))}
         {selected.length === 0 && (
-          <span className="text-xs text-text-muted">No geographies selected.</span>
+          <span className="text-xs text-text-muted">No regions or countries selected.</span>
         )}
       </div>
       {!disabled && (
-        <div className="flex flex-wrap gap-1">
-          {(geos ?? [])
-            .filter((g) => !selected.includes(g.name))
-            .map((g) => (
-              <button
-                key={g.id}
-                onClick={() => onChange([...selected, g.name])}
-                className="text-xs px-2 py-0.5 rounded-full border border-beroe-card-border text-text-secondary hover:bg-beroe-bg"
-              >
-                {g.name}
-              </button>
-            ))}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className="text-[12px] rounded-md border border-beroe-card-border bg-white px-2 py-1.5 inline-flex items-center gap-1 hover:border-beroe-blue/40 focus:outline-none focus:border-beroe-blue"
+        >
+          <span className="text-text-secondary">🌍</span>
+          <span>Add region or country</span>
+          <span
+            className={cn(
+              "text-[9px] text-text-muted ml-1 transition-transform",
+              open && "rotate-180",
+            )}
+          >
+            ▾
+          </span>
+        </button>
+      )}
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Select geography"
+          className="absolute z-30 mt-1 left-0 w-[300px] rounded-md border border-beroe-card-border bg-white shadow-lg overflow-hidden"
+        >
+          <div className="p-2 border-b border-beroe-card-border">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="🔍 Search regions and countries…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full px-2 py-1.5 text-[12px] rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
+            />
+          </div>
+          <div className="max-h-[320px] overflow-y-auto">
+            {matches !== null ? (
+              matches.length === 0 ? (
+                <div className="px-3 py-3 text-[11px] text-text-muted text-center">
+                  No match for &quot;{query}&quot;.
+                </div>
+              ) : (
+                matches.map((g) => (
+                  <GeoRow
+                    key={g.id}
+                    geo={g}
+                    picked={isPicked(g.name)}
+                    onToggle={() => toggle(g.name)}
+                  />
+                ))
+              )
+            ) : (
+              grouped.map(([bucket, list]) => (
+                <div key={bucket}>
+                  <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-text-muted bg-beroe-bg sticky top-0">
+                    {bucket}
+                  </div>
+                  {list
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((g) => (
+                      <GeoRow
+                        key={g.id}
+                        geo={g}
+                        picked={isPicked(g.name)}
+                        onToggle={() => toggle(g.name)}
+                      />
+                    ))}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+function GeoRow({
+  geo,
+  picked,
+  onToggle,
+}: {
+  geo: Geography;
+  picked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={picked}
+      onClick={onToggle}
+      className={cn(
+        "w-full px-3 py-2 flex items-center gap-2 text-left text-[12px] hover:bg-beroe-bg",
+        picked && "bg-beroe-blue/5",
+      )}
+    >
+      <span
+        className={cn(
+          "w-3.5 h-3.5 inline-flex items-center justify-center rounded border flex-shrink-0",
+          picked
+            ? "bg-beroe-blue border-beroe-blue text-white"
+            : "border-beroe-card-border bg-white",
+        )}
+        aria-hidden
+      >
+        {picked && <span className="text-[9px]">✓</span>}
+      </span>
+      <span className="flex-1 truncate text-text-primary">{geo.name}</span>
+      {geo.region && geo.region !== geo.name && (
+        <span className="text-[10px] text-text-muted">{geo.region}</span>
+      )}
+    </button>
   );
 }
 
@@ -1013,6 +1200,326 @@ function countWords(s: string): number {
   return s.trim() ? s.trim().split(/\s+/).length : 0;
 }
 
+// Currencies pinned at the top of the picker — common procurement currencies
+// across Beroe customer base. Order matters (most-likely first).
+const COMMON_CURRENCY_CODES: SpendCurrency[] = [
+  "USD", "EUR", "GBP", "INR", "JPY", "CNY", "AED", "SGD",
+];
+
+/** Compact currency picker — small chip trigger, click opens a search popover
+ *  with a "Common" section pinned at the top and the rest scrollable. Replaces
+ *  the 27-item native dropdown that was unreadable. */
+function CurrencyPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: SpendCurrency;
+  onChange: (code: SpendCurrency) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Close on outside click + ESC.
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    // Auto-focus the search on open for keyboard users.
+    setTimeout(() => inputRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const active = SPEND_CURRENCIES.find((c) => c.code === value);
+  const q = query.trim().toLowerCase();
+
+  const matches = useMemo(() => {
+    if (!q) return SPEND_CURRENCIES;
+    return SPEND_CURRENCIES.filter(
+      (c) =>
+        c.code.toLowerCase().includes(q) ||
+        c.label.toLowerCase().includes(q) ||
+        c.symbol.toLowerCase().includes(q),
+    );
+  }, [q]);
+
+  const common = useMemo(
+    () =>
+      COMMON_CURRENCY_CODES.map((code) =>
+        SPEND_CURRENCIES.find((c) => c.code === code),
+      ).filter((c): c is (typeof SPEND_CURRENCIES)[number] => Boolean(c)),
+    [],
+  );
+
+  const showCommon = !q;
+
+  return (
+    <div ref={wrapRef} className="relative w-[88px] flex-none">
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={cn(
+          inputCls(!disabled),
+          "w-full text-left inline-flex items-center justify-between gap-1 pr-2",
+        )}
+      >
+        <span className="truncate">
+          <span className="text-text-secondary mr-1">{active?.symbol ?? "$"}</span>
+          {value}
+        </span>
+        <span className={cn("text-[9px] text-text-muted transition-transform", open && "rotate-180")}>
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Select currency"
+          className="absolute z-30 mt-1 left-0 w-[260px] rounded-md border border-beroe-card-border bg-white shadow-lg overflow-hidden"
+        >
+          <div className="p-2 border-b border-beroe-card-border">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="🔍 Search currency…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full px-2 py-1.5 text-[12px] rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
+            />
+          </div>
+
+          <div className="max-h-[260px] overflow-y-auto">
+            {showCommon && (
+              <>
+                <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-text-muted bg-beroe-bg">
+                  Common
+                </div>
+                {common.map((c) => (
+                  <CurrencyRow
+                    key={`common-${c.code}`}
+                    c={c}
+                    active={c.code === value}
+                    onPick={() => {
+                      onChange(c.code);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  />
+                ))}
+                <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-text-muted bg-beroe-bg">
+                  All currencies
+                </div>
+              </>
+            )}
+            {matches.length === 0 ? (
+              <div className="px-3 py-3 text-[11px] text-text-muted text-center">
+                No match for &quot;{query}&quot;.
+              </div>
+            ) : (
+              matches.map((c) => (
+                <CurrencyRow
+                  key={c.code}
+                  c={c}
+                  active={c.code === value}
+                  onPick={() => {
+                    onChange(c.code);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CurrencyRow({
+  c,
+  active,
+  onPick,
+}: {
+  c: (typeof SPEND_CURRENCIES)[number];
+  active: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      role="option"
+      aria-selected={active}
+      className={cn(
+        "w-full px-3 py-2 flex items-center gap-2 text-left text-[12px] hover:bg-beroe-bg",
+        active && "bg-beroe-blue/5",
+      )}
+    >
+      <span className="w-6 text-center text-text-secondary">{c.symbol}</span>
+      <span className="font-semibold text-text-primary w-10">{c.code}</span>
+      <span className="text-text-secondary truncate">{c.label}</span>
+      {active && <span className="ml-auto text-beroe-blue text-[10px]">✓</span>}
+    </button>
+  );
+}
+
+/** Compact Spend-Pool picker — button trigger + click-to-open popover with
+ *  search. Replaces the 22-row native dropdown next to the category search. */
+function SpendPoolPicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    setTimeout(() => inputRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const matches = useMemo(
+    () => (q ? options.filter((o) => o.toLowerCase().includes(q)) : options),
+    [q, options],
+  );
+
+  const triggerLabel = value || `All Spend Pools (${options.length})`;
+
+  return (
+    <div ref={wrapRef} className="relative sm:w-[200px]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="w-full text-[12px] rounded-md border border-beroe-card-border bg-white px-2 py-1.5 inline-flex items-center justify-between gap-1 hover:border-beroe-blue/40 focus:outline-none focus:border-beroe-blue"
+      >
+        <span className={cn("truncate text-left", !value && "text-text-secondary")}>
+          {triggerLabel}
+        </span>
+        <span className={cn("text-[9px] text-text-muted transition-transform shrink-0", open && "rotate-180")}>
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Select spend pool"
+          className="absolute z-30 mt-1 left-0 w-full min-w-[240px] rounded-md border border-beroe-card-border bg-white shadow-lg overflow-hidden"
+        >
+          <div className="p-2 border-b border-beroe-card-border">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="🔍 Search spend pools…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full px-2 py-1.5 text-[12px] rounded-md border border-beroe-card-border focus:outline-none focus:border-beroe-blue"
+            />
+          </div>
+          <div className="max-h-[280px] overflow-y-auto">
+            {/* Clear / all entry always at top */}
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+                setQuery("");
+              }}
+              className={cn(
+                "w-full px-3 py-2 flex items-center gap-2 text-left text-[12px] hover:bg-beroe-bg border-b border-beroe-card-border",
+                !value && "bg-beroe-blue/5 font-semibold",
+              )}
+            >
+              <span className="text-text-secondary">⌫</span>
+              <span>All Spend Pools</span>
+              <span className="ml-auto text-[10px] text-text-muted">
+                {options.length}
+              </span>
+              {!value && <span className="text-beroe-blue text-[10px]">✓</span>}
+            </button>
+
+            {matches.length === 0 ? (
+              <div className="px-3 py-3 text-[11px] text-text-muted text-center">
+                No match for &quot;{query}&quot;.
+              </div>
+            ) : (
+              matches.map((d) => {
+                const active = d === value;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => {
+                      onChange(d);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                    className={cn(
+                      "w-full px-3 py-2 flex items-center gap-2 text-left text-[12px] hover:bg-beroe-bg",
+                      active && "bg-beroe-blue/5",
+                    )}
+                  >
+                    <span className="truncate text-text-primary">{d}</span>
+                    {active && (
+                      <span className="ml-auto text-beroe-blue text-[10px]">✓</span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function scoreLabel(score: number): string {
   if (score >= 4) return "Strong";
   if (score === 3) return "Acceptable";
@@ -1042,7 +1549,7 @@ function diff(next: Engagement, prev: Engagement): EngagementUpdate {
     "sdr_lead", "pre_discovery_date", "discovery_lead", "sales_lead",
     "target_categories", "engagement_objective",
     "procurement_maturity", "ai_penetration",
-    "procurement_spend_musd", "geographies",
+    "procurement_spend_musd", "procurement_spend_currency", "geographies",
     "spoc_text", "sponsor_text", "power_users_text",
     "ai_quality_dismissed",
   ];
@@ -1173,6 +1680,8 @@ const DECISION_LABELS: Record<string, string> = {
 // types/contact.ts if needed elsewhere.
 
 function ClientContactsInline({ accountId }: { accountId: string }) {
+  const qc = useQueryClient();
+  const confirmDlg = useConfirm();
   const { data, isLoading, isError } = useQuery<{
     items: ContactRow[];
     total: number;
@@ -1184,6 +1693,14 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
     staleTime: 30_000,
   });
   const navigate = useNavigate();
+  const removeMutation = useMutation({
+    mutationFn: (contactId: string) =>
+      api.delete(`/api/v1/contacts/${contactId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contacts", accountId] });
+      qc.invalidateQueries({ queryKey: ["activity", accountId] });
+    },
+  });
 
   if (isLoading) {
     return (
@@ -1273,17 +1790,18 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
         </div>
       ) : (
         <div>
-          <div className="hidden md:grid grid-cols-[2fr_2fr_1.2fr_1fr] gap-2 px-2 pb-1 text-[10px] uppercase tracking-wider font-semibold text-text-muted">
+          <div className="hidden md:grid grid-cols-[2fr_2fr_1.2fr_1fr_28px] gap-2 px-2 pb-1 text-[10px] uppercase tracking-wider font-semibold text-text-muted">
             <div>Name</div>
             <div>Title</div>
             <div>Role</div>
             <div>Influence</div>
+            <div />
           </div>
           <ul className="space-y-1.5">
             {allContacts.map((c) => (
               <li
                 key={c.id}
-                className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.2fr_1fr] gap-2 items-center rounded-md border border-beroe-card-border bg-white px-2.5 py-1.5"
+                className="grid grid-cols-1 md:grid-cols-[2fr_2fr_1.2fr_1fr_28px] gap-2 items-center rounded-md border border-beroe-card-border bg-white px-2.5 py-1.5"
               >
                 <div className="text-[12px] font-semibold text-text-primary">
                   {c.name}
@@ -1313,6 +1831,31 @@ function ClientContactsInline({ accountId }: { accountId: string }) {
                         ? "Medium"
                         : "Low"}
                   </span>
+                </div>
+                <div className="flex justify-end">
+                  {data?.is_editable && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${c.name}`}
+                      title="Remove from this account"
+                      disabled={
+                        removeMutation.isPending &&
+                        removeMutation.variables === c.id
+                      }
+                      onClick={async () => {
+                        const ok = await confirmDlg({
+                          title: `Remove "${c.name}"?`,
+                          body: "The contact is soft-deleted and can be restored by an admin within 30 days.",
+                          confirmLabel: "Remove",
+                          danger: true,
+                        });
+                        if (ok) removeMutation.mutate(c.id);
+                      }}
+                      className="w-5 h-5 rounded-full inline-flex items-center justify-center text-text-muted hover:text-beroe-red hover:bg-beroe-red/10 disabled:opacity-40 disabled:cursor-wait"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </li>
             ))}

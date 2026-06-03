@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useNotify, usePrompt } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ALIGNMENT_LABELS,
@@ -256,6 +257,7 @@ function AlignmentDot({ status }: { status: CSGoalAlignment }) {
 
 function GoalEditor({ goal }: { goal: CSGoal }) {
   const qc = useQueryClient();
+  const promptDlg = usePrompt();
   const [form, setForm] = useState<CSGoal>(goal);
   const [savingError, setSavingError] = useState<string | null>(null);
   useEffect(() => {
@@ -527,12 +529,20 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
             <span className="text-xs text-text-muted">✓ All changes saved</span>
           )}
           <button
-            onClick={() => {
-              const reason = prompt(
-                "Reason for deleting this goal (5–600 chars, captured in the audit trail):",
-              );
-              if (!reason || reason.trim().length < 5) return;
-              del.mutate(reason.trim());
+            onClick={async () => {
+              const reason = await promptDlg({
+                title: "Delete this goal?",
+                body: "Provide a reason — it's captured in the audit trail. Minimum 5 characters.",
+                placeholder: "Reason for deletion…",
+                minLength: 5,
+                maxLength: 600,
+                multiline: true,
+                confirmLabel: "Delete",
+                tone: "warning",
+              });
+              if (reason && reason.trim().length >= 5) {
+                del.mutate(reason.trim());
+              }
             }}
             disabled={del.isPending}
             className="px-3 py-1.5 rounded-lg text-xs bg-white disabled:opacity-50"
@@ -1371,6 +1381,7 @@ function AddGoalModal({
   saving: boolean;
   error: string | null;
 }) {
+  const notify = useNotify();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<CSGoalCategory>("other");
   return (
@@ -1422,7 +1433,7 @@ function AddGoalModal({
           <button
             onClick={() => {
               if (!title.trim()) {
-                alert("Title is required.");
+                notify({ title: "Title is required", tone: "warning" });
                 return;
               }
               onCreate({ title: title.trim(), category });

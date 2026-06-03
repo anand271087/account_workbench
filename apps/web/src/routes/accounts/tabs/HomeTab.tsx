@@ -175,28 +175,14 @@ export default function HomeTab() {
           now starts with content (red flag banner, priority card, KPIs)
           rather than re-rendering chrome. */}
 
-      {/* 28-May — Escalation section (prototype line 4149). Banner when
-          open escalations exist + Escalate button + history list. */}
-      <EscalationSection
-        accountId={aid}
-        accountName={account.name}
-        canEdit={account.is_editable}
-      />
+      {/* 1-June bug — Notification cluster sits ABOVE the Escalate
+          button now. Three banners (red flag · overdue checkpoint ·
+          held-not-signed-off) render top-of-page so the CSM sees what
+          to act on BEFORE the escalation affordance below. Order
+          matches stakeholder request: notifications first, then
+          escalation, then churn risk + everything else. */}
 
-      {/* 28-May — Churn Risk banner (prototype line 4626-4644). Renders
-          only when computed risk is medium or high. Derives churn-score
-          inversely from appetite breakdown: lower appetite → higher
-          churn. Surfaces the 4 score components + recent trend. */}
-      <ChurnRiskBanner
-        healthScore={account.health_score}
-        appetite={apptQ}
-        overdueCp={overdueCp}
-      />
-
-      {/* 27-May Row 66 — Red Flag notification.
-          Renders ONLY when there are unresolved red flags on the
-          M23 Delivery & Renewal record. Red highlighted, top-of-page
-          so it's impossible to miss. */}
+      {/* 1-June — Red Flag notification (was below Escalate; promoted to top). */}
       {(() => {
         const openRedFlags = (dr?.red_flags ?? []).filter(
           (f) => !f.resolved_at,
@@ -250,6 +236,92 @@ export default function HomeTab() {
           onClose={() => setRedFlagEscalateOpen(false)}
         />
       )}
+
+      {/* 1-June — Overdue checkpoints notification. Renders when any
+          scheduled checkpoint is past-due and not signed off. */}
+      {overdueCp > 0 && (
+        <div className="bg-beroe-amber/10 border-2 border-beroe-amber/40 rounded-card p-3.5 flex items-start gap-3">
+          <span className="text-[22px] flex-shrink-0">⏰</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-bold text-beroe-amber mb-0.5">
+              {overdueCp === 1
+                ? "1 overdue checkpoint"
+                : `${overdueCp} overdue checkpoints`}
+            </div>
+            <p className="text-[12px] text-beroe-amber/90">
+              Scheduled checkpoint{overdueCp === 1 ? " is" : "s are"} past due
+              — reschedule or mark held to keep the cadence on track.
+            </p>
+            <div className="mt-1.5">
+              <Link
+                to={`/accounts/${aid}/success-management/checkpoints`}
+                className="text-[11px] text-beroe-amber font-bold hover:underline"
+              >
+                Review Checkpoints →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1-June — Held-but-not-signed-off notification. Held checkpoints
+          have happened but lack the client acknowledgement step — they
+          stall the cadence until signed. */}
+      {(() => {
+        const heldUnsigned = cps.filter((c) => c.status === "held");
+        if (heldUnsigned.length === 0) return null;
+        return (
+          <div className="bg-beroe-blue/10 border-2 border-beroe-blue/30 rounded-card p-3.5 flex items-start gap-3">
+            <span className="text-[22px] flex-shrink-0">✍️</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-bold text-beroe-blue mb-0.5">
+                {heldUnsigned.length === 1
+                  ? "1 checkpoint awaiting sign-off"
+                  : `${heldUnsigned.length} checkpoints awaiting sign-off`}
+              </div>
+              <p className="text-[12px] text-beroe-blue/90">
+                Held but not signed off —
+                {" "}
+                <b>
+                  {heldUnsigned
+                    .slice(0, 3)
+                    .map((c) => c.type)
+                    .join(", ")}
+                </b>
+                {heldUnsigned.length > 3 && ` + ${heldUnsigned.length - 3} more`}
+                . Capture client acknowledgement to complete the cycle.
+              </p>
+              <div className="mt-1.5">
+                <Link
+                  to={`/accounts/${aid}/success-management/checkpoints`}
+                  className="text-[11px] text-beroe-blue font-bold hover:underline"
+                >
+                  Capture sign-off →
+                </Link>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 1-June — Escalation section moved BELOW the notification
+          cluster (prototype line 4149). Banner when open escalations
+          exist + Escalate button + history list. */}
+      <EscalationSection
+        accountId={aid}
+        accountName={account.name}
+        canEdit={account.is_editable}
+      />
+
+      {/* 28-May — Churn Risk banner (prototype line 4626-4644). Renders
+          only when computed risk is medium or high. Derives churn-score
+          inversely from appetite breakdown: lower appetite → higher
+          churn. Surfaces the 4 score components + recent trend. */}
+      <ChurnRiskBanner
+        healthScore={account.health_score}
+        appetite={apptQ}
+        overdueCp={overdueCp}
+      />
 
       {/* Priority Action Card */}
       {activePriority && <PriorityCard priority={activePriority} aid={aid} />}
@@ -449,6 +521,136 @@ export default function HomeTab() {
           </Link>
         </Card>
       </div>
+
+      {/* 1-June bug 01-02 — Active Signals (restores the block removed
+          28-May per bug 28-04). Surfaces open soft signals so the CSM
+          sees the top problems without leaving Home. Critical/high
+          first, then by created_at desc. */}
+      {(() => {
+        const IMPACT_RANK: Record<string, number> = {
+          critical: 0,
+          high: 1,
+          medium: 2,
+          low: 3,
+        };
+        const TYPE_TONE: Record<
+          string,
+          { bg: string; text: string; border: string; icon: string }
+        > = {
+          critical: {
+            bg: "bg-beroe-red/15",
+            text: "text-beroe-red",
+            border: "border-beroe-red/30",
+            icon: "🚨",
+          },
+          risk: {
+            bg: "bg-beroe-amber/15",
+            text: "text-beroe-amber",
+            border: "border-beroe-amber/30",
+            icon: "⚠️",
+          },
+          neutral: {
+            bg: "bg-beroe-bg",
+            text: "text-text-secondary",
+            border: "border-beroe-card-border",
+            icon: "•",
+          },
+          positive: {
+            bg: "bg-beroe-green/15",
+            text: "text-beroe-green",
+            border: "border-beroe-green/30",
+            icon: "✓",
+          },
+          expansion: {
+            bg: "bg-beroe-blue/10",
+            text: "text-beroe-blue",
+            border: "border-beroe-blue/30",
+            icon: "↗",
+          },
+        };
+        const open = signals
+          .filter((s) => s.status === "active" && !s.hidden)
+          .sort((a, b) => {
+            const ra = IMPACT_RANK[a.impact] ?? 9;
+            const rb = IMPACT_RANK[b.impact] ?? 9;
+            if (ra !== rb) return ra - rb;
+            return (
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime()
+            );
+          })
+          .slice(0, 5);
+        return (
+          <Card>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="text-[13px] font-bold text-text-primary">
+                📡 Active Signals
+                {open.length > 0 && (
+                  <span className="ml-2 text-[11px] text-text-muted font-normal">
+                    {signals.filter((s) => s.status === "active" && !s.hidden)
+                      .length}{" "}
+                    open
+                  </span>
+                )}
+              </div>
+              <Link
+                to={`/accounts/${aid}/growth-pipeline/signals`}
+                className="text-[11px] text-beroe-blue font-semibold hover:underline"
+              >
+                View All →
+              </Link>
+            </div>
+            {open.length === 0 ? (
+              <div className="text-[12px] text-text-muted text-center py-4">
+                No active signals — clean slate.
+              </div>
+            ) : (
+              <ul className="space-y-1.5 text-[12px]">
+                {open.map((s) => {
+                  const tone = TYPE_TONE[s.type] ?? TYPE_TONE.neutral;
+                  return (
+                    <li
+                      key={s.id}
+                      className={cn(
+                        "flex items-start gap-2 px-2.5 py-2 rounded-md border",
+                        tone.bg,
+                        tone.border,
+                      )}
+                    >
+                      <span className="text-[14px] leading-tight flex-shrink-0">
+                        {tone.icon}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={cn(
+                              "text-[10px] font-bold uppercase tracking-wider",
+                              tone.text,
+                            )}
+                          >
+                            {s.type}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-beroe-card-border text-text-secondary font-semibold">
+                            {s.impact}
+                          </span>
+                          {s.source && (
+                            <span className="text-[10px] text-text-muted">
+                              · {s.source}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[12px] text-text-primary mt-0.5 truncate">
+                          {s.signal || s.description || "—"}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* Block 6 — Recent Activity (full-width, prototype line 4820) */}
       <Card>

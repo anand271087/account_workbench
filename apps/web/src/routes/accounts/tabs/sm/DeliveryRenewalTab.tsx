@@ -27,6 +27,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthProvider";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   FLAG_LABELS,
@@ -60,6 +61,7 @@ export default function DeliveryRenewalTab() {
   const { me } = useAuth();
   const isAdmin = !!me?.permissions?.is_global_admin;
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const queryKey = ["delivery-renewal", account.id];
 
   const { data, isLoading } = useQuery<DeliveryRenewal>({
@@ -410,13 +412,14 @@ export default function DeliveryRenewalTab() {
             </div>
             {isAdmin && (
               <button
-                onClick={() => {
-                  if (
-                    confirm(
-                      "Re-open the outcome? Editing will be unlocked again.",
-                    )
-                  )
-                    reopenMutation.mutate();
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Re-open the outcome?",
+                    body: "Editing will be unlocked again. The action is recorded in the audit log.",
+                    confirmLabel: "Re-open",
+                    tone: "warning",
+                  });
+                  if (ok) reopenMutation.mutate();
                 }}
                 disabled={reopenMutation.isPending}
                 className="text-[11px] px-2.5 py-1 rounded-md"
@@ -439,13 +442,14 @@ export default function DeliveryRenewalTab() {
               return (
                 <button
                   key={o}
-                  onClick={() => {
-                    if (
-                      confirm(
-                        `Set outcome to "${OUTCOME_LABELS[o]}"? This locks the document.`,
-                      )
-                    )
-                      setOutcomeMutation.mutate(o);
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: `Set outcome to "${OUTCOME_LABELS[o]}"?`,
+                      body: "This locks the document. Re-opening requires admin.",
+                      confirmLabel: "Set outcome",
+                      tone: "info",
+                    });
+                    if (ok) setOutcomeMutation.mutate(o);
                   }}
                   disabled={setOutcomeMutation.isPending}
                   className="text-[12px] px-3 py-1.5 rounded-md font-semibold hover:opacity-90"
@@ -1026,6 +1030,8 @@ function ReadinessGrid({
  *    GET /reports/vdd (HTML download). */
 function VddSummaryCard({ accountId }: { accountId: string }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
+  const notify = useNotify();
   type ValueRow = {
     initiative_name?: string;
     identified_musd?: number | null;
@@ -1135,7 +1141,11 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : "VDD download failed");
+      notify({
+        title: "VDD download failed",
+        body: e instanceof ApiError ? e.message : undefined,
+        tone: "error",
+      });
     }
   };
 
@@ -1171,12 +1181,14 @@ function VddSummaryCard({ accountId }: { accountId: string }) {
           {editable && (
             <button
               type="button"
-              onClick={() => {
-                if (
-                  confirm(
-                    "Re-draft this VDD from Success Contract + Metrics + Goals?\n\nUnsaved changes will be lost.",
-                  )
-                ) {
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Re-draft this VDD?",
+                  body: "Regenerated from Success Contract + Metrics + Goals. Unsaved changes will be lost.",
+                  confirmLabel: "Re-draft",
+                  tone: "warning",
+                });
+                if (ok) {
                   redraft.mutate();
                 }
               }}

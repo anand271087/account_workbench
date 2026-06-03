@@ -17,6 +17,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { useConfirm } from "@/components/DialogProvider";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeBriefSlice,
@@ -62,6 +63,7 @@ const ATTENDEE_COMPANY_OPTIONS: AttendeeCompany[] = ["client", "beroe"];
 
 export function MeetingBriefEditor({ accountId }: { accountId: string }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
 
   const { data, isLoading, isError } = useQuery<MeetingBrief>({
     queryKey: ["meeting-brief", accountId],
@@ -1292,14 +1294,14 @@ export function MeetingBriefEditor({ accountId }: { accountId: string }) {
             <span className="text-xs text-text-muted">✓ All changes saved</span>
           )}
           <button
-            onClick={() => {
-              if (
-                confirm(
-                  "Reset the brief? This deletes everything saved and starts over.",
-                )
-              ) {
-                resetMutation.mutate();
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Reset the brief?",
+                body: "This deletes everything saved and starts over from a blank brief.",
+                confirmLabel: "Reset",
+                danger: true,
+              });
+              if (ok) resetMutation.mutate();
             }}
             disabled={resetMutation.isPending}
             className="px-3 py-1.5 rounded-lg text-xs border border-beroe-red/30 text-beroe-red disabled:opacity-50 bg-white"

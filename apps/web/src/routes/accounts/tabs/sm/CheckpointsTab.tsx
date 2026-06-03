@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   daysUntil,
@@ -222,6 +223,7 @@ function CheckpointCard({
   accountId: string;
 }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const queryKey = ["checkpoints", accountId];
   const tone = STATUS_TONES[cp.status];
   const [editingNotes, setEditingNotes] = useState(false);
@@ -346,8 +348,14 @@ function CheckpointCard({
             )}
             {cp.status === "not_held" && (
               <button
-                onClick={() => {
-                  if (confirm(`Delete ${cp.type} checkpoint?`)) deleteMutation.mutate();
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: `Delete ${cp.type} checkpoint?`,
+                    body: "This is permanent. Signed-off checkpoints cannot be deleted; this one is still in not-held status.",
+                    confirmLabel: "Delete",
+                    danger: true,
+                  });
+                  if (ok) deleteMutation.mutate();
                 }}
                 className="text-[11px] px-2 py-1 rounded-md"
                 style={{

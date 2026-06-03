@@ -5,6 +5,8 @@ import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { emailError } from "@/lib/validators";
+import { useConfirm } from "@/components/DialogProvider";
 import {
   ROLE_LABELS,
   type RoleKey,
@@ -25,6 +27,7 @@ const ALL_ROLES: RoleKey[] = [
 export default function UsersPage() {
   const { me } = useAuth();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [roleFilter, setRoleFilter] = useState<string>("");
   const [includeDeactivated, setIncludeDeactivated] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -166,9 +169,14 @@ export default function UsersPage() {
                           )}
                           {!isSelf && u.status !== "deactivated" && (
                             <button
-                              onClick={() => {
-                                if (confirm(`Deactivate ${u.full_name || u.email}? They will lose access immediately.`))
-                                  deactivateMutation.mutate(u.id);
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: `Deactivate ${u.full_name || u.email}?`,
+                                  body: "They will lose access to the workbench immediately.",
+                                  confirmLabel: "Deactivate",
+                                  danger: true,
+                                });
+                                if (ok) deactivateMutation.mutate(u.id);
                               }}
                               className="text-xs text-beroe-red hover:underline font-semibold"
                             >
@@ -271,15 +279,24 @@ function UserModal({
         </label>
         <input
           type="email"
+          autoComplete="email"
+          inputMode="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={mode === "edit"}
           className={cn(
-            "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue mb-3",
+            "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
             mode === "edit" && "bg-beroe-bg text-text-secondary",
+            mode === "invite" && emailError(email) && "border-beroe-red",
           )}
           placeholder="alice@beroe-inc.com"
         />
+        {mode === "invite" && emailError(email) && (
+          <div className="mt-1 mb-3 text-[10px] font-semibold text-beroe-red">
+            {emailError(email)}
+          </div>
+        )}
+        {!(mode === "invite" && emailError(email)) && <div className="mb-3" />}
 
         <label className="block text-[11px] uppercase tracking-wider text-text-muted font-bold mb-1">
           Full name *
@@ -321,13 +338,27 @@ function UserModal({
           >
             Cancel
           </button>
-          <button
-            onClick={submit}
-            disabled={isPending}
-            className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
-          >
-            {isPending ? "Saving…" : mode === "invite" ? "Invite" : "Save"}
-          </button>
+          {(() => {
+            const ve = mode === "invite" ? emailError(email) : null;
+            const nameInvalid = fullName.trim().length < 1;
+            const disabled = isPending || !!ve || nameInvalid;
+            return (
+              <button
+                onClick={submit}
+                disabled={disabled}
+                title={ve || (nameInvalid ? "Full name is required" : undefined)}
+                className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
+              >
+                {isPending
+                  ? "Saving…"
+                  : ve
+                    ? "Fix email to invite"
+                    : mode === "invite"
+                      ? "Invite"
+                      : "Save"}
+              </button>
+            );
+          })()}
         </div>
       </div>
     </div>

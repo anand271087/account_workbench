@@ -16,6 +16,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { useNotify, usePrompt } from "@/components/DialogProvider";
 // 29-May bug 29-16 — Sales Handoff Documents upload card.
 import { KindUploadCard } from "@/components/KindUploadCard";
 // Auto-populate Client Signed from handoff doc (KindUploadCard saves a
@@ -460,7 +461,7 @@ export default function SalesHandoffTab() {
             kind="contract"
             title="Sales handoff documents"
             description="Upload the signed handoff doc, ROI deck, commercial brief, or any other artefact Sales is passing to CS."
-            emptyHint="No handoff documents yet. Drag a .docx, .pdf or .pptx onto the card above."
+            emptyHint="No handoff documents yet. Drag a file onto the card above (hover the ? for supported formats)."
           />
         </div>
 
@@ -644,6 +645,8 @@ function SigningGateCard({
   handoffNote?: string | null;
   onDismissHandoffNote?: () => void;
 }) {
+  const notify = useNotify();
+  const promptDlg = usePrompt();
   const isSigned = gate.gate_signed;
   const inEdit = !isSigned || gate.gate_unlocked;
   const renewalAfterBvd =
@@ -854,15 +857,15 @@ function SigningGateCard({
           <button
             onClick={() => {
               if (!signForm.gate_signed_date) {
-                alert("Pick a signed date.");
+                notify({ title: "Pick a signed date", tone: "warning" });
                 return;
               }
               if (!signForm.gate_contract_acv) {
-                alert("Enter the contract ACV.");
+                notify({ title: "Enter the contract ACV", tone: "warning" });
                 return;
               }
               if (!signForm.gate_contract_term) {
-                alert("Pick a term.");
+                notify({ title: "Pick a term", tone: "warning" });
                 return;
               }
               sign(signForm);
@@ -973,15 +976,20 @@ function SigningGateCard({
           enforces the actual permission. */}
       {isSigned && !gate.gate_unlocked && (
         <button
-          onClick={() => {
+          onClick={async () => {
             if (!gate.can_unlock) return;
-            const reason = prompt(
-              "Reason for unlocking the signing gate (min 10 chars):",
-            );
+            const reason = await promptDlg({
+              title: "Unlock the signing gate?",
+              body: "Provide a reason — it's recorded in the audit log. Minimum 10 characters.",
+              placeholder: "e.g. Customer requested term extension; re-signing on Friday.",
+              minLength: 10,
+              maxLength: 600,
+              multiline: true,
+              confirmLabel: "Unlock",
+              tone: "warning",
+            });
             if (reason && reason.trim().length >= 10) {
               unlock(reason.trim());
-            } else if (reason !== null) {
-              alert("Reason must be at least 10 characters.");
             }
           }}
           disabled={unlocking || !gate.can_unlock}
@@ -1265,17 +1273,37 @@ function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
         : s === "red"
           ? "bg-beroe-red/100"
           : "bg-text-subtle";
+  // 2-June bug — Success Metrics box restyled per stakeholder spec:
+  //   * Green-tinted card (bg-beroe-green/10 + green border)
+  //   * Metrics rendered as a single PARAGRAPH (not bullet list)
+  //   * "View in Success Management →" link sits OUTSIDE the box below.
+  const sentence = (m: Met) => {
+    const cur = m.current_value?.trim() || "not yet captured";
+    const tgt = m.target_value?.trim();
+    const verb =
+      m.status === "green"
+        ? "on track"
+        : m.status === "amber"
+          ? "tracking close"
+          : m.status === "red"
+            ? "off target"
+            : "pending baseline";
+    return tgt
+      ? `${m.name} — target ${tgt}, currently ${cur} (${verb})`
+      : `${m.name} — ${cur} (${verb})`;
+  };
   return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+    <>
+    <div className="bg-beroe-green/10 border border-beroe-green/40 rounded-card p-4">
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div>
-          <h3 className="text-sm font-bold text-text-primary">Success Metrics</h3>
-          <p className="text-[11px] text-text-muted">
+          <h3 className="text-sm font-bold text-beroe-green">Success Metrics</h3>
+          <p className="text-[11px] text-text-secondary">
             Agreed at signing — tracked live. Edits happen on the Value Tracking tab.
           </p>
         </div>
         <div className="flex items-center gap-2 text-[11px]">
-          <span className="px-1.5 py-0.5 rounded bg-beroe-green/15 text-beroe-green font-semibold">
+          <span className="px-1.5 py-0.5 rounded bg-beroe-green/20 text-beroe-green font-semibold">
             ✓ {counts.green}
           </span>
           <span className="px-1.5 py-0.5 rounded bg-beroe-amber/15 text-beroe-amber font-semibold">
@@ -1285,57 +1313,59 @@ function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
             ✕ {counts.red}
           </span>
           {counts.grey > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-beroe-bg text-text-secondary font-semibold">
+            <span className="px-1.5 py-0.5 rounded bg-white/70 text-text-secondary font-semibold">
               ○ {counts.grey}
             </span>
           )}
         </div>
       </div>
       {isLoading ? (
-        <div className="text-xs text-text-muted italic">Loading metrics…</div>
+        <div className="text-xs text-text-secondary italic">Loading metrics…</div>
       ) : items.length === 0 ? (
-        <div className="text-xs text-text-muted italic">
+        <div className="text-xs text-text-secondary italic">
           No metrics captured yet. Define them on the Value Tracking tab so the
           signing snapshot has measurement teeth.
         </div>
       ) : (
-        <ul className="space-y-1.5">
-          {items.slice(0, 6).map((m) => (
-            <li
-              key={m.id}
-              className="flex items-center gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
-            >
-              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", dot(m.status))} />
-              <span className="font-semibold text-text-primary flex-1 truncate">
-                {m.name}
-              </span>
-              <span className="text-[11px] text-text-muted">
-                {m.current_value ?? "—"}
-                {m.target_value && (
-                  <span className="text-text-muted/70"> / {m.target_value}</span>
+        <p className="text-[12px] text-text-primary leading-relaxed">
+          {items.slice(0, 6).map((m, i) => (
+            <span key={m.id}>
+              <span
+                className={cn(
+                  "inline-block w-2 h-2 rounded-full align-middle mr-1.5",
+                  dot(m.status),
                 )}
-              </span>
-            </li>
+                aria-hidden
+              />
+              <b className="font-semibold">{sentence(m).split(" — ")[0]}</b>
+              {" — "}
+              {sentence(m).split(" — ").slice(1).join(" — ")}
+              {i < Math.min(items.length, 6) - 1 ? ". " : "."}
+              {i < Math.min(items.length, 6) - 1 && " "}
+            </span>
           ))}
           {items.length > 6 && (
-            <li className="text-[10px] text-text-muted italic pt-1">
-              + {items.length - 6} more on Value Tracking
-            </li>
+            <span className="text-[11px] text-text-secondary italic">
+              {" "}+ {items.length - 6} more on Value Tracking.
+            </span>
           )}
-        </ul>
+        </p>
       )}
-      <div className="mt-3">
-        <button
-          type="button"
-          onClick={() =>
-            navigate(`/accounts/${accountId}/success-management/value-tracking`)
-          }
-          className="text-[11px] text-beroe-blue font-semibold hover:underline"
-        >
-          → Open Value Tracking to add or log values
-        </button>
-      </div>
     </div>
+    {/* 2-June bug — "View in Success Management" link moved OUT of the
+        green Success Metrics box and below it per stakeholder spec. */}
+    <div className="mt-2 px-1">
+      <button
+        type="button"
+        onClick={() =>
+          navigate(`/accounts/${accountId}/success-management/value-tracking`)
+        }
+        className="text-[11px] text-beroe-blue font-semibold hover:underline"
+      >
+        View in Success Management →
+      </button>
+    </div>
+    </>
   );
 }
 
@@ -1351,6 +1381,7 @@ function ContractDocSection({
   onLatest: (filename: string | null) => void;
 }) {
   const qc = useQueryClient();
+  const notify = useNotify();
   const queryKey = ["documents", accountId, "contract"];
   const { data, isLoading } = useQuery<{
     items: ContractDoc[];
@@ -1452,9 +1483,11 @@ function ContractDocSection({
                           );
                           window.open(r.url, "_blank", "noopener");
                         } catch (e) {
-                          alert(
-                            e instanceof ApiError ? e.message : "Download failed",
-                          );
+                          notify({
+                            title: "Download failed",
+                            body: e instanceof ApiError ? e.message : undefined,
+                            tone: "error",
+                          });
                         }
                       }}
                       className="w-full text-left px-3 py-2 hover:bg-beroe-bg flex items-center gap-2 text-[12px]"

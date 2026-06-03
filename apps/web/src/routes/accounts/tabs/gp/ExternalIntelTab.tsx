@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   CATEGORY_COLOR,
@@ -221,6 +222,8 @@ function IntelCard({
   accountId: string;
 }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
+  const notify = useNotify();
   const [open, setOpen] = useState(false);
   const [emailToast, setEmailToast] = useState<string | null>(null);
   const col = CATEGORY_COLOR[item.category];
@@ -242,7 +245,8 @@ function IntelCard({
       qc.invalidateQueries({ queryKey: ["signals", accountId] });
       qc.invalidateQueries({ queryKey: ["appetite", accountId] });
     },
-    onError: (e: ApiError) => alert(e.message),
+    onError: (e: ApiError) =>
+      notify({ title: "Action failed", body: e.message, tone: "error" }),
   });
 
   const slug = (s: string) =>
@@ -485,8 +489,14 @@ function IntelCard({
             )}
             {editable && (
               <button
-                onClick={() => {
-                  if (confirm("Hide this intel item?")) hide.mutate();
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Hide this intel item?",
+                    body: "It won't appear in the feed. Admin can restore from the DB.",
+                    confirmLabel: "Hide",
+                    tone: "warning",
+                  });
+                  if (ok) hide.mutate();
                 }}
                 className="text-[10px] px-2 py-0.5 rounded border border-beroe-card-border text-text-muted hover:bg-beroe-bg/60"
               >

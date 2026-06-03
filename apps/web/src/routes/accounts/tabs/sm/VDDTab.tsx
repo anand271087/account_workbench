@@ -17,6 +17,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthProvider";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   attributionTotals,
@@ -38,6 +39,7 @@ export default function VDDTab() {
   const { me } = useAuth();
   const isAdmin = !!me?.permissions?.is_global_admin;
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const queryKey = ["vdd", account.id];
 
   const { data, isLoading } = useQuery<Vdd>({
@@ -152,14 +154,14 @@ export default function VDDTab() {
             {/* R24 — Draft-with-AI + Download-PPT shortcuts. */}
             {form.is_editable && !locked && (
               <button
-                onClick={() => {
-                  if (
-                    confirm(
-                      "Re-draft this VDD from Success Contract + Metrics + Goals?\n\nUnsaved changes will be lost.",
-                    )
-                  ) {
-                    redraftMutation.mutate();
-                  }
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Re-draft this VDD?",
+                    body: "The VDD will be regenerated from Success Contract + Metrics + Goals. Unsaved changes will be lost.",
+                    confirmLabel: "Re-draft",
+                    tone: "warning",
+                  });
+                  if (ok) redraftMutation.mutate();
                 }}
                 disabled={redraftMutation.isPending}
                 className="text-[11px] px-2 py-1 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/5 disabled:opacity-50"

@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
 import { VpdMetricsExtractionReview } from "@/components/VpdMetricsExtractionReview";
 import {
@@ -29,6 +30,8 @@ const ENGAGEMENT_TYPE_OPTIONS: EngagementType[] = [
 export default function SolutioningTab() {
   const account = useAccountFromLayout();
   const qc = useQueryClient();
+  const confirm = useConfirm();
+  const notify = useNotify();
 
   const { data, isLoading, isError } = useQuery<Solutioning>({
     queryKey: ["solutioning", account.id],
@@ -381,14 +384,14 @@ export default function SolutioningTab() {
               </div>
               {roleCanWrite && (
                 <button
-                  onClick={() => {
-                    if (
-                      confirm(
-                        "Unlock solutioning? This re-opens the value definition for edits and the activity log will record it.",
-                      )
-                    ) {
-                      unlockMutation.mutate();
-                    }
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: "Unlock Solutioning?",
+                      body: "Re-opens the value definition for edits. The activity log will record the unlock.",
+                      confirmLabel: "Unlock",
+                      tone: "warning",
+                    });
+                    if (ok) unlockMutation.mutate();
                   }}
                   disabled={unlockMutation.isPending}
                   className="w-full px-3 py-1.5 rounded-lg border border-beroe-amber/50 bg-beroe-amber/15 text-beroe-amber text-xs font-semibold disabled:opacity-50"
@@ -405,25 +408,33 @@ export default function SolutioningTab() {
               </div>
               {roleCanWrite && (
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (dirty) {
-                      alert("Save your edits first — lock works against the saved value definition.");
+                      notify({
+                        title: "Save your edits first",
+                        body: "Lock works against the saved value definition.",
+                        tone: "warning",
+                      });
                       return;
                     }
                     if (
                       !form.value_definition ||
                       !form.value_definition.trim()
                     ) {
-                      alert("Fill in the value definition before locking.");
+                      notify({
+                        title: "Value definition required",
+                        body: "Fill in the value definition before locking.",
+                        tone: "warning",
+                      });
                       return;
                     }
-                    if (
-                      confirm(
-                        "Lock the value definition and pass to Sales Hand-off? Unlock will be required for further edits.",
-                      )
-                    ) {
-                      lockMutation.mutate();
-                    }
+                    const ok = await confirm({
+                      title: "Lock & pass to Sales Hand-off?",
+                      body: "The value definition will be locked and passed to Sales Hand-off. Unlocking is required for further edits.",
+                      confirmLabel: "Lock & pass",
+                      tone: "info",
+                    });
+                    if (ok) lockMutation.mutate();
                   }}
                   disabled={lockMutation.isPending || dirty}
                   className="w-full px-3 py-1.5 rounded-lg bg-beroe-blue text-white text-xs font-semibold disabled:opacity-50"

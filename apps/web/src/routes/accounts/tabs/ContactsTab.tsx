@@ -4,6 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { useHasRole } from "@/components/AuthProvider";
 import { cn } from "@/lib/utils";
+import {
+  cleanPhoneInput,
+  emailError,
+  nameError,
+  phoneError,
+} from "@/lib/validators";
+import { useConfirm } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   type Contact,
@@ -32,6 +39,7 @@ export default function ContactsTab() {
   const account = useAccountFromLayout();
   const isAdmin = useHasRole("admin");
   const qc = useQueryClient();
+  const confirm = useConfirm();
 
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
@@ -231,10 +239,14 @@ export default function ContactsTab() {
                             Edit
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Soft-delete ${c.name}? Admins can restore within 30 days.`)) {
-                                deleteMutation.mutate(c.id);
-                              }
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: `Delete ${c.name}?`,
+                                body: "Admins can restore within 30 days.",
+                                confirmLabel: "Delete",
+                                danger: true,
+                              });
+                              if (ok) deleteMutation.mutate(c.id);
                             }}
                             className="text-xs text-beroe-red hover:underline font-semibold"
                           >
@@ -419,12 +431,15 @@ function ContactFormModal({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <ModalField label="Name *" full>
+          <ModalField label="Name *" full error={nameError(form.name)}>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className={modalInputCls}
+              className={cn(
+                modalInputCls,
+                nameError(form.name) && form.name.length > 0 && "border-beroe-red",
+              )}
               autoFocus
               minLength={3}
             />
@@ -437,20 +452,34 @@ function ContactFormModal({
               className={modalInputCls}
             />
           </ModalField>
-          <ModalField label="Email">
+          <ModalField label="Email" error={emailError(form.email)}>
             <input
               type="email"
+              autoComplete="email"
+              inputMode="email"
               value={form.email ?? ""}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className={modalInputCls}
+              className={cn(
+                modalInputCls,
+                emailError(form.email) && "border-beroe-red",
+              )}
+              placeholder="name@company.com"
             />
           </ModalField>
-          <ModalField label="Phone">
+          <ModalField label="Phone" error={phoneError(form.phone)}>
             <input
               type="tel"
+              autoComplete="tel"
+              inputMode="tel"
               value={form.phone ?? ""}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className={modalInputCls}
+              onChange={(e) =>
+                setForm({ ...form, phone: cleanPhoneInput(e.target.value) })
+              }
+              className={cn(
+                modalInputCls,
+                phoneError(form.phone) && "border-beroe-red",
+              )}
+              placeholder="+1 555 123 4567"
             />
           </ModalField>
           <ModalField label="Function">
@@ -537,14 +566,31 @@ function ContactFormModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isPending || !!dup}
-            title={dup ? `Duplicate: "${dup.name}" already exists` : undefined}
-            className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
-          >
-            {isPending ? "Saving…" : dup ? "Duplicate detected" : "Save"}
-          </button>
+          {(() => {
+            const ne = nameError(form.name);
+            const ee = emailError(form.email);
+            const pe = phoneError(form.phone);
+            const validationError = ne || ee || pe;
+            return (
+              <button
+                onClick={handleSubmit}
+                disabled={isPending || !!dup || !!validationError}
+                title={
+                  validationError ||
+                  (dup ? `Duplicate: "${dup.name}" already exists` : undefined)
+                }
+                className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
+              >
+                {isPending
+                  ? "Saving…"
+                  : dup
+                    ? "Duplicate detected"
+                    : validationError
+                      ? "Fix errors to save"
+                      : "Save"}
+              </button>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -555,10 +601,12 @@ function ModalField({
   label,
   full,
   children,
+  error,
 }: {
   label: string;
   full?: boolean;
   children: React.ReactNode;
+  error?: string | null;
 }) {
   return (
     <div className={full ? "col-span-2" : ""}>
@@ -566,6 +614,11 @@ function ModalField({
         {label}
       </label>
       {children}
+      {error && (
+        <div className="mt-1 text-[10px] text-beroe-red font-semibold">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

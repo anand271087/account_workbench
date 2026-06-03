@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthProvider";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   ACT_CONF,
@@ -130,6 +131,7 @@ function SignalRow({
   onChange: () => void;
   onAppetiteChange: () => void;
 }) {
+  const confirm = useConfirm();
   const conf = SIG_CONF[sig.type];
   const [showResolveModal, setShowResolveModal] = useState(false);
   const hide = useMutation({
@@ -224,8 +226,14 @@ function SignalRow({
               </button>
             )}
             <button
-              onClick={() => {
-                if (confirm("Hide this signal? It can be brought back by Admin from the DB.")) hide.mutate();
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Hide this signal?",
+                  body: "It can be brought back by Admin from the DB.",
+                  confirmLabel: "Hide",
+                  tone: "warning",
+                });
+                if (ok) hide.mutate();
               }}
               className="text-[10px] px-1.5 py-0.5 rounded border border-beroe-card-border text-text-muted hover:bg-beroe-bg/60"
             >
@@ -233,9 +241,14 @@ function SignalRow({
             </button>
             {isAdmin && (
               <button
-                onClick={() => {
-                  if (confirm(`Hard-delete "${sig.signal}"? This is irreversible.`))
-                    del.mutate();
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: `Delete "${sig.signal}"?`,
+                    body: "This is irreversible.",
+                    confirmLabel: "Delete",
+                    danger: true,
+                  });
+                  if (ok) del.mutate();
                 }}
                 className="text-[10px] px-1.5 py-0.5 rounded border border-beroe-red/30 text-beroe-red hover:bg-beroe-red/10"
               >
@@ -509,6 +522,7 @@ function ActivityRow({
   editable: boolean;
   onChange: () => void;
 }) {
+  const confirm = useConfirm();
   const conf = ACT_CONF[act.type];
   // 29-May bug 29-50 — Edit affordance + modal pre-filled from this row.
   const [showEdit, setShowEdit] = useState(false);
@@ -550,8 +564,14 @@ function ActivityRow({
             ✎ Edit
           </button>
           <button
-            onClick={() => {
-              if (confirm(`Delete activity "${act.title}"?`)) del.mutate();
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Delete activity "${act.title}"?`,
+                body: "Activity log entries are soft-deleted; admin can restore from the DB.",
+                confirmLabel: "Delete",
+                danger: true,
+              });
+              if (ok) del.mutate();
             }}
             className="text-[10px] text-text-muted hover:text-beroe-red px-1"
             title="Delete activity"

@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { cleanPhoneInput, emailError, phoneError } from "@/lib/validators";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useAccountFromLayout } from "../AccountProfileLayout";
@@ -86,6 +87,20 @@ export default function CSOnboardingTab() {
     onError: (e: ApiError) => setSavingError(e.message),
   });
 
+  // Auto-default entry type the first time the CSM lands on this tab:
+  //   gate_signed === true  → 'A' (clean handover from AWB Sales flow)
+  //   gate_signed === false → 'B' (CSM picks up before / without signing)
+  // One-shot — fires only when the server has cs_entry_type == null AND the
+  // user is allowed to write. After the PATCH lands the server returns the
+  // chosen value, so this effect never fires again on the same account.
+  useEffect(() => {
+    if (!data || data.cs_entry_type || !data.is_editable) return;
+    if (instant.isPending) return;
+    const next: CSEntryType = account.gate_signed ? "A" : "B";
+    instant.mutate({ cs_entry_type: next });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, account.gate_signed]);
+
   const saveDirty = () => {
     if (form && data) save.mutate(diff(form, data));
   };
@@ -141,14 +156,13 @@ export default function CSOnboardingTab() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
           <EntryButton
             label="✅ Entry A — New Account (Clean Handover)"
-            desc="Sales passed a complete handover package to CS"
-            active={form.cs_entry_type === "A"}
-            disabled={!editable || !account.gate_signed}
-            disabledHint={
-              !account.gate_signed
-                ? "Account isn't signed yet — Entry A activates after signing."
-                : undefined
+            desc={
+              account.gate_signed
+                ? "Sales passed a complete handover package to CS"
+                : "Default for new accounts — handover checklist activates once Sales signs."
             }
+            active={form.cs_entry_type === "A"}
+            disabled={!editable}
             col="#4A00F8"
             activeBg="#f3f0ff"
             onClick={() => setEntry("A")}
@@ -688,22 +702,45 @@ function StakeholderCard({
       />
       <input
         type="email"
+        autoComplete="email"
+        inputMode="email"
         maxLength={320}
         value={value.email ?? ""}
-        placeholder="Email"
+        placeholder="name@company.com"
         onChange={(e) => onChange({ email: e.target.value || null })}
         disabled={!editable}
-        className={cn(inputCls(editable), "mb-1.5")}
+        className={cn(
+          inputCls(editable),
+          "mb-1.5",
+          emailError(value.email) && "border-beroe-red",
+        )}
       />
+      {emailError(value.email) && (
+        <div className="text-[10px] font-semibold text-beroe-red mb-1.5">
+          {emailError(value.email)}
+        </div>
+      )}
       <input
         type="tel"
+        autoComplete="tel"
+        inputMode="tel"
         maxLength={40}
         value={value.phone ?? ""}
-        placeholder="Phone"
-        onChange={(e) => onChange({ phone: e.target.value || null })}
+        placeholder="+1 555 123 4567"
+        onChange={(e) =>
+          onChange({ phone: cleanPhoneInput(e.target.value) || null })
+        }
         disabled={!editable}
-        className={inputCls(editable)}
+        className={cn(
+          inputCls(editable),
+          phoneError(value.phone) && "border-beroe-red",
+        )}
       />
+      {phoneError(value.phone) && (
+        <div className="text-[10px] font-semibold text-beroe-red mt-1">
+          {phoneError(value.phone)}
+        </div>
+      )}
       {duplicateOf && (
         <div className="mt-2 text-[10px] font-semibold flex items-start gap-1" style={{ color: "#CF4548" }}>
           <span>⚠</span>
