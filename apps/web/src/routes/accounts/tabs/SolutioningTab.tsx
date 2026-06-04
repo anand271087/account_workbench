@@ -15,17 +15,21 @@ import {
 import type { VpdMetricsExtractionResult } from "@/types/vpd_metrics_extraction";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
-  ENGAGEMENT_TYPE_LABELS,
-  type EngagementType,
   type Solutioning,
   type SolutioningLockResponse,
   type SolutioningUpdate,
+  TRIAL_CLIENT_TYPE_OPTIONS,
+  TRIAL_TYPE_OPTIONS,
+  TRIAL_PAYMENT_TYPE_OPTIONS,
+  TRIAL_MODULES,
+  type TrialClientType,
+  type TrialType,
+  type TrialPaymentType,
 } from "@/types/solutioning";
 import type { ExtractedVpd } from "@/types/vpd_extraction";
 
-const ENGAGEMENT_TYPE_OPTIONS: EngagementType[] = [
-  "one_time", "retainer", "subscription", "pilot", "other",
-];
+// 03-Jun bug — Engagement Shape (Engagement Type + Duration) removed in
+// favour of the richer Trial Summary section below.
 
 export default function SolutioningTab() {
   const account = useAccountFromLayout();
@@ -233,44 +237,11 @@ export default function SolutioningTab() {
             inline by the VPD description text + the per-doc badge
             inside KindUploadCard; the standalone callout is gone. */}
 
-        {/* 27-May Row 82 — section sequence rewritten to match the
-            stakeholder's exact order:
-              1. Engagement Shape (Type + Duration)
-              2. Proposed Solution
-              3. ⭐ Value Definition (starred — primary deliverable)
-              4. Value Themes
-            Handed-off-to-Sales date already lives at the bottom of
-            the right-column Sales Hand-off card with the lock action. */}
-        <Section title="Engagement shape">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Engagement type">
-              <select
-                value={form.engagement_type ?? ""}
-                onChange={(e) => setForm({ ...form, engagement_type: (e.target.value || null) as EngagementType | null })}
-                disabled={!form.is_editable}
-                className={inputCls(form.is_editable)}
-              >
-                <option value="">— Select —</option>
-                {ENGAGEMENT_TYPE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>{ENGAGEMENT_TYPE_LABELS[t]}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Duration (weeks)">
-              <input
-                type="number"
-                min={1}
-                max={520}
-                value={form.engagement_duration_months ?? ""}
-                onChange={(e) =>
-                  setForm({ ...form, engagement_duration_months: e.target.value === "" ? null : Number(e.target.value) })
-                }
-                disabled={!form.is_editable}
-                className={inputCls(form.is_editable)}
-              />
-            </Field>
-          </div>
-        </Section>
+        {/* 03-Jun bug — "Engagement shape" renamed to "Trial Summary" with
+            a richer field set per stakeholder spec. Captures client type,
+            trial vs pilot, payment terms, trial date, per-module config
+            tested, outcome, and overall feedback. */}
+        <TrialSummarySection form={form} setForm={setForm} />
 
         <Section
           title="Proposed solution"
@@ -516,6 +487,247 @@ export default function SolutioningTab() {
           onStay={guard.stay}
         />
       )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 03-Jun bug — Trial Summary (replaces Engagement Shape).
+// Fields: client type / trial-or-pilot / payment type / trial date /
+// modules tested (checklist with per-module mini-config) / outcome /
+// feedback. Saves through the existing /solutioning PATCH endpoint.
+// ─────────────────────────────────────────────────────────────
+function TrialSummarySection({
+  form,
+  setForm,
+}: {
+  form: Solutioning;
+  setForm: (next: Solutioning) => void;
+}) {
+  const editable = form.is_editable;
+  const modules = (form.trial_modules_tested ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const toggleModule = (m: string) => {
+    const next = { ...modules };
+    if (m in next) delete next[m];
+    else next[m] = {};
+    setForm({ ...form, trial_modules_tested: next });
+  };
+  const setModuleField = (m: string, key: string, val: unknown) => {
+    const next = { ...modules, [m]: { ...(modules[m] ?? {}), [key]: val } };
+    setForm({ ...form, trial_modules_tested: next });
+  };
+  return (
+    <Section
+      title="Trial Summary"
+      subtitle="Captures the trial / pilot the customer ran before signing. Module checklist drives the per-module config audit."
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Client Type">
+          <select
+            value={form.trial_client_type ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                trial_client_type: (e.target.value || null) as TrialClientType | null,
+              })
+            }
+            disabled={!editable}
+            className={inputCls(editable)}
+          >
+            <option value="">— Select —</option>
+            {TRIAL_CLIENT_TYPE_OPTIONS.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </Field>
+        <Field label="Trial or Pilot">
+          <select
+            value={form.trial_type ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                trial_type: (e.target.value || null) as TrialType | null,
+              })
+            }
+            disabled={!editable}
+            className={inputCls(editable)}
+          >
+            <option value="">— Select —</option>
+            {TRIAL_TYPE_OPTIONS.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </Field>
+        <Field label="Payment Type">
+          <select
+            value={form.trial_payment_type ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                trial_payment_type: (e.target.value || null) as TrialPaymentType | null,
+              })
+            }
+            disabled={!editable}
+            className={inputCls(editable)}
+          >
+            <option value="">— Select —</option>
+            {TRIAL_PAYMENT_TYPE_OPTIONS.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </Field>
+        <Field label="Trial Date">
+          <input
+            type="date"
+            value={form.trial_date ?? ""}
+            onChange={(e) =>
+              setForm({ ...form, trial_date: e.target.value || null })
+            }
+            disabled={!editable}
+            className={inputCls(editable)}
+          />
+        </Field>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-[10px] uppercase tracking-wider font-semibold text-text-muted mb-1.5">
+          What was Tested?
+        </div>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {TRIAL_MODULES.map((m) => {
+            const sel = m in modules;
+            return (
+              <button
+                key={m}
+                type="button"
+                disabled={!editable}
+                onClick={() => toggleModule(m)}
+                className={cn(
+                  "px-3 py-1 rounded-full border-[1.5px] text-[11.5px] font-medium transition disabled:opacity-60 disabled:cursor-not-allowed",
+                  sel
+                    ? "bg-[#ede6ff] border-beroe-blue text-beroe-blue font-bold"
+                    : "bg-white border-beroe-card-border text-text-secondary hover:border-beroe-blue/40 hover:text-beroe-blue",
+                )}
+              >
+                {sel ? "✓ " : ""}{m}
+              </button>
+            );
+          })}
+        </div>
+        {Object.keys(modules).length > 0 && (
+          <div className="space-y-1.5">
+            {Object.keys(modules).map((m) => (
+              <TrialModuleRow
+                key={m}
+                module={m}
+                config={modules[m]}
+                editable={editable}
+                onSet={(k, v) => setModuleField(m, k, v)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Field label="What happened in the trial?">
+        <textarea
+          rows={3}
+          value={form.trial_outcome ?? ""}
+          onChange={(e) => setForm({ ...form, trial_outcome: e.target.value || null })}
+          disabled={!editable}
+          className={inputCls(editable)}
+          placeholder="Short summary of how the trial went — usage, outcomes, blockers."
+        />
+      </Field>
+      <Field label="Overall Feedback">
+        <textarea
+          rows={3}
+          value={form.trial_feedback ?? ""}
+          onChange={(e) => setForm({ ...form, trial_feedback: e.target.value || null })}
+          disabled={!editable}
+          className={inputCls(editable)}
+          placeholder="Client's overall reaction + signal on willingness to sign."
+        />
+      </Field>
+    </Section>
+  );
+}
+
+function TrialModuleRow({
+  module: m,
+  config,
+  editable,
+  onSet,
+}: {
+  module: string;
+  config: Record<string, unknown>;
+  editable: boolean;
+  onSet: (key: string, value: unknown) => void;
+}) {
+  // Per-module mini-config — the bug spec calls out a few specific
+  // field shapes (LiVE.Ai: users + Category Watch; Custom Credits:
+  // FTEs / Hours / Instances / Infinity Slots; etc.). Render a small
+  // inline grid of typed inputs; falls back to a single "Details" text
+  // field for modules without a bespoke shape.
+  const minis: Array<{ key: string; label: string; placeholder?: string }> = (() => {
+    switch (m) {
+      case "LiVE.Ai":
+        return [
+          { key: "users", label: "# users", placeholder: "e.g. 95" },
+          { key: "category_watch", label: "Category Watch (Ent / Non-Ent · # cats)", placeholder: "Ent · 30" },
+        ];
+      case "Supplier Watch":
+        return [
+          { key: "suppliers", label: "# suppliers", placeholder: "22" },
+          { key: "datapoints", label: "Datapoints", placeholder: "D&B, AME, Sanctions…" },
+        ];
+      case "MMD":
+        return [{ key: "categories", label: "# categories", placeholder: "12" }];
+      case "Custom Credits":
+        return [
+          { key: "ftes", label: "FTEs", placeholder: "1" },
+          { key: "hours", label: "Hours", placeholder: "400" },
+          { key: "instances", label: "Instances", placeholder: "15" },
+          { key: "infinity_slots", label: "Infinity Slots", placeholder: "3" },
+          { key: "slot_categories", label: "Slot categories", placeholder: "Cocoa, Sugar" },
+        ];
+      case "Commodity Forecasting":
+        return [{ key: "commodities", label: "# commodities", placeholder: "9" }];
+      case "Datahub":
+        return [{ key: "connector", label: "Connector", placeholder: "Power BI, SAP" }];
+      case "GSA":
+        return [{ key: "count", label: "# GSAs", placeholder: "3" }];
+      case "Cirtuo":
+        return [{ key: "categories", label: "# categories", placeholder: "4" }];
+      case "Sourcing Optimizer":
+        return [{ key: "events", label: "# events / yr", placeholder: "6" }];
+      case "Alerts and Updates":
+        return [{ key: "subscribers", label: "# subscribers", placeholder: "98" }];
+      default:
+        return [{ key: "details", label: "Details" }];
+    }
+  })();
+  return (
+    <div
+      className="rounded-[8px] border px-2.5 py-2 bg-beroe-bg/40"
+      style={{ borderColor: "#e4eaf6" }}
+    >
+      <div className="text-[11px] font-bold text-text-primary mb-1">{m}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {minis.map((mini) => (
+          <div key={mini.key}>
+            <div className="text-[9px] uppercase tracking-wider font-semibold text-text-muted mb-0.5">
+              {mini.label}
+            </div>
+            <input
+              type="text"
+              value={(config[mini.key] as string | undefined) ?? ""}
+              disabled={!editable}
+              placeholder={mini.placeholder}
+              onChange={(e) => onSet(mini.key, e.target.value)}
+              className="w-full px-2 py-1 text-[12px] border rounded-md focus:outline-none focus:border-beroe-blue bg-white"
+              style={{ borderColor: "#e4eaf6" }}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );

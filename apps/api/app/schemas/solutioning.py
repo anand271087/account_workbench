@@ -20,6 +20,14 @@ class SolutioningOut(BaseModel):
     proposed_solution: str | None
     engagement_type: EngagementType | None
     engagement_duration_months: int | None
+    # 03-Jun bug — Trial Summary fields (replaces Engagement Shape in UI).
+    trial_client_type: str | None = None
+    trial_type: str | None = None
+    trial_payment_type: str | None = None
+    trial_date: date | None = None
+    trial_modules_tested: dict = Field(default_factory=dict)
+    trial_outcome: str | None = None
+    trial_feedback: str | None = None
     value_themes: list[str]
     value_definition: str | None
     estimated_value_musd: Decimal | None
@@ -55,6 +63,16 @@ class SolutioningUpdate(BaseModel):
     proposed_solution: str | None = Field(None, max_length=4000)
     engagement_type: EngagementType | None = None
     engagement_duration_months: int | None = Field(None, ge=1, le=120)
+    # 03-Jun bug — Trial Summary fields. Server-side CHECK constraints
+    # in migration 0063 bound the allowed values; Pydantic mirrors them
+    # with Literal so 422 fires before the DB round-trip.
+    trial_client_type: Literal["Existing", "New"] | None = None
+    trial_type: Literal["Trial", "Pilot"] | None = None
+    trial_payment_type: Literal["Complimentary", "Pro Bono", "Paid"] | None = None
+    trial_date: date | None = None
+    trial_modules_tested: dict | None = None
+    trial_outcome: str | None = Field(None, max_length=4000)
+    trial_feedback: str | None = Field(None, max_length=4000)
     value_themes: list[str] | None = None
     value_definition: str | None = Field(None, max_length=4000)
     estimated_value_musd: Decimal | None = Field(None, ge=0, le=100000)

@@ -9,10 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-ContactFunction = ENUM(
-    "procurement", "supply_chain", "finance", "operations", "it", "other",
-    name="contact_function", create_type=False,
-)
+# 03-Jun bug — contact_function enum dropped in migration 0061; column
+# is now text + CHECK with an expanded set. The Pydantic Literal in
+# schemas/contact.py bounds the API surface.
 ContactSeniority = ENUM(
     "cxo", "vp", "director", "manager", "other",
     name="contact_seniority", create_type=False,
@@ -36,8 +35,10 @@ class ClientContact(Base):
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     phone: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    function: Mapped[str | None] = mapped_column(ContactFunction, nullable=True)
+    function: Mapped[str | None] = mapped_column(String, nullable=True)
     seniority: Mapped[str | None] = mapped_column(ContactSeniority, nullable=True)
+    # 03-Jun bug — salutation dropdown before name. CHECK-bounded.
+    salutation: Mapped[str | None] = mapped_column(String, nullable=True)
     decision_power: Mapped[str | None] = mapped_column(ContactDecisionPower, nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
 

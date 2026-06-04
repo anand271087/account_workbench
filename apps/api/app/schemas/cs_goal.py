@@ -22,11 +22,30 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 CSGoalCategory = Literal[
+    # Legacy values kept for back-compat with existing rows. New goals
+    # use the 03-Jun prototype vocabulary below.
     "cost_savings",
     "base_rationalization",
     "risk_mitigation",
     "adoption",
     "other",
+    # 03-Jun prototype categories (14 unique items — `Negotiation
+    # Leverage` and `AI - Driven sourcing transformations` /
+    # `ESG / Responsible Sourcing` were duplicated in the bug list).
+    "cost_reduction",
+    "negotiation_leverage",
+    "should_cost_modeling",
+    "tco_optimization",
+    "competitive_benchmarking",
+    "category_strategy_market_dynamics",
+    "supply_demand_outlook",
+    "enhanced_supplier_discovery",
+    "financial_risk_monitoring",
+    "supply_assurance",
+    "geopolitical_risk_management",
+    "lcc_ncc_sourcing_strategy",
+    "ai_driven_sourcing_transformations",
+    "esg_responsible_sourcing",
 ]
 CSGoalAlignment = Literal["not_started", "partial", "aligned"]
 

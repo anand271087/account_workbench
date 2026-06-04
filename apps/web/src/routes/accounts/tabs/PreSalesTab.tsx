@@ -31,26 +31,8 @@ export default function PreSalesTab() {
   const account = useAccountFromLayout();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const confirm = useConfirm();
-
-  const handoverMutation = useMutation({
-    mutationFn: () =>
-      api.post<{
-        account_id: string;
-        handed_off_to_solutioning: boolean;
-        handed_off_at: string | null;
-      }>(`/api/v1/accounts/${account.id}/handover-to-solutioning`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["account", account.id] });
-      qc.invalidateQueries({ queryKey: ["activity", account.id] });
-      // After Row 73 the Solutioning section lives below Pre-Sales on
-      // the merged tab — scroll to its anchor instead of route-jumping.
-      document.getElementById("sol-section")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    },
-  });
+  // 03-Jun bug — handover button (and its mutation + confirm dialog)
+  // removed; Solutioning is reachable from the Account Kit sub-nav.
 
   const { data, isLoading, isError } = useQuery<Engagement>({
     queryKey: ["engagement", account.id],
@@ -516,64 +498,9 @@ export default function PreSalesTab() {
                banner at top already covers locked-state messaging
           The amber "📤 Handed off to Solutioning · DATE" strip from
           Row 79 lives below this and stays unchanged. */}
-      {form.is_editable && !account.handed_off_to_solutioning && (
-        <div
-          className="pt-3 mt-2 border-t-[2px] border-dashed"
-          style={{ borderColor: "#4A00F830" }}
-        >
-          <button
-            type="button"
-            onClick={async () => {
-              const ok = await confirm({
-                title: "Hand over to Solutioning?",
-                body: "Pre-Sales will be marked complete, the Solutioning team will be notified, and the action is recorded in the activity log.",
-                confirmLabel: "Hand off",
-                tone: "info",
-              });
-              if (ok) handoverMutation.mutate();
-            }}
-            disabled={handoverMutation.isPending || dirty}
-            className="w-full px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-opacity"
-            style={{ background: "#4A00F8" }}
-            title={dirty ? "Save engagement changes before handing off" : ""}
-          >
-            {handoverMutation.isPending
-              ? "Handing off…"
-              : "→ Hand off to Solutioning"}
-          </button>
-          <div className="text-[10px] text-text-muted text-center mt-1">
-            Marks Pre-Sales as complete and notifies the Solutioning team.
-          </div>
-        </div>
-      )}
-      {form.is_editable && account.handed_off_to_solutioning && (
-        <div
-          className="mt-2 rounded-lg px-3 py-2 flex items-center gap-2"
-          style={{ background: "#f0fdf4", border: "1px solid #6EC45730" }}
-        >
-          <span style={{ color: "#6EC457" }}>✓</span>
-          <span
-            className="text-[11px] font-semibold"
-            style={{ color: "#6EC457" }}
-          >
-            Handed off to Solutioning
-            {account.handed_off_at &&
-              ` on ${new Date(account.handed_off_at).toLocaleDateString()}`}
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              document
-                .getElementById("sol-section")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
-            className="ml-auto text-[11px] font-semibold hover:underline"
-            style={{ color: "#6EC457" }}
-          >
-            Open Solutioning ↓
-          </button>
-        </div>
-      )}
+      {/* 03-Jun bug — "Hand off to Solutioning" button removed from
+          Pre-Sales per stakeholder spec. Solutioning is reachable from
+          the Account Kit sub-nav directly; no separate handover gate. */}
 
       {/* 27-May Row 79 — Handed-to-Solutioning date at end of Pre-Sales.
           Always visible (not gated on form.is_editable) so locked

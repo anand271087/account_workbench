@@ -1,12 +1,30 @@
 // Mirrors apps/api/app/schemas/contact.py — BRD table 12.
 
 export type ContactFunction =
+  // Legacy (preserved for back-compat)
   | "procurement"
   | "supply_chain"
   | "finance"
   | "operations"
   | "it"
-  | "other";
+  | "other"
+  // 03-Jun prototype additions
+  | "executive_leadership"
+  | "research_development"
+  | "manufacturing"
+  | "legal"
+  | "marketing"
+  | "sales";
+
+// 03-Jun bug — Salutation dropdown before name.
+export type ContactSalutation =
+  | "Mr." | "Mrs." | "Ms." | "Miss" | "Dr." | "Prof." | "Mx."
+  | "Sir" | "Madam" | "Rev." | "Prefer not to say";
+
+export const SALUTATION_OPTIONS: ContactSalutation[] = [
+  "Mr.", "Mrs.", "Ms.", "Miss", "Dr.", "Prof.", "Mx.",
+  "Sir", "Madam", "Rev.", "Prefer not to say",
+];
 
 export type ContactSeniority = "cxo" | "vp" | "director" | "manager" | "other";
 
@@ -20,6 +38,7 @@ export type ContactDecisionPower =
 export interface Contact {
   id: string;
   account_id: string;
+  salutation: ContactSalutation | null;
   name: string;
   title: string | null;
   email: string | null;
@@ -42,6 +61,7 @@ export interface ContactListResponse {
 }
 
 export interface ContactCreate {
+  salutation?: ContactSalutation | null;
   name: string;
   title?: string | null;
   email?: string | null;
@@ -57,13 +77,38 @@ export interface ContactCreate {
 export type ContactUpdate = Partial<ContactCreate>;
 
 export const FUNCTION_LABELS: Record<ContactFunction, string> = {
-  procurement: "Procurement",
+  // Legacy
+  procurement: "Procurement / Sourcing",
   supply_chain: "Supply Chain",
   finance: "Finance",
   operations: "Operations",
   it: "IT",
   other: "Other",
+  // 03-Jun prototype additions
+  executive_leadership: "Executive / Leadership",
+  research_development: "Research & Development",
+  manufacturing: "Manufacturing / Production",
+  legal: "Legal",
+  marketing: "Marketing",
+  sales: "Sales",
 };
+
+/** New-row dropdown order (03-Jun spec). Legacy keys still load on
+ *  existing rows via FUNCTION_LABELS but aren't surfaced in this list. */
+export const FUNCTION_OPTIONS_NEW: ContactFunction[] = [
+  "procurement",          // "Procurement / Sourcing" label
+  "supply_chain",
+  "executive_leadership",
+  "finance",
+  "research_development",
+  "manufacturing",
+  "it",
+  "legal",
+  "marketing",
+  "sales",
+  "operations",
+  "other",
+];
 
 export const SENIORITY_LABELS: Record<ContactSeniority, string> = {
   cxo: "CXO",

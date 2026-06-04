@@ -6,16 +6,28 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
-ContactFunction = Literal["procurement", "supply_chain", "finance", "operations", "it", "other"]
+ContactFunction = Literal[
+    # legacy (kept for back-compat with existing rows)
+    "procurement", "supply_chain", "finance", "operations", "it", "other",
+    # 03-Jun prototype additions
+    "executive_leadership", "research_development", "manufacturing",
+    "legal", "marketing", "sales",
+]
 ContactSeniority = Literal["cxo", "vp", "director", "manager", "other"]
 ContactDecisionPower = Literal[
     "executive_sponsor", "influencer", "champion", "detractor", "unknown"
+]
+# 03-Jun bug — Salutation dropdown before Name.
+ContactSalutation = Literal[
+    "Mr.", "Mrs.", "Ms.", "Miss", "Dr.", "Prof.", "Mx.",
+    "Sir", "Madam", "Rev.", "Prefer not to say",
 ]
 
 
 class ContactOut(BaseModel):
     id: UUID
     account_id: UUID
+    salutation: ContactSalutation | None = None
     name: str
     title: str | None
     email: str | None
@@ -42,6 +54,7 @@ class ContactListResponse(BaseModel):
 class ContactCreate(BaseModel):
     """BRD: name ≥3 chars, title ≥2, email unique-per-account, notes ≤500."""
 
+    salutation: ContactSalutation | None = None
     name: str = Field(..., min_length=3, max_length=200)
     title: str | None = Field(None, min_length=2, max_length=200)
     email: EmailStr | None = None
@@ -57,6 +70,7 @@ class ContactCreate(BaseModel):
 class ContactUpdate(BaseModel):
     """All fields optional — partial update."""
 
+    salutation: ContactSalutation | None = None
     name: str | None = Field(None, min_length=3, max_length=200)
     title: str | None = Field(None, min_length=2, max_length=200)
     email: EmailStr | None = None

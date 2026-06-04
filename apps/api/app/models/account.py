@@ -32,6 +32,11 @@ class Account(Base):
 
     csm_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     co_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # 03-Jun bug — Display-only owner names from the Add Account modal
+    # dropdowns. RBAC continues to read csm_user_id / co_user_id; these
+    # capture the named Beroe staff until those users are invited.
+    commercial_owner_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    csm_owner_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     category: Mapped[str | None] = mapped_column(String, nullable=True)
     tier: Mapped[str | None] = mapped_column(String, nullable=True)

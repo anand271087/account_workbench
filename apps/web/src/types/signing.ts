@@ -82,7 +82,9 @@ export const GEO_OPTIONS = [
   "Global", "North America", "EMEA", "APAC", "LATAM",
   "Multi-region (custom)",
 ] as const;
-export const FIRST_CP_OPTIONS = ["30 days", "45 days", "60 days"] as const;
+// 03-Jun bug — First checkpoint dropdown now offers 15/30/45-day options
+// (was 30/45/60). Spans the shortest practical CS cadence options.
+export const FIRST_CP_OPTIONS = ["15 days", "30 days", "45 days"] as const;
 
 // 04-Jun — Per-module field schemas ported verbatim from prototype
 // `MODULE_CONFIGS` (line 138-217). Drives the dynamic config form per

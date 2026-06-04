@@ -73,10 +73,61 @@ export const STAKEHOLDER_ROLES = [
   },
 ] as const;
 
-/** Four items in the CSM-side handover checklist. */
+/** Legacy flat-list checklist. Kept for back-compat — existing
+ *  cs_handover_checklist rows reference these keys. */
 export const CS_HANDOVER_ITEMS = [
   { key: "savings",        label: "Savings target defined" },
   { key: "stakeholders",   label: "Key stakeholders named" },
   { key: "categories",     label: "Agreed categories listed" },
   { key: "success_metric", label: "Success metric indicated" },
 ] as const;
+
+/** 03-Jun bug — Handover Quality Check restructured into 3 main pointers
+ *  with sub-checks under each. Contract Details + ACV get separate sub-
+ *  checks (per the bug Expected). The legacy 4-item list above is the
+ *  fallback for already-saved rows. */
+export interface HandoverChecklistGroup {
+  key: string;
+  label: string;
+  desc?: string;
+  items: { key: string; label: string }[];
+}
+
+export const CS_HANDOVER_GROUPS: HandoverChecklistGroup[] = [
+  {
+    key: "contract",
+    label: "Contract & Commercials",
+    desc:
+      "Contract Ops has audited the signed deal and the per-module configuration is captured.",
+    items: [
+      { key: "contract_details",  label: "Contract details captured (signed date, term, renewal)" },
+      { key: "acv",               label: "ACV confirmed" },
+      { key: "modules",           label: "Modules + per-module config recorded" },
+      { key: "commercial_terms",  label: "Billing freq, payment terms, geography set" },
+    ],
+  },
+  {
+    key: "client",
+    label: "Client Context",
+    desc:
+      "The CSM knows who they're talking to and the power-user roster is in place.",
+    items: [
+      { key: "spoc",        label: "SPOC named with title + email" },
+      { key: "budget_owner", label: "Budget Owner named" },
+      { key: "power_users", label: "≥1 Power User listed for adoption tracking" },
+      { key: "stakeholders", label: "Stakeholder coverage flagged (no gaps)" },
+    ],
+  },
+  {
+    key: "engagement",
+    label: "Engagement Plan",
+    desc:
+      "Kickoff is scheduled, the success metric is locked, and value themes are agreed.",
+    items: [
+      { key: "go_live",        label: "Go-Live / Kickoff date set" },
+      { key: "first_checkpoint", label: "First Checkpoint cadence agreed" },
+      { key: "success_metric", label: "Primary success metric defined" },
+      { key: "value_themes",   label: "Value themes confirmed by Sales" },
+    ],
+  },
+];

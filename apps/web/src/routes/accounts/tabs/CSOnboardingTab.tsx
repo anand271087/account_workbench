@@ -27,11 +27,13 @@ import type {
   CSOnboarding,
   CSOnboardingUpdate,
 } from "@/types/cs_onboarding";
+import { CS_HANDOVER_GROUPS } from "@/types/cs_onboarding";
 import type {
   CSGoal,
   CSGoalCategory,
   CSGoalUpdate,
 } from "@/types/cs_goal";
+import { CATEGORY_LABELS } from "@/types/cs_goal";
 
 // ─────────────────────────────────────────────────────────────
 // Brand-locked palette (maps prototype off-brand colours to the
@@ -193,6 +195,127 @@ function BlockEntry({
 // Block 2 — Commercial (prototype buildCommercialBlock)
 // Pulls gate_* + contract-doc fields from accounts.
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 03-Jun bug — Handover Quality Check restructured into 3 main
+// pointers (Contract / Client / Engagement), each with sub-checks.
+// Only renders under Entry A. Toggles save instantly via the
+// existing cs_handover_checklist jsonb merge.
+// ─────────────────────────────────────────────────────────────
+function HandoverQualityCheckBlock({
+  checklist,
+  locked,
+  editable,
+  onToggle,
+}: {
+  checklist: Record<string, boolean>;
+  locked: boolean;
+  editable: boolean;
+  onToggle: (key: string, val: boolean) => void;
+}) {
+  const groupCount = (g: (typeof CS_HANDOVER_GROUPS)[number]) => {
+    const total = g.items.length;
+    const done = g.items.filter((it) => !!checklist[it.key]).length;
+    return { total, done };
+  };
+  const allDone = CS_HANDOVER_GROUPS.every((g) =>
+    g.items.every((it) => !!checklist[it.key]),
+  );
+
+  return (
+    <Card leftBorderColor={allDone ? C.GREEN : C.BLUE}>
+      <SectionHead
+        n="✓"
+        color={allDone ? C.GREEN : C.BLUE}
+        title="Handover Quality Check"
+        teamLabel="CS"
+        teamColor={C.BLUE}
+        trailing={
+          <span
+            className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            style={
+              allDone
+                ? { background: "#d4f5e5", color: "#146a45" }
+                : { background: "#fff3e0", color: "#b85b00" }
+            }
+          >
+            {allDone ? "✓ All checks complete" : "In progress"}
+          </span>
+        }
+      />
+      <p className="text-[11px] text-text-muted mb-3">
+        Three groups, each with sub-checks. Tick every item before starting
+        the Success Journey so nothing slips between Sales / Contract Ops
+        / CS.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+        {CS_HANDOVER_GROUPS.map((g) => {
+          const { total, done } = groupCount(g);
+          const complete = done === total;
+          return (
+            <div
+              key={g.key}
+              className="rounded-[10px] border p-3"
+              style={{
+                background: complete ? "#f0fdf4" : "#fff",
+                borderColor: complete ? `${C.GREEN}40` : C.CB,
+                borderWidth: 1.5,
+              }}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="text-[12px] font-bold text-text-primary flex-1">
+                  {g.label}
+                </div>
+                <span
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={
+                    complete
+                      ? { background: "#d4f5e5", color: "#146a45" }
+                      : { background: "#f1f5f9", color: "#64748b" }
+                  }
+                >
+                  {done}/{total}
+                </span>
+              </div>
+              {g.desc && (
+                <p className="text-[10.5px] text-text-muted mb-2 leading-[1.45]">
+                  {g.desc}
+                </p>
+              )}
+              <ul className="space-y-1.5">
+                {g.items.map((it) => {
+                  const checked = !!checklist[it.key];
+                  return (
+                    <li key={it.key}>
+                      <label
+                        className={cn(
+                          "flex items-start gap-2 text-[11.5px] leading-[1.4] cursor-pointer rounded-md px-1.5 py-1",
+                          (!editable || locked) && "cursor-not-allowed opacity-60",
+                          checked && "text-text-secondary",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={!editable || locked}
+                          onChange={(e) => onToggle(it.key, e.target.checked)}
+                          className="mt-0.5 w-3.5 h-3.5 flex-shrink-0 accent-beroe-green"
+                        />
+                        <span className={cn(checked && "line-through")}>
+                          {it.label}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function BlockCommercial({
   account,
 }: {
@@ -610,14 +733,40 @@ function BlockGoals({
 }
 
 function categoryPillFor(cat: CSGoalCategory) {
-  const map: Record<CSGoalCategory, { bg: string; color: string; label: string }> = {
-    cost_savings: { bg: "#ede6ff", color: "#3800CC", label: "Cost Savings" },
-    risk_mitigation: { bg: "#ffe0e5", color: "#c42040", label: "Risk Mitigation" },
-    base_rationalization: { bg: "#fef0c0", color: "#8a4510", label: "Base Rationalization" },
-    adoption: { bg: "#d4f5e5", color: "#146a45", label: "Adoption" },
-    other: { bg: "#f1f5f9", color: "#64748b", label: "Other" },
+  // 03-Jun bug — Each category maps to a visual flavor (cost → green,
+  // risk → amber, strategy → indigo, ESG/AI → fuscia, fallback grey).
+  // Label is sourced from CATEGORY_LABELS so the prototype's wording
+  // doesn't have to be duplicated here.
+  const COST_BUCKET = { bg: "#ede6ff", color: "#3800CC" };
+  const RISK_BUCKET = { bg: "#ffe0e5", color: "#c42040" };
+  const STRATEGY_BUCKET = { bg: "#fef0c0", color: "#8a4510" };
+  const ADOPTION_BUCKET = { bg: "#d4f5e5", color: "#146a45" };
+  const FALLBACK = { bg: "#f1f5f9", color: "#64748b" };
+  const map: Record<CSGoalCategory, { bg: string; color: string }> = {
+    // legacy
+    cost_savings: COST_BUCKET,
+    risk_mitigation: RISK_BUCKET,
+    base_rationalization: STRATEGY_BUCKET,
+    adoption: ADOPTION_BUCKET,
+    other: FALLBACK,
+    // 03-Jun
+    cost_reduction: COST_BUCKET,
+    negotiation_leverage: COST_BUCKET,
+    should_cost_modeling: COST_BUCKET,
+    tco_optimization: COST_BUCKET,
+    competitive_benchmarking: STRATEGY_BUCKET,
+    category_strategy_market_dynamics: STRATEGY_BUCKET,
+    supply_demand_outlook: STRATEGY_BUCKET,
+    enhanced_supplier_discovery: STRATEGY_BUCKET,
+    financial_risk_monitoring: RISK_BUCKET,
+    supply_assurance: RISK_BUCKET,
+    geopolitical_risk_management: RISK_BUCKET,
+    lcc_ncc_sourcing_strategy: STRATEGY_BUCKET,
+    ai_driven_sourcing_transformations: ADOPTION_BUCKET,
+    esg_responsible_sourcing: ADOPTION_BUCKET,
   };
-  return map[cat];
+  const v = map[cat] ?? FALLBACK;
+  return { ...v, label: CATEGORY_LABELS[cat] ?? "Other" };
 }
 
 function GoalCard({
@@ -2116,6 +2265,16 @@ export default function CSOnboardingTab() {
         locked={journeyStarted}
         onChange={(t) => patch.mutate({ cs_entry_type: t })}
       />
+      {data.cs_entry_type === "A" && (
+        <HandoverQualityCheckBlock
+          checklist={data.cs_handover_checklist}
+          locked={journeyStarted}
+          editable={data.is_editable}
+          onToggle={(key, val) =>
+            patch.mutate({ cs_handover_checklist: { [key]: val } })
+          }
+        />
+      )}
       <BlockCommercial account={account} />
       <BlockClient accountId={account.id} />
       <BlockCommitment

@@ -40,13 +40,10 @@ import {
   type PhaseC,
 } from "@/types/cs_goal";
 
-const CATEGORY_OPTIONS: CSGoalCategory[] = [
-  "cost_savings",
-  "base_rationalization",
-  "risk_mitigation",
-  "adoption",
-  "other",
-];
+// 03-Jun bug — Category dropdown now surfaces the prototype's 14-item
+// list (legacy 5 still render via CATEGORY_LABELS for old goals).
+import { CSGOAL_CATEGORIES_NEW } from "@/types/cs_goal";
+const CATEGORY_OPTIONS: CSGoalCategory[] = CSGOAL_CATEGORIES_NEW;
 
 /** Per-category icon + colour. Verbatim port of prototype line
  *  3084-3090 (`GOAL_CATS`), with the two off-brand hex values mapped
@@ -58,15 +55,34 @@ const CATEGORY_OPTIONS: CSGoalCategory[] = [
  *    other               prototype #64748b → Midnight 60% #00113799
  *  Saves repeating the icon emoji + colour map in three render sites
  *  (row chip, card border, alignment dot palette anchor). */
+// Legacy + 03-Jun categories all map to one of 5 visual buckets driven
+// by domain: cost-flavoured → green, risk-flavoured → amber, strategy/
+// market → blue, ESG/adoption → fuscia, fallback → midnight.
 export const CATEGORY_META: Record<
   CSGoalCategory,
   { icon: string; color: string }
 > = {
+  // Legacy
   cost_savings: { icon: "💰", color: "#6EC457" },
   base_rationalization: { icon: "🔗", color: "#4A00F8" },
   risk_mitigation: { icon: "🛡", color: "#F0BC41" },
   adoption: { icon: "📊", color: "#C344C7" },
   other: { icon: "🎯", color: "#001137" },
+  // 03-Jun prototype
+  cost_reduction: { icon: "💰", color: "#6EC457" },
+  negotiation_leverage: { icon: "🤝", color: "#4A00F8" },
+  should_cost_modeling: { icon: "🧮", color: "#4A00F8" },
+  tco_optimization: { icon: "📉", color: "#6EC457" },
+  competitive_benchmarking: { icon: "📊", color: "#4A00F8" },
+  category_strategy_market_dynamics: { icon: "🧭", color: "#4A00F8" },
+  supply_demand_outlook: { icon: "📈", color: "#4A00F8" },
+  enhanced_supplier_discovery: { icon: "🔍", color: "#4A00F8" },
+  financial_risk_monitoring: { icon: "🛡", color: "#F0BC41" },
+  supply_assurance: { icon: "🛡", color: "#F0BC41" },
+  geopolitical_risk_management: { icon: "🌍", color: "#F0BC41" },
+  lcc_ncc_sourcing_strategy: { icon: "🧭", color: "#4A00F8" },
+  ai_driven_sourcing_transformations: { icon: "🤖", color: "#C344C7" },
+  esg_responsible_sourcing: { icon: "🌱", color: "#C344C7" },
 };
 
 export default function GoalsTab() {
@@ -357,16 +373,10 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
             />
           </Field>
           <Field label="Owner">
-            <input
-              type="text"
-              maxLength={200}
+            <OwnerFields
               value={form.owner ?? ""}
-              placeholder="Who's accountable"
-              onChange={(e) =>
-                setForm({ ...form, owner: e.target.value || null })
-              }
               disabled={!editable}
-              className={inputCls(editable)}
+              onChange={(next) => setForm({ ...form, owner: next || null })}
             />
           </Field>
         </div>
@@ -1495,6 +1505,78 @@ function inputCls(enabled: boolean) {
   return cn(
     "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
     !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
+  );
+}
+
+// 03-Jun bug — Owner split into First / Last / Email. We store all three
+// as a JSON blob in the existing cs_goals.owner text column so no schema
+// migration is needed; legacy free-text owners still load (parsed as
+// `first` with empty last + email).
+type OwnerData = { first: string; last: string; email: string };
+function parseOwner(raw: string): OwnerData {
+  const trimmed = raw.trim();
+  if (!trimmed) return { first: "", last: "", email: "" };
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const o = JSON.parse(trimmed) as Partial<OwnerData>;
+      return {
+        first: (o.first ?? "").toString(),
+        last: (o.last ?? "").toString(),
+        email: (o.email ?? "").toString(),
+      };
+    } catch {
+      /* fall through */
+    }
+  }
+  // Legacy single-string owner — treat as the first name.
+  return { first: trimmed, last: "", email: "" };
+}
+function serialiseOwner(d: OwnerData): string {
+  if (!d.first && !d.last && !d.email) return "";
+  return JSON.stringify({ first: d.first, last: d.last, email: d.email });
+}
+
+function OwnerFields({
+  value, disabled, onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (next: string) => void;
+}) {
+  const parsed = parseOwner(value);
+  function patch(p: Partial<OwnerData>) {
+    onChange(serialiseOwner({ ...parsed, ...p }));
+  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <input
+        type="text"
+        maxLength={100}
+        value={parsed.first}
+        placeholder="First name"
+        disabled={disabled}
+        onChange={(e) => patch({ first: e.target.value })}
+        className={inputCls(!disabled)}
+      />
+      <input
+        type="text"
+        maxLength={100}
+        value={parsed.last}
+        placeholder="Last name"
+        disabled={disabled}
+        onChange={(e) => patch({ last: e.target.value })}
+        className={inputCls(!disabled)}
+      />
+      <input
+        type="email"
+        maxLength={320}
+        value={parsed.email}
+        placeholder="name@company.com"
+        disabled={disabled}
+        onChange={(e) => patch({ email: e.target.value })}
+        className={inputCls(!disabled)}
+      />
+    </div>
   );
 }
 

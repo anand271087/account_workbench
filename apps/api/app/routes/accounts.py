@@ -343,19 +343,23 @@ async def create_account(
             "Your role cannot create accounts (admin / cs_director / vp_csm only)",
         )
 
-    # Validate the assigned CSM is real + can own.
-    new_csm = (
-        await db.execute(
-            select(User).where(User.id == body.csm_user_id, User.deleted_at.is_(None))
-        )
-    ).scalar_one_or_none()
-    if new_csm is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Assigned CSM not found")
-    if new_csm.role not in {"csm", "cs_team_manager"}:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Role '{new_csm.role}' cannot own an account; pick a CSM or CS Team Manager",
-        )
+    # 03-Jun bug — csm_user_id is optional now. The new Add Account modal
+    # captures csm_owner_name as text; the user-ID can be backfilled when
+    # the named Beroe staff are invited. We still validate the FK when it
+    # IS supplied so legacy callers can't point at deleted users.
+    if body.csm_user_id is not None:
+        new_csm = (
+            await db.execute(
+                select(User).where(User.id == body.csm_user_id, User.deleted_at.is_(None))
+            )
+        ).scalar_one_or_none()
+        if new_csm is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Assigned CSM not found")
+        if new_csm.role not in {"csm", "cs_team_manager"}:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Role '{new_csm.role}' cannot own an account; pick a CSM or CS Team Manager",
+            )
 
     if body.co_user_id is not None:
         co = (
@@ -381,6 +385,8 @@ async def create_account(
         region=body.region,
         csm_user_id=body.csm_user_id,
         co_user_id=body.co_user_id,
+        commercial_owner_name=body.commercial_owner_name,
+        csm_owner_name=body.csm_owner_name,
         category=body.category,
         tier=body.tier,
         account_type=body.account_type,

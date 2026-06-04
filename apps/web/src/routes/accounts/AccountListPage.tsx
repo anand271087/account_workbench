@@ -919,26 +919,37 @@ function BulkReassignModal({
 
 // ---------- Create-account modal (M9) ----------
 
+// 03-Jun bug — Add Account form simplified per stakeholder spec:
+// removed Segment / Category / Health; new dropdowns for Industry /
+// Country / Tier / Account Type / Commercial Owner / CSM Owner.
+import {
+  INDUSTRY_OPTIONS,
+  COUNTRY_OPTIONS,
+  TIER_OPTIONS as NEW_TIER_OPTIONS,
+  ACCOUNT_TYPE_OPTIONS as NEW_ACCOUNT_TYPE_OPTIONS,
+  COMMERCIAL_OWNER_OPTIONS,
+  CSM_OWNER_OPTIONS,
+} from "@/types/account_options";
+
 interface CreateAccountForm {
   name: string;
   industry: string;
   country: string;
   region: string;
-  csm_user_id: string;
-  co_user_id: string;
-  category: string;
+  // Hardcoded staff-name dropdowns. The backend stores these as text;
+  // the FK csm_user_id / co_user_id stays empty until the named staff
+  // are invited as real users.
+  csm_owner_name: string;
+  commercial_owner_name: string;
   tier: string;
   account_type: string;
-  segment: string;
   current_acv: string;
   target_acv: string;
   contract_start: string;
   contract_end: string;
   renewal_date: string;
-  health_score: string;
 }
 
-const TIER_OPTIONS = ["Strategic", "Enterprise", "Growth", "Emerging"];
 const REGION_OPTIONS = [
   "North America",
   "Europe",
@@ -947,7 +958,6 @@ const REGION_OPTIONS = [
   "Rest of the World",
   "LATAM",
 ];
-const ACCOUNT_TYPE_OPTIONS = ["New Logo", "Existing", "Renewal", "Pilot"];
 
 function CreateAccountModal({
   onClose,
@@ -956,49 +966,36 @@ function CreateAccountModal({
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
-  const [users, setUsers] = useState<UserOpt[] | null>(null);
   const [showMore, setShowMore] = useState(false);
   const [form, setForm] = useState<CreateAccountForm>({
-    name: "", industry: "", country: "", region: "", csm_user_id: "", co_user_id: "",
-    category: "", tier: "", account_type: "", segment: "",
+    name: "", industry: "", country: "", region: "",
+    csm_owner_name: "", commercial_owner_name: "",
+    tier: "", account_type: "",
     current_acv: "", target_acv: "",
-    contract_start: "", contract_end: "", renewal_date: "", health_score: "",
+    contract_start: "", contract_end: "", renewal_date: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    api.get<UserOpt[]>("/api/v1/users")
-      .then((rows) => setUsers(rows.filter((u) => !u.email.includes("deleted"))))
-      .catch((e: Error) => setError(e.message));
-  }, []);
-
-  const csmCandidates = (users ?? []).filter(
-    (u) => u.role === "csm" || u.role === "cs_team_manager",
-  );
-  const coCandidates = (users ?? []).filter((u) => u.role === "commercial_owner");
-
   async function submit() {
     setError(null);
     if (form.name.trim().length < 2) return setError("Name must be at least 2 characters.");
-    if (!form.csm_user_id) return setError("Pick a CSM owner.");
+    if (!form.csm_owner_name) return setError("Pick a CSM owner.");
     setSubmitting(true);
     try {
       const body: Record<string, unknown> = {
         name: form.name.trim(),
-        csm_user_id: form.csm_user_id,
       };
       const optStr = (k: keyof CreateAccountForm) =>
         form[k] && (body[k] = (form[k] as string).trim());
       optStr("industry"); optStr("country"); optStr("region");
-      optStr("category"); optStr("tier"); optStr("account_type"); optStr("segment");
-      if (form.co_user_id) body.co_user_id = form.co_user_id;
+      optStr("tier"); optStr("account_type");
+      optStr("csm_owner_name"); optStr("commercial_owner_name");
       if (form.current_acv) body.current_acv = form.current_acv;
       if (form.target_acv) body.target_acv = form.target_acv;
       if (form.contract_start) body.contract_start = form.contract_start;
       if (form.contract_end) body.contract_end = form.contract_end;
       if (form.renewal_date) body.renewal_date = form.renewal_date;
-      if (form.health_score) body.health_score = parseInt(form.health_score, 10);
 
       const created = await api.post<AccountListItem>("/api/v1/accounts", body);
       onCreated(created.id);
@@ -1036,22 +1033,24 @@ function CreateAccountModal({
           </ModalField>
 
           <ModalField label="Industry">
-            <input
-              type="text"
+            <select
               value={form.industry}
               onChange={(e) => setForm({ ...form, industry: e.target.value })}
               className={modalInputCls}
-              placeholder="Pharma, CPG, …"
-            />
+            >
+              <option value="">— Select —</option>
+              {INDUSTRY_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}
+            </select>
           </ModalField>
           <ModalField label="Country">
-            <input
-              type="text"
+            <select
               value={form.country}
               onChange={(e) => setForm({ ...form, country: e.target.value })}
               className={modalInputCls}
-              placeholder="Denmark, India, …"
-            />
+            >
+              <option value="">— Select —</option>
+              {COUNTRY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
           </ModalField>
 
           <ModalField label="Region">
@@ -1071,29 +1070,19 @@ function CreateAccountModal({
               className={modalInputCls}
             >
               <option value="">— Select —</option>
-              {TIER_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+              {NEW_TIER_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </ModalField>
 
           <ModalField label="CSM owner *" full>
-            {users === null ? (
-              <div className="text-xs text-text-muted">Loading users…</div>
-            ) : csmCandidates.length === 0 ? (
-              <div className="text-xs text-beroe-amber bg-beroe-amber/15 border border-beroe-amber/40 rounded-lg px-3 py-2">
-                No CSM users exist yet. Invite a CSM from the Admin → Users page first.
-              </div>
-            ) : (
-              <select
-                value={form.csm_user_id}
-                onChange={(e) => setForm({ ...form, csm_user_id: e.target.value })}
-                className={modalInputCls}
-              >
-                <option value="">— Pick a CSM —</option>
-                {csmCandidates.map((u) => (
-                  <option key={u.id} value={u.id}>{u.full_name ?? u.email} · {u.role}</option>
-                ))}
-              </select>
-            )}
+            <select
+              value={form.csm_owner_name}
+              onChange={(e) => setForm({ ...form, csm_owner_name: e.target.value })}
+              className={modalInputCls}
+            >
+              <option value="">— Pick a CSM —</option>
+              {CSM_OWNER_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
           </ModalField>
 
           <button
@@ -1113,36 +1102,17 @@ function CreateAccountModal({
                   className={modalInputCls}
                 >
                   <option value="">— Select —</option>
-                  {ACCOUNT_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {NEW_ACCOUNT_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-              </ModalField>
-              <ModalField label="Segment">
-                <input
-                  type="text"
-                  value={form.segment}
-                  onChange={(e) => setForm({ ...form, segment: e.target.value })}
-                  className={modalInputCls}
-                />
-              </ModalField>
-
-              <ModalField label="Category">
-                <input
-                  type="text"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className={modalInputCls}
-                />
               </ModalField>
               <ModalField label="Commercial Owner">
                 <select
-                  value={form.co_user_id}
-                  onChange={(e) => setForm({ ...form, co_user_id: e.target.value })}
+                  value={form.commercial_owner_name}
+                  onChange={(e) => setForm({ ...form, commercial_owner_name: e.target.value })}
                   className={modalInputCls}
                 >
                   <option value="">— None —</option>
-                  {coCandidates.map((u) => (
-                    <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
-                  ))}
+                  {COMMERCIAL_OWNER_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </ModalField>
 
@@ -1195,25 +1165,8 @@ function CreateAccountModal({
                   className={modalInputCls}
                 />
               </ModalField>
-              <ModalField label="Health score (0–100)">
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={form.health_score}
-                  onChange={(e) => {
-                    // Clamp to [0, 100] so the UI matches the server schema
-                    // (Pydantic ge=0/le=100 also rejects out-of-range).
-                    const raw = e.target.value;
-                    if (raw === "") return setForm({ ...form, health_score: "" });
-                    const n = parseInt(raw, 10);
-                    if (Number.isNaN(n)) return;
-                    const clamped = Math.max(0, Math.min(100, n));
-                    setForm({ ...form, health_score: String(clamped) });
-                  }}
-                  className={modalInputCls}
-                />
-              </ModalField>
+              {/* 03-Jun bug — Health score / Segment / Category fields
+                  removed from the Add Account modal per stakeholder spec. */}
             </>
           )}
         </div>

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, text
-from sqlalchemy.dialects.postgresql import ARRAY, ENUM, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, ENUM, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -33,6 +33,17 @@ class AccountSolutioning(Base):
     proposed_solution: Mapped[str | None] = mapped_column(String, nullable=True)
     engagement_type: Mapped[str | None] = mapped_column(EngagementType, nullable=True)
     engagement_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 03-Jun bug — "Engagement Shape" renamed to "Trial Summary".
+    # CHECK constraints in migration 0063 bound the allowed values.
+    trial_client_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    trial_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    trial_payment_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    trial_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trial_modules_tested: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
+    trial_outcome: Mapped[str | None] = mapped_column(String, nullable=True)
+    trial_feedback: Mapped[str | None] = mapped_column(String, nullable=True)
     value_themes: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, server_default=text("'{}'")
     )

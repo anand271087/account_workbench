@@ -65,8 +65,14 @@ class AccountCreate(BaseModel):
     country: str | None = Field(None, max_length=80)
     region: str | None = Field(None, max_length=40)
 
-    csm_user_id: UUID
+    # 03-Jun bug — csm_user_id is now optional. The new Add Account modal
+    # stores the named owners as text (csm_owner_name / commercial_owner_name)
+    # for display while the assignee user IDs may be backfilled later when
+    # the named Beroe staff are invited as real users.
+    csm_user_id: UUID | None = None
     co_user_id: UUID | None = None
+    commercial_owner_name: str | None = Field(None, max_length=200)
+    csm_owner_name: str | None = Field(None, max_length=200)
 
     category: str | None = Field(None, max_length=120)
     tier: str | None = Field(None, max_length=40)

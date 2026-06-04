@@ -38,6 +38,8 @@ _FIELDS = (
     # M16.1 — header chips applied from MoM extraction.
     "headquarters", "annual_revenue_text", "sf_link",
     "csm_user_id", "co_user_id", "category", "tier",
+    # 03-Jun bug — display-only owner names from the Add Account modal.
+    "commercial_owner_name", "csm_owner_name",
     "account_type", "segment", "current_acv", "target_acv",
     "contract_start", "contract_end", "renewal_date",
     "health_score", "last_activity_at",

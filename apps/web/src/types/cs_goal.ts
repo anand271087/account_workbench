@@ -1,11 +1,49 @@
 // Mirrors apps/api/app/schemas/cs_goal.py.
 
 export type CSGoalCategory =
+  // Legacy values — preserved so existing goals still load. New goals
+  // use the 03-Jun vocabulary below.
   | "cost_savings"
   | "base_rationalization"
   | "risk_mitigation"
   | "adoption"
-  | "other";
+  | "other"
+  // 03-Jun prototype categories.
+  | "cost_reduction"
+  | "negotiation_leverage"
+  | "should_cost_modeling"
+  | "tco_optimization"
+  | "competitive_benchmarking"
+  | "category_strategy_market_dynamics"
+  | "supply_demand_outlook"
+  | "enhanced_supplier_discovery"
+  | "financial_risk_monitoring"
+  | "supply_assurance"
+  | "geopolitical_risk_management"
+  | "lcc_ncc_sourcing_strategy"
+  | "ai_driven_sourcing_transformations"
+  | "esg_responsible_sourcing";
+
+/** New-goal vocabulary (03-Jun). The dropdown in the create-goal modal
+ *  surfaces ONLY these; legacy categories on existing goals still render
+ *  via CATEGORY_LABELS but aren't pickable for new rows. */
+export const CSGOAL_CATEGORIES_NEW: CSGoalCategory[] = [
+  "cost_reduction",
+  "negotiation_leverage",
+  "should_cost_modeling",
+  "tco_optimization",
+  "competitive_benchmarking",
+  "category_strategy_market_dynamics",
+  "supply_demand_outlook",
+  "enhanced_supplier_discovery",
+  "financial_risk_monitoring",
+  "supply_assurance",
+  "geopolitical_risk_management",
+  "lcc_ncc_sourcing_strategy",
+  "ai_driven_sourcing_transformations",
+  "esg_responsible_sourcing",
+  "other",
+];
 
 export type CSGoalAlignment = "not_started" | "partial" | "aligned";
 
@@ -156,11 +194,27 @@ export type CSGoalUpdate = Partial<
 >;
 
 export const CATEGORY_LABELS: Record<CSGoalCategory, string> = {
+  // Legacy
   cost_savings: "Cost Savings",
   base_rationalization: "Supplier Base Rationalisation",
   risk_mitigation: "Risk Mitigation",
   adoption: "Adoption",
   other: "Other",
+  // 03-Jun prototype
+  cost_reduction: "Cost Reduction",
+  negotiation_leverage: "Negotiation Leverage",
+  should_cost_modeling: "Should-Cost Modeling",
+  tco_optimization: "Total Cost of Ownership (TCO) Optimization",
+  competitive_benchmarking: "Competitive Benchmarking",
+  category_strategy_market_dynamics: "Category Strategy & Market Dynamics",
+  supply_demand_outlook: "Supply-Demand Outlook",
+  enhanced_supplier_discovery: "Enhanced Supplier Discovery",
+  financial_risk_monitoring: "Financial Risk Monitoring & Risk Mitigation",
+  supply_assurance: "Supply Assurance / Business Continuity",
+  geopolitical_risk_management: "Geopolitical Risk Management",
+  lcc_ncc_sourcing_strategy: "LCC and NCC Sourcing Strategy",
+  ai_driven_sourcing_transformations: "AI-Driven Sourcing Transformations",
+  esg_responsible_sourcing: "ESG / Responsible Sourcing",
 };
 
 export const ALIGNMENT_LABELS: Record<CSGoalAlignment, string> = {
@@ -176,20 +230,58 @@ export const GROUNDWORK_LABELS: Record<GroundworkStatus, string> = {
   unknown: "Unknown",
 };
 
-/** Per-category goal_type choices for Phase A. */
+/** Per-category goal_type choices for Phase A. New 03-Jun categories
+ *  fall back to a generic "Confirmed / Partial / Unclear" set until
+ *  bespoke per-category vocab lands. */
+const GENERIC_PHASE_A = ["Confirmed", "Partial", "Unclear"];
+const GENERIC_STAGES = ["identified", "in_progress", "achieved"];
+
 export const PHASE_A_GOAL_TYPE_OPTIONS: Record<CSGoalCategory, string[]> = {
+  // Legacy
   cost_savings: ["cost_savings", "cost_avoidance", "spend_reduction", "cost_efficiency"],
   base_rationalization: ["confirmed", "partial", "no"],
   risk_mitigation: ["supply_disruption", "regulatory", "geopolitical", "financial", "all"],
   adoption: ["mau_growth", "module_activation", "stakeholder_breadth"],
   other: [],
+  // 03-Jun prototype — fall back to generic vocab until per-category
+  // bespoke options are designed.
+  cost_reduction: GENERIC_PHASE_A,
+  negotiation_leverage: GENERIC_PHASE_A,
+  should_cost_modeling: GENERIC_PHASE_A,
+  tco_optimization: GENERIC_PHASE_A,
+  competitive_benchmarking: GENERIC_PHASE_A,
+  category_strategy_market_dynamics: GENERIC_PHASE_A,
+  supply_demand_outlook: GENERIC_PHASE_A,
+  enhanced_supplier_discovery: GENERIC_PHASE_A,
+  financial_risk_monitoring: GENERIC_PHASE_A,
+  supply_assurance: GENERIC_PHASE_A,
+  geopolitical_risk_management: GENERIC_PHASE_A,
+  lcc_ncc_sourcing_strategy: GENERIC_PHASE_A,
+  ai_driven_sourcing_transformations: GENERIC_PHASE_A,
+  esg_responsible_sourcing: GENERIC_PHASE_A,
 };
 
 /** Per-category initiative value_stage progressions. */
 export const VALUE_STAGES: Record<CSGoalCategory, string[]> = {
+  // Legacy
   cost_savings: ["identified", "committed", "implemented", "deferred", "not_pursued"],
   base_rationalization: ["baselined", "in_progress", "achieved"],
   risk_mitigation: ["risk_baseline", "alert_generated", "disruption_avoided"],
   adoption: ["pilot", "active", "embedded"],
   other: [],
+  // 03-Jun
+  cost_reduction: ["identified", "committed", "implemented", "deferred", "not_pursued"],
+  negotiation_leverage: GENERIC_STAGES,
+  should_cost_modeling: GENERIC_STAGES,
+  tco_optimization: GENERIC_STAGES,
+  competitive_benchmarking: GENERIC_STAGES,
+  category_strategy_market_dynamics: GENERIC_STAGES,
+  supply_demand_outlook: GENERIC_STAGES,
+  enhanced_supplier_discovery: GENERIC_STAGES,
+  financial_risk_monitoring: ["risk_baseline", "alert_generated", "disruption_avoided"],
+  supply_assurance: ["risk_baseline", "alert_generated", "disruption_avoided"],
+  geopolitical_risk_management: ["risk_baseline", "alert_generated", "disruption_avoided"],
+  lcc_ncc_sourcing_strategy: GENERIC_STAGES,
+  ai_driven_sourcing_transformations: ["pilot", "active", "embedded"],
+  esg_responsible_sourcing: GENERIC_STAGES,
 };

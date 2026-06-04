@@ -25,9 +25,10 @@ import {
   SENIORITY_LABELS,
 } from "@/types/contact";
 
-const FUNCTION_OPTIONS: ContactFunction[] = [
-  "procurement", "supply_chain", "finance", "operations", "it", "other",
-];
+// 03-Jun bug — Now uses the expanded function list from types
+// (FUNCTION_OPTIONS_NEW = 12-item prototype set + Salutation dropdown).
+import { FUNCTION_OPTIONS_NEW, SALUTATION_OPTIONS } from "@/types/contact";
+import type { ContactSalutation } from "@/types/contact";
 const SENIORITY_OPTIONS: ContactSeniority[] = ["cxo", "vp", "director", "manager", "other"];
 const DECISION_POWER_OPTIONS: ContactDecisionPower[] = [
   "executive_sponsor", "influencer", "champion", "detractor", "unknown",
@@ -347,6 +348,7 @@ function ContactFormModal({
   isPending: boolean;
 }) {
   const [form, setForm] = useState<ContactCreate>({
+    salutation: initial?.salutation ?? null,
     name: initial?.name ?? "",
     title: initial?.title ?? "",
     email: initial?.email ?? "",
@@ -402,6 +404,7 @@ function ContactFormModal({
       return;
     }
     const cleaned: ContactCreate = {
+      salutation: form.salutation || null,
       name: form.name.trim(),
       title: form.title?.trim() || null,
       email: form.email?.trim() || null,
@@ -431,6 +434,23 @@ function ContactFormModal({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+          <ModalField label="Salutation" full>
+            <select
+              value={form.salutation ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  salutation: (e.target.value || null) as ContactSalutation | null,
+                })
+              }
+              className={modalInputCls}
+            >
+              <option value="">— Select —</option>
+              {SALUTATION_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </ModalField>
           <ModalField label="Name *" full error={nameError(form.name)}>
             <input
               type="text"
@@ -491,7 +511,7 @@ function ContactFormModal({
               className={modalInputCls}
             >
               <option value="">— Select —</option>
-              {FUNCTION_OPTIONS.map((f) => (
+              {FUNCTION_OPTIONS_NEW.map((f) => (
                 <option key={f} value={f}>{FUNCTION_LABELS[f]}</option>
               ))}
             </select>

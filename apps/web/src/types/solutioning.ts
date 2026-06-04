@@ -3,11 +3,47 @@
 export type EngagementType = "one_time" | "retainer" | "subscription" | "pilot" | "other";
 export type ShValidation = "confirmed" | "partially_confirmed" | "revised";
 
+// 03-Jun bug — Trial Summary section replaces Engagement Shape.
+export type TrialClientType = "Existing" | "New";
+export type TrialType = "Trial" | "Pilot";
+export type TrialPaymentType = "Complimentary" | "Pro Bono" | "Paid";
+
+export const TRIAL_CLIENT_TYPE_OPTIONS: TrialClientType[] = ["Existing", "New"];
+export const TRIAL_TYPE_OPTIONS: TrialType[] = ["Trial", "Pilot"];
+export const TRIAL_PAYMENT_TYPE_OPTIONS: TrialPaymentType[] = [
+  "Complimentary", "Pro Bono", "Paid",
+];
+
+/** Modules the trial can cover — verbatim from the bug spec
+ *  "What was Tested" list (06-03). Each module's config is a free-form
+ *  object so the prototype can add fields without a schema bump. */
+export const TRIAL_MODULES = [
+  "LiVE.Ai",
+  "Supplier Watch",
+  "MMD",
+  "Custom Credits",
+  "Commodity Forecasting",
+  "Datahub",
+  "GSA",
+  "Cirtuo",
+  "Sourcing Optimizer",
+  "Alerts and Updates",
+] as const;
+export type TrialModuleName = (typeof TRIAL_MODULES)[number];
+
 export interface Solutioning {
   account_id: string;
   proposed_solution: string | null;
   engagement_type: EngagementType | null;
   engagement_duration_months: number | null;
+  // 03-Jun bug — Trial Summary fields.
+  trial_client_type: TrialClientType | null;
+  trial_type: TrialType | null;
+  trial_payment_type: TrialPaymentType | null;
+  trial_date: string | null;
+  trial_modules_tested: Record<string, Record<string, unknown>>;
+  trial_outcome: string | null;
+  trial_feedback: string | null;
   value_themes: string[];
   value_definition: string | null;
   estimated_value_musd: string | number | null;
@@ -42,6 +78,14 @@ export interface SolutioningUpdate {
   proposed_solution?: string | null;
   engagement_type?: EngagementType | null;
   engagement_duration_months?: number | null;
+  // 03-Jun bug — Trial Summary fields.
+  trial_client_type?: TrialClientType | null;
+  trial_type?: TrialType | null;
+  trial_payment_type?: TrialPaymentType | null;
+  trial_date?: string | null;
+  trial_modules_tested?: Record<string, Record<string, unknown>> | null;
+  trial_outcome?: string | null;
+  trial_feedback?: string | null;
   value_themes?: string[] | null;
   value_definition?: string | null;
   estimated_value_musd?: string | number | null;

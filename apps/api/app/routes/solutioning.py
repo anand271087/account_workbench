@@ -150,6 +150,15 @@ async def patch_solutioning(
                 "value_themes",
                 "value_definition",
                 "estimated_value_musd",
+                # 03-Jun bug — Trial Summary fields are also part of the
+                # Solutioning-owned block; touching them counts as user-edit.
+                "trial_client_type",
+                "trial_type",
+                "trial_payment_type",
+                "trial_date",
+                "trial_modules_tested",
+                "trial_outcome",
+                "trial_feedback",
             )
         )
         for field, value in sol_fields.items():
