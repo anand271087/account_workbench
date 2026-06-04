@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
@@ -734,11 +735,13 @@ function TrialModuleRow({
 }
 
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  // 03-Jun bug 6 — subtitle becomes a tooltip on a small ⓘ next to the title.
   return (
     <div className="bg-white rounded-card border border-beroe-card-border p-5">
-      <h2 className="text-sm font-bold text-text-primary">{title}</h2>
-      {subtitle && <p className="text-xs text-text-muted mt-0.5 mb-3">{subtitle}</p>}
-      {!subtitle && <div className="mb-2" />}
+      <div className="flex items-center gap-1.5 mb-3">
+        <h2 className="text-sm font-bold text-text-primary">{title}</h2>
+        <HelpTooltip text={subtitle} />
+      </div>
       {children}
     </div>
   );

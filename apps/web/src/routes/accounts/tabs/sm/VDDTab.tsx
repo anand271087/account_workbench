@@ -18,6 +18,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/DialogProvider";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   attributionTotals,
@@ -561,17 +562,16 @@ function Card({ children }: { children: React.ReactNode }) {
  *  Verbatim port of prototype line 3397. Aqua is already on the Beroe
  *  brand palette (page 35) so no substitution needed. */
 function SectionHeader({ title, hint }: { title: string; hint?: string }) {
+  // 03-Jun bug 6 — `hint` becomes a hover tooltip on a small ⓘ next to title.
   return (
-    <div className="mb-3">
+    <div className="mb-3 flex items-center gap-1.5">
       <div
         className="text-[11px] font-bold uppercase"
         style={{ color: "#35E1D4", letterSpacing: "0.05em" }}
       >
         {title}
       </div>
-      {hint && (
-        <div className="text-[11px] text-text-muted mt-0.5">{hint}</div>
-      )}
+      <HelpTooltip text={hint} />
     </div>
   );
 }

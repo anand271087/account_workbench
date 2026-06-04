@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useConfirm } from "@/components/DialogProvider";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeBriefSlice,
@@ -1369,15 +1370,13 @@ function BriefSection({
   // reads as one printable page (mirrors prototype `bMomBrief`). That also
   // moves the AI suggest button out of a <summary>, fixing the click-eaten-
   // by-toggle bug behind Row 49.
+  // 03-Jun bug 6 — subtitle becomes a hover tooltip on a small ⓘ badge
+  // next to the title rather than the inline "· subtitle" string.
   return (
     <section className="bg-white rounded-card border border-beroe-card-border overflow-hidden">
-      <header className="px-4 py-3 border-b border-beroe-card-border/60 bg-beroe-bg/40 flex items-center gap-2 flex-wrap">
+      <header className="px-4 py-3 border-b border-beroe-card-border/60 bg-beroe-bg/40 flex items-center gap-1.5 flex-wrap">
         <h3 className="text-sm font-bold text-text-primary">{title}</h3>
-        {subtitle && (
-          <span className="text-[11px] font-normal text-text-muted">
-            · {subtitle}
-          </span>
-        )}
+        <HelpTooltip text={subtitle} />
         {actions && <span className="ml-auto">{actions}</span>}
       </header>
       <div className="px-4 py-3 space-y-2">{children}</div>

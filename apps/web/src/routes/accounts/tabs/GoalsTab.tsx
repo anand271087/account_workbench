@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useNotify, usePrompt } from "@/components/DialogProvider";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   ALIGNMENT_LABELS,
@@ -1472,13 +1473,13 @@ function Section({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  // 03-Jun bug 6 — subtitle → hover tooltip on a small ⓘ next to title.
   return (
     <div className="bg-white rounded-card border border-beroe-card-border p-4">
-      <h3 className="text-sm font-bold text-text-primary">{title}</h3>
-      {subtitle && (
-        <p className="text-xs text-text-muted mt-0.5 mb-2">{subtitle}</p>
-      )}
-      {!subtitle && <div className="mb-2" />}
+      <div className="flex items-center gap-1.5 mb-2">
+        <h3 className="text-sm font-bold text-text-primary">{title}</h3>
+        <HelpTooltip text={subtitle} />
+      </div>
       {children}
     </div>
   );

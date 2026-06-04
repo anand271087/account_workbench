@@ -15,6 +15,7 @@ import { api, ApiError } from "@/lib/api";
 import { authProvider } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/DialogProvider";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { saveExtractionDraft } from "@/lib/extractionDraft";
 import {
   AI_STATUS_LABELS,
@@ -362,7 +363,7 @@ export function KindUploadCard({
                 <h2 className="text-sm font-bold text-text-primary">{title}</h2>
                 {/* 03-Jun bug 6 — long description is now a hover-tooltip
                     on the (i) icon next to the title, not inline text. */}
-                <HeaderHelpTooltip text={description} />
+                <HelpTooltip text={description} />
               </div>
               {headerAction}
             </div>
@@ -1008,31 +1009,5 @@ async function createExtractedContacts(
   return { created, skipped, failed };
 }
 
-// ─────────────────────────────────────────────────────────────
-// 03-Jun bug 6 — Inline section descriptions become a hover tooltip
-// on a small ⓘ icon next to the title. Same visual pattern as the
-// Sales Hand-off / Contract Audit InlineTooltip atoms.
-// ─────────────────────────────────────────────────────────────
-function HeaderHelpTooltip({ text }: { text: string }) {
-  if (!text) return null;
-  return (
-    <span className="relative inline-flex items-center group">
-      <span
-        tabIndex={0}
-        role="button"
-        aria-label="Show section description"
-        className="cursor-help w-3.5 h-3.5 inline-flex items-center justify-center rounded-full border border-beroe-card-border text-[10px] text-text-muted hover:text-beroe-blue hover:border-beroe-blue/40 focus:outline-none focus:ring-1 focus:ring-beroe-blue/40 italic"
-        style={{ fontFamily: "Georgia, serif" }}
-      >
-        i
-      </span>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-0 top-[140%] z-50 w-[340px] rounded-md bg-beroe-navy text-white text-[11px] leading-[1.55] px-2.5 py-2 shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-      >
-        {text}
-        <span className="absolute left-3 bottom-full w-0 h-0 border-x-4 border-x-transparent border-b-4 border-b-beroe-navy" />
-      </span>
-    </span>
-  );
-}
+// 03-Jun bug 6 — HeaderHelpTooltip extracted to @/components/HelpTooltip
+// so every Section/Card helper across the app can reach the same atom.

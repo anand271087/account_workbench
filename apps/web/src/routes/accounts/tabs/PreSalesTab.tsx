@@ -8,6 +8,7 @@ import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useConfirm } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { MeetingBriefEditor } from "@/components/MeetingBriefEditor";
 import {
   EXTRACTION_APPLIED_EVENT,
@@ -615,27 +616,28 @@ function Section({
    */
   variant?: "card" | "group";
 }) {
+  // 03-Jun bug 6 — `subtitle` is now rendered as a hover tooltip on
+  // a small italic ⓘ badge next to the title, not as inline muted text.
   if (variant === "group") {
     return (
       <div className="mb-3">
         <div
-          className="text-[12px] font-bold uppercase tracking-[0.05em] mb-2"
+          className="flex items-center gap-1.5 mb-2"
           style={{ color: "#6b7fa0" }}
         >
-          {title}
+          <div className="text-[12px] font-bold uppercase tracking-[0.05em]">{title}</div>
+          <HelpTooltip text={subtitle} />
         </div>
-        {subtitle && (
-          <p className="text-xs text-text-muted mt-0.5 mb-2">{subtitle}</p>
-        )}
         {children}
       </div>
     );
   }
   return (
     <div className="bg-white rounded-card border border-beroe-card-border p-5">
-      <h2 className="text-sm font-bold text-text-primary">{title}</h2>
-      {subtitle && <p className="text-xs text-text-muted mt-0.5 mb-3">{subtitle}</p>}
-      {!subtitle && <div className="mb-2" />}
+      <div className="flex items-center gap-1.5 mb-3">
+        <h2 className="text-sm font-bold text-text-primary">{title}</h2>
+        <HelpTooltip text={subtitle} />
+      </div>
       {children}
     </div>
   );
