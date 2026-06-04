@@ -72,6 +72,15 @@ class AccountDetail(BaseModel):
     gate_bvd_due_date: date | None = None
     # R13 — Pre-Sales surfaces a banner when signing has been reopened.
     gate_unlocked: bool = False
+    # 03-Jun — CS Handoff page reads the full contract snapshot from
+    # AccountDetail so the Commercial block doesn't need a second call.
+    gate_confirmed_at: datetime | None = None
+    gate_contract_acv: Decimal | None = None
+    gate_contract_term: str | None = None
+    gate_contract_modules: list[str] = []
+    gate_platform_tier: str | None = None
+    gate_account_segment: str | None = None
+    gate_subscribers: str | None = None
 
     # New top-level tabs (M13)
     can_view_sales_handoff: bool = True

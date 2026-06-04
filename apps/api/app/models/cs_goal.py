@@ -58,6 +58,24 @@ class CSGoal(Base):
     phase_b: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'"))
     phase_c: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'"))
 
+    # 03-Jun — CS Handoff prototype port. validation_status is the CSM's
+    # per-goal sign-off and is independent of alignment_status (Phase A/B/C
+    # progress). The phase_*_completed_at timestamps drive the prototype's
+    # per-phase "Done" badge.
+    validation_status: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'pending'")
+    )
+    flag_note: Mapped[str | None] = mapped_column(String, nullable=True)
+    phase_a_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    phase_b_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    phase_c_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     initiatives: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
     history: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'"))
 

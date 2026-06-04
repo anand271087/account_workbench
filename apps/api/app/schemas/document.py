@@ -18,6 +18,8 @@ class DocumentOut(BaseModel):
     id: UUID
     account_id: UUID
     kind: DocKind
+    # 04-Jun — contract-doc subclassification (Signed Proposal / MSA / etc.)
+    contract_subtype: str | None = None
     filename: str
     mime_type: str | None
     size_bytes: int | None
@@ -53,6 +55,24 @@ class DocumentNotesUpdate(BaseModel):
     Empty string allowed (clears the note)."""
 
     notes: str = Field("", max_length=4000)
+
+
+# 04-Jun — Sales Handoff prototype port.
+ContractSubtype = Literal[
+    "Signed Proposal", "Unsigned Proposal", "Work Order",
+    "MSA", "Purchase Order", "Invoice", "SOW",
+    "Amendment", "NDA",
+]
+
+
+class DocumentContractSubtypeUpdate(BaseModel):
+    """PATCH body for contract-doc subtype tagging.
+
+    Sales picks one of the 9 canonical types from a dropdown after
+    upload; the audit table then filters/sorts by type. Server-side
+    CHECK constraint bounds the set."""
+
+    contract_subtype: ContractSubtype | None = None
 
 
 class DocumentListResponse(BaseModel):

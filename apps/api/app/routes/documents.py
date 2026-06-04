@@ -50,6 +50,7 @@ from app.schemas.document import (
     DiscoverySummaryOut,
     DocKind,
     DocumentListResponse,
+    DocumentContractSubtypeUpdate,
     DocumentNotesUpdate,
     DocumentOut,
     DocumentSummaryUpdate,
@@ -180,6 +181,10 @@ async def upload_document(
     kind: Annotated[DocKind, Form()],
     file: Annotated[UploadFile, File()],
     meeting_date: Annotated[str | None, Form()] = None,
+    # 04-Jun — optional contract subtype tagging for kind='contract'.
+    # Frontend picks one of 9 canonical types from a dropdown. Any value
+    # outside the CHECK-bounded set is rejected by the server.
+    contract_subtype: Annotated[str | None, Form()] = None,
 ) -> DocumentUploadResponse:
     _, is_assigned, is_team = await _scope_for_account(db, user, account_id)
     if not can_write_documents(
@@ -256,10 +261,18 @@ async def upload_document(
                 status.HTTP_400_BAD_REQUEST, "meeting_date must be ISO-8601 (YYYY-MM-DD)"
             ) from None
 
+    # 04-Jun — contract_subtype only meaningful when kind='contract'.
+    # Bound the input here so a stray form field on a MoM upload doesn't
+    # pollute the doc row.
+    cs_value = (contract_subtype or "").strip() if kind == "contract" else None
+    if cs_value == "":
+        cs_value = None
+
     doc = Document(
         id=doc_id,
         account_id=account_id,
         kind=kind,
+        contract_subtype=cs_value,
         filename=file.filename or "upload",
         file_hash=digest,
         storage_path=f"{bucket}/{key}",
@@ -383,6 +396,33 @@ async def edit_notes(
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot edit this document")
     doc.notes = body.notes.strip() or None
+    await db.commit()
+    await db.refresh(doc)
+    return DocumentOut.model_validate(doc)
+
+
+@document_router.patch(
+    "/{document_id}/contract-subtype", response_model=DocumentOut,
+)
+async def edit_contract_subtype(
+    document_id: Annotated[UUID, Path()],
+    body: DocumentContractSubtypeUpdate,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DocumentOut:
+    """04-Jun — retag a contract-doc subtype after upload. CHECK
+    constraint bounds the set in DB; Pydantic Literal bounds it here."""
+    doc, _, is_assigned, is_team = await _scope_for_document(db, user, document_id)
+    if doc.kind != "contract":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "contract_subtype only applies to documents with kind='contract'",
+        )
+    if not can_write_documents(
+        user.role, is_assigned=is_assigned, is_team=is_team, kind=doc.kind
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot edit this document")
+    doc.contract_subtype = body.contract_subtype
     await db.commit()
     await db.refresh(doc)
     return DocumentOut.model_validate(doc)

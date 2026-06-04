@@ -82,6 +82,14 @@ export interface AccountDetail {
   gate_renewal_date: string | null;
   gate_bvd_due_date: string | null;
   gate_unlocked: boolean;
+  // 03-Jun — full contract snapshot for the CS Handoff Commercial block.
+  gate_confirmed_at: string | null;
+  gate_contract_acv: string | null;
+  gate_contract_term: string | null;
+  gate_contract_modules: string[];
+  gate_platform_tier: string | null;
+  gate_account_segment: string | null;
+  gate_subscribers: string | null;
   can_view_sales_handoff: boolean;
   // CS Onboarding (M14)
   cs_entry_type: "A" | "B" | null;

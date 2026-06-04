@@ -27,6 +27,9 @@ class Document(Base):
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
     kind: Mapped[str] = mapped_column(DocKind, nullable=False)
+    # 04-Jun — typed sub-classification for contract docs (Signed Proposal /
+    # MSA / SOW / NDA / etc.). CHECK-bounded set in migration 0059.
+    contract_subtype: Mapped[str | None] = mapped_column(String, nullable=True)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     file_hash: Mapped[str] = mapped_column(String, nullable=False)
     storage_path: Mapped[str] = mapped_column(String, nullable=False)

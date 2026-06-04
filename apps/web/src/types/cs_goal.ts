@@ -9,6 +9,13 @@ export type CSGoalCategory =
 
 export type CSGoalAlignment = "not_started" | "partial" | "aligned";
 
+/** 03-Jun — CSM's per-goal sign-off, independent of alignment_status. */
+export type CSGoalValidationStatus =
+  | "pending"
+  | "accepted"
+  | "flagged"
+  | "removed";
+
 export type GroundworkStatus =
   | "done_current"
   | "done_outdated"
@@ -93,9 +100,16 @@ export interface CSGoal {
   owner: string | null;
   alignment_status: CSGoalAlignment;
 
+  // 03-Jun — CSM per-goal sign-off + flag note.
+  validation_status: CSGoalValidationStatus;
+  flag_note: string | null;
+
   phase_a: PhaseA;
   phase_b: PhaseB;
   phase_c: PhaseC;
+  phase_a_completed_at: string | null;
+  phase_b_completed_at: string | null;
+  phase_c_completed_at: string | null;
 
   initiatives: Initiative[];
   history: HistoryAction[];
@@ -133,6 +147,11 @@ export type CSGoalUpdate = Partial<
     | "phase_b"
     | "phase_c"
     | "initiatives"
+    | "validation_status"
+    | "flag_note"
+    | "phase_a_completed_at"
+    | "phase_b_completed_at"
+    | "phase_c_completed_at"
   >
 >;
 

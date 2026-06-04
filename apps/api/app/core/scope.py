@@ -53,6 +53,12 @@ _FIELDS = (
     # M14 — CS Onboarding columns.
     "cs_entry_type", "cs_entry_b_context", "cs_entry_b_goals",
     "cs_handover_checklist", "cs_stakeholders",
+    # 03-Jun — CS Handoff state (realignment + started).
+    "cs_handoff",
+    # 04-Jun — Sales Handoff stage-1 lock + per-module configs +
+    # audit-only extras (billing/payment/discount/geography/caveats).
+    "sh_locked_at", "sh_locked_by",
+    "gate_module_configs", "gate_contract_extras",
     # M19 — Success Contract (3-lock structure).
     "success_contract", "success_contract_locked_at", "success_contract_locked_by",
     # M22 — Value Delivery Document.

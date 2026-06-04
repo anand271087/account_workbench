@@ -247,13 +247,44 @@ async def patch_cs_goal(
         if now_complete and not was_complete:
             completed_phases.append(phase_key)
 
-    # Apply scalars + phases + initiatives.
+    # Apply scalars + phases + initiatives + 03-Jun validation fields.
     for key in (
         "title", "category", "target_value", "target_date", "owner",
         "alignment_status", "phase_a", "phase_b", "phase_c", "initiatives",
+        "validation_status", "flag_note",
+        "phase_a_completed_at", "phase_b_completed_at", "phase_c_completed_at",
     ):
         if key in payload:
             setattr(goal, key, payload[key])
+
+    # 03-Jun — stamp phase_*_completed_at automatically when a phase
+    # flips to complete; clear it when it flips back. Belt-and-braces
+    # so callers don't have to send the timestamp explicitly.
+    for phase in completed_phases:
+        ts_field = f"{phase}_completed_at"
+        if ts_field not in payload:
+            setattr(goal, ts_field, _now())
+    for phase_key in ("phase_a", "phase_b", "phase_c"):
+        if phase_key not in payload:
+            continue
+        flag = f"{phase_key}_complete"
+        if not bool((getattr(goal, phase_key) or {}).get(flag)):
+            ts_field = f"{phase_key}_completed_at"
+            if ts_field not in payload:
+                setattr(goal, ts_field, None)
+
+    # 03-Jun — flag_note is required when validation_status='flagged'.
+    # CHECK constraint enforces in DB; surface a cleaner 422 here.
+    if (
+        "validation_status" in payload
+        and payload["validation_status"] == "flagged"
+    ):
+        note = (goal.flag_note or "").strip()
+        if len(note) < 5:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Flagging a goal requires a note of at least 5 characters.",
+            )
 
     # Auto-derive alignment if the caller didn't explicitly set it.
     if "alignment_status" not in payload and any(

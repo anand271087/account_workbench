@@ -15,6 +15,8 @@ export interface Document {
   id: string;
   account_id: string;
   kind: DocKind;
+  // 04-Jun — contract-doc subclassification (Signed Proposal / MSA / etc.)
+  contract_subtype: string | null;
   filename: string;
   mime_type: string | null;
   size_bytes: number | null;

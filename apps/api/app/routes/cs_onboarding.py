@@ -177,6 +177,12 @@ async def patch_cs_onboarding(
         _dedup_check(merged)
         real.cs_stakeholders = merged
 
+    # 03-Jun — cs_handoff is REPLACED whole (state machine), not merged.
+    # The caller PATCHes the entire new state including null-ing the
+    # realignment when resolved.
+    if "cs_handoff" in payload:
+        real.cs_handoff = payload["cs_handoff"] or {}
+
     real.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(real)

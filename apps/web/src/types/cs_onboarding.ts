@@ -8,6 +8,22 @@ export interface Stakeholder {
   phone: string | null;
 }
 
+/** 03-Jun — CS Handoff state. Realignment is null when none is in
+ *  flight; `started` flips true when the CSM clicks "Start Success
+ *  Journey" after every ready-check passes. */
+export interface CSHandoffRealignment {
+  block: "Commercial" | "Client" | "Commitment";
+  note: string;
+  sent_at: string; // ISO date
+  sent_to: string; // free-text — Sales / Contract Ops lead name
+}
+
+export interface CSHandoffState {
+  realignment?: CSHandoffRealignment | null;
+  started?: boolean;
+  started_at?: string | null;
+}
+
 export interface CSOnboarding {
   account_id: string;
   cs_entry_type: CSEntryType | null;
@@ -15,6 +31,7 @@ export interface CSOnboarding {
   cs_entry_b_goals: string | null;
   cs_handover_checklist: Record<string, boolean>;
   cs_stakeholders: Record<string, Stakeholder>;
+  cs_handoff: CSHandoffState;
   activated: boolean;
   is_editable: boolean;
 }
@@ -25,6 +42,7 @@ export interface CSOnboardingUpdate {
   cs_entry_b_goals?: string | null;
   cs_handover_checklist?: Record<string, boolean>;
   cs_stakeholders?: Record<string, Partial<Stakeholder>>;
+  cs_handoff?: CSHandoffState | null;
 }
 
 /** Three canonical CS stakeholder roles, in render order.

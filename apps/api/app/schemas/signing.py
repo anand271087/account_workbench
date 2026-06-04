@@ -64,10 +64,54 @@ class SigningGateOut(BaseModel):
 
     handover_quality_check: dict
 
+    # 04-Jun — Sales Handoff prototype port. Stage-1 lock + per-module
+    # configs + audit-only extras. gate_signed remains the stage-2 lock.
+    sh_locked_at: datetime | None = None
+    sh_locked_by: UUID | None = None
+    sh_locked_by_name: str | None = None
+    gate_module_configs: dict = Field(default_factory=dict)
+    gate_contract_extras: dict = Field(default_factory=dict)
+
     # Capabilities so the frontend can render the right buttons without
     # re-deriving RBAC.
     can_sign: bool = False
     can_unlock: bool = False
+    can_sh_lock: bool = False
+    can_sh_unlock: bool = False
+
+
+class ShLockIn(BaseModel):
+    """Sales locks the handoff for onboarding (stage 1 → 2)."""
+    # Empty body — locking is just a state flip; the act of POSTing
+    # against /sh-lock is the intent.
+    pass
+
+
+class ShUnlockIn(BaseModel):
+    """Admin reopens the Sales handoff. Reason required for audit."""
+
+    reason: str = Field(..., min_length=10, max_length=600)
+
+
+class ModuleConfigsUpdate(BaseModel):
+    """PATCH body for per-module configs.
+
+    Body shape: { "<module name>": { ...fields }, ... }
+    Modules absent from the body are left unchanged; passing a module
+    with an empty dict explicitly clears its config.
+    """
+
+    configs: dict[str, dict] = Field(..., max_length=64)
+
+
+class ContractExtrasUpdate(BaseModel):
+    """PATCH body for the audit-only extras blob.
+
+    Open shape; the prototype evolves field names freely. Server stores
+    whatever's provided and merges over the existing extras.
+    """
+
+    extras: dict = Field(..., max_length=32)
 
 
 class SignAccountIn(BaseModel):

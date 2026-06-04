@@ -104,6 +104,35 @@ class Account(Base):
         JSONB, nullable=False, server_default=text("'{}'")
     )
 
+    # 03-Jun — CS Handoff state for the prototype port. Carries the
+    # in-flight realignment (block + note + sent_at/to) and whether the
+    # Success Journey has been started.
+    cs_handoff: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
+
+    # 04-Jun — Sales Handoff prototype port (two-lock model).
+    # sh_locked_* = Sales hands to Contract Ops (stage 1 → 2).
+    # gate_signed (existing) = Contract Audit complete (stage 2 → 3).
+    sh_locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sh_locked_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    # Per-module contract configurations. Key = module name, value = dict
+    # with module-specific fields (tier/users/sources/etc.). Permissive
+    # shape so prototype tweaks flow through.
+    gate_module_configs: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
+    # Audit-only extras (billing freq, payment terms, discount, geography,
+    # module caveats, audit notes, other terms, tcv override, audited_by
+    # name). Single jsonb to avoid a dozen new columns.
+    gate_contract_extras: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'")
+    )
+
     # M19 — Success Contract. CSM's commitment to the client. Three-lock
     # structure (primary metric / measurement method / value narrative).
     # success_contract_locked_at = null → in-draft; non-null → locked.

@@ -1,1540 +1,1920 @@
-// M13 — Sales Handoff & Signing.
+// 04-Jun — Sales Handoff page (full prototype port).
 //
-// Three cards:
-//   1. Sales Hand-off — value validation, engagement timeline, watch-outs,
-//      handoff doc (sh_* fields on account_solutioning).
-//   2. CLIENT SIGNED stage gate — before/after states. Before: Sales captures
-//      signed date / ACV / term and confirms; after: signed metadata shown
-//      with renewal date + VDD due date derived from term.
-//   3. Handover Quality Check — 4 items, auto-detected with manual overrides.
+// Single-page mirror of beroe_sales_handoff_proto.html. Two-card layout:
+//   Section A · Sales Handoff (purple)       — Sales captures value-def
+//     validation, client stakeholders, engagement timeline, watch-outs,
+//     contract docs. Lock to hand off to Contract Ops.
+//   Section B · Contract Audit (amber)       — Contract Ops fills dates,
+//     commercial terms, modules + per-module configs, caveats, geography,
+//     other terms. Locks via /sign endpoint → handed off to CS.
+//
+// Two locks:
+//   * sh_locked_at (Stage 1 → 2) via POST /sh-lock
+//   * gate_signed=true (Stage 2 → 3) via POST /sign
+//
+// Demo state toggle (fixed top-right) mirrors the prototype's mock-toggle.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
+import { authProvider } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes";
-import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
-import { useNotify, usePrompt } from "@/components/DialogProvider";
-// 29-May bug 29-16 — Sales Handoff Documents upload card.
-import { KindUploadCard } from "@/components/KindUploadCard";
-// Auto-populate Client Signed from handoff doc (KindUploadCard saves a
-// "handoff" slice in localStorage; we consume it here).
-import {
-  EXTRACTION_APPLIED_EVENT,
-  consumeHandoffSlice,
-} from "@/lib/extractionDraft";
+import { useConfirm, useNotify, usePrompt } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../AccountProfileLayout";
-import {
-  SH_VALIDATION_LABELS,
-  type ShValidation,
-  type Solutioning,
-  type SolutioningUpdate,
-} from "@/types/solutioning";
-import {
-  HANDOVER_QC_ITEMS,
-  MODULE_OPTIONS,
-  PLATFORM_TIER_OPTIONS,
-  SEGMENT_OPTIONS,
-  TERM_OPTIONS,
-  type ContractDocBody,
-  type HandoverChecklistBody,
-  type SignAccountBody,
-  type SigningGate,
-  type UnlockSigningBody,
+import type {
+  SigningGate,
+  SignAccountBody,
+  ModuleName,
+  DocType,
+  ModuleField,
 } from "@/types/signing";
+import {
+  ALL_MODULES,
+  DOC_TYPES,
+  BILLING_FREQ_OPTIONS,
+  PAYMENT_TERM_OPTIONS,
+  GEO_OPTIONS,
+  FIRST_CP_OPTIONS,
+  MODULE_CONFIG_SPECS,
+} from "@/types/signing";
+import type { Solutioning, SolutioningUpdate, ShValidation } from "@/types/solutioning";
+import { SH_VALIDATION_LABELS } from "@/types/solutioning";
+import type { Document } from "@/types/document";
 
-const SH_VALIDATION_OPTIONS: ShValidation[] = [
-  "confirmed",
-  "partially_confirmed",
-  "revised",
-];
+// ─────────────────────────────────────────────────────────────
+// Brand-locked palette (off-palette prototype hex mapped to tokens).
+// ─────────────────────────────────────────────────────────────
+const C = {
+  BLUE: "#4A00F8",    // Indigo
+  PURPLE: "#C344C7",  // Fuscia
+  AMBER: "#F0BC41",   // Risk Amber / Bumblebee
+  GREEN: "#6EC457",   // Risk Green
+  RED: "#CF4548",     // Risk Red
+  TEAL: "#35E1D4",    // Aqua
+  NAVY: "#001137",    // Midnight
+  T2: "#475569",
+  T3: "#94a3b8",
+  CB: "#e4eaf6",
+  BG: "#EAF1F5",
+};
 
-export default function SalesHandoffTab() {
-  const account = useAccountFromLayout();
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-
-  // ---- Queries ----
-  const { data: gate, isLoading: gateLoading } = useQuery<SigningGate>({
-    queryKey: ["signing-gate", account.id],
-    queryFn: () => api.get<SigningGate>(`/api/v1/accounts/${account.id}/sign`),
-  });
-  const { data: sol, isLoading: solLoading } = useQuery<Solutioning>({
-    queryKey: ["solutioning", account.id],
-    queryFn: () => api.get<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`),
-  });
-
-  // ---- Sales hand-off form state (sh_* fields on solutioning) ----
-  const [form, setForm] = useState<Solutioning | null>(null);
-  const [shError, setShError] = useState<string | null>(null);
-  useEffect(() => {
-    if (sol && !form) setForm(sol);
-  }, [sol, form]);
-  const dirty = useMemo(() => {
-    if (!form || !sol) return false;
-    return JSON.stringify(shSlice(form)) !== JSON.stringify(shSlice(sol));
-  }, [form, sol]);
-
-  const saveSh = useMutation({
-    mutationFn: (body: SolutioningUpdate) =>
-      api.patch<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`, body),
-    onSuccess: (saved) => {
-      qc.setQueryData(["solutioning", account.id], saved);
-      qc.invalidateQueries({ queryKey: ["activity", account.id] });
-      setForm(saved);
-      setShError(null);
-    },
-    onError: (e: ApiError) => setShError(e.message),
-  });
-
-  const saveDirty = () => {
-    if (form && sol) saveSh.mutate(shDiff(form, sol));
-  };
-  const guard = useUnsavedChangesGuard({
-    dirty,
-    isSaving: saveSh.isPending,
-    onSaveShortcut: saveDirty,
-  });
-
-  // ---- Signing gate mutations ----
-  const [signError, setSignError] = useState<string | null>(null);
-  const sign = useMutation({
-    mutationFn: (body: SignAccountBody) =>
-      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sign`, body),
-    onSuccess: (g) => {
-      qc.setQueryData(["signing-gate", account.id], g);
-      qc.invalidateQueries({ queryKey: ["account", account.id] });
-      qc.invalidateQueries({ queryKey: ["activity", account.id] });
-      setSignError(null);
-    },
-    onError: (e: ApiError) => setSignError(e.message),
-  });
-  const unlock = useMutation({
-    mutationFn: (body: UnlockSigningBody) =>
-      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sign/unlock`, body),
-    onSuccess: (g) => {
-      qc.setQueryData(["signing-gate", account.id], g);
-      qc.invalidateQueries({ queryKey: ["account", account.id] });
-      setSignError(null);
-    },
-    onError: (e: ApiError) => setSignError(e.message),
-  });
-  const checklist = useMutation({
-    mutationFn: (body: HandoverChecklistBody) =>
-      api.patch<SigningGate>(`/api/v1/accounts/${account.id}/handover-checklist`, body),
-    onSuccess: (g) => {
-      qc.setQueryData(["signing-gate", account.id], g);
-      setSignError(null);
-    },
-    onError: (e: ApiError) => setSignError(e.message),
-  });
-  const contractDoc = useMutation({
-    mutationFn: (body: ContractDocBody) =>
-      api.patch<SigningGate>(`/api/v1/accounts/${account.id}/contract-doc`, body),
-    onSuccess: (g) => {
-      qc.setQueryData(["signing-gate", account.id], g);
-      setSignError(null);
-    },
-    onError: (e: ApiError) => setSignError(e.message),
-  });
-
-  // ---- Signing form state (before-signed only) ----
-  const [signForm, setSignForm] = useState<SignAccountBody>({
-    gate_signed_date: new Date().toISOString().slice(0, 10),
-    gate_contract_acv: "",
-    gate_contract_term: "",
-    gate_contract_modules: [],
-    gate_platform_tier: "",
-    gate_account_segment: "",
-    gate_subscribers: "",
-  });
-
-  // Auto-populate Client Signed from a Sales-Handoff doc upload.
-  // KindUploadCard saves the structured fields in localStorage as a
-  // "handoff" slice; we consume + merge into signForm (fill-blank-only
-  // so user edits never get clobbered by a re-upload).
-  const [handoffNote, setHandoffNote] = useState<string | null>(null);
-  useEffect(() => {
-    const applyDraft = () => {
-      const slice = consumeHandoffSlice(account.id);
-      if (!slice) return;
-      setSignForm((prev) => ({
-        gate_signed_date:
-          slice.gate_signed_date && !prev.gate_signed_date
-            ? slice.gate_signed_date
-            : prev.gate_signed_date,
-        gate_contract_acv:
-          slice.gate_contract_acv_usd != null && !prev.gate_contract_acv
-            ? String(slice.gate_contract_acv_usd)
-            : prev.gate_contract_acv,
-        gate_contract_term:
-          slice.gate_contract_term && !prev.gate_contract_term
-            ? slice.gate_contract_term
-            : prev.gate_contract_term,
-        gate_contract_modules:
-          slice.gate_contract_modules && slice.gate_contract_modules.length > 0
-            ? Array.from(
-                new Set([
-                  ...(prev.gate_contract_modules ?? []),
-                  ...slice.gate_contract_modules,
-                ]),
-              )
-            : prev.gate_contract_modules,
-        gate_platform_tier:
-          slice.gate_platform_tier && !prev.gate_platform_tier
-            ? slice.gate_platform_tier
-            : prev.gate_platform_tier,
-        gate_account_segment:
-          slice.gate_account_segment && !prev.gate_account_segment
-            ? slice.gate_account_segment
-            : prev.gate_account_segment,
-        gate_subscribers:
-          slice.gate_subscribers && !prev.gate_subscribers
-            ? slice.gate_subscribers
-            : prev.gate_subscribers,
-      }));
-      setHandoffNote(
-        slice.is_stub
-          ? "Pre-filled from the uploaded handoff doc (heuristic extract — please verify)."
-          : "Pre-filled from the uploaded handoff doc — please verify and click Sign.",
-      );
-    };
-    applyDraft();
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (!detail || detail.accountId === account.id) applyDraft();
-    };
-    window.addEventListener(EXTRACTION_APPLIED_EVENT, handler);
-    return () => window.removeEventListener(EXTRACTION_APPLIED_EVENT, handler);
-  }, [account.id]);
-
-  if (gateLoading || solLoading || !form || !gate) {
-    return <div className="text-sm text-text-muted">Loading sales hand-off…</div>;
-  }
-
-  const editable = form.is_editable;
-
-  return (
-    <div className="space-y-4">
-      {/* 28-May — "Received from Solutioning" magenta pill (prototype
-          line 5972-5975). Sales' team colour is #C344C7 (magenta).
-          Renders only when sh_value_received_at is set. */}
-      {form.sh_value_received_at && (
-        <div
-          className="rounded-card px-3 py-1.5 flex items-center gap-2"
-          style={{
-            background: "#C344C710",
-            border: "1px solid #C344C730",
-          }}
-        >
-          <span className="text-[13px]">📥</span>
-          <span
-            className="text-[11px] font-semibold"
-            style={{ color: "#C344C7" }}
-          >
-            Received from Solutioning ·{" "}
-            {new Date(form.sh_value_received_at).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        </div>
-      )}
-
-      {/* 28-May — Outer C) Sales Hand-off card (prototype line 5977-6034).
-          Magenta "C" badge + "Sales" team pill. Opacity dims when
-          locked at signing (gate signed & not unlocked). */}
-      <div
-        className={cn(
-          "bg-white rounded-card border border-beroe-card-border p-5",
-          gate?.gate_signed && !gate?.gate_unlocked && "opacity-[0.85]",
-        )}
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <span
-            className="w-[22px] h-[22px] rounded-md text-white text-[10px] font-extrabold flex items-center justify-center flex-shrink-0"
-            style={{ background: "#C344C7" }}
-          >
-            C
-          </span>
-          <span className="text-[14px] font-bold text-text-primary">
-            Sales Hand-off
-          </span>
-          <span
-            className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
-            style={{
-              background: "#C344C715",
-              color: "#C344C7",
-              border: "1px solid #C344C730",
-            }}
-          >
-            Sales
-          </span>
-        </div>
-
-        {/* 29-May bug 29-13 — "Before starting" must be the FIRST field
-            on the Sales Hand-off section regardless of signing state.
-            The lock chip now renders ABOVE it (small, muted) when the
-            account is locked. */}
-        {gate?.gate_signed && !gate?.gate_unlocked && (
-          <div className="text-[10px] text-text-muted mb-2 flex items-center gap-1.5">
-            🔒 Locked at signing
-            {gate.gate_signed_date && (
-              <> · {new Date(gate.gate_signed_date).toLocaleDateString()}</>
-            )}
-          </div>
-        )}
-        <div className="rounded-lg px-3.5 py-2.5 mb-3 text-[11px] leading-relaxed bg-beroe-blue/5 border border-beroe-blue/30 text-beroe-blue">
-          <b>Before starting</b> — make sure you have from Sales: (1)
-          contract value and ACV, (2) at least one named stakeholder,
-          (3) the agreed category list, (4) a stated savings target or
-          success metric. Missing any of these? Resolve with Sales
-          before proceeding.
-        </div>
-
-        <p className="text-xs text-text-muted mb-3">
-          Continues from the Solutioning lock. Sales validates the value
-          definition, fills in the engagement timeline, and notes any
-          watch-outs before the signing event.
-        </p>
-
-        {/* 29-May bug 29-14 — "Value Definition Validation" group
-            heading now sits ABOVE the violet From-Solutioning box per
-            the screenshot, so the Sales reader sees "what they're
-            validating" labelled before reading the content. */}
-        <div className="text-[12px] uppercase tracking-wider font-bold text-text-secondary mt-1 mb-1.5">
-          Value Definition Validation
-        </div>
-
-        {/* 27-May Row 85 — Value Definition (received) + Value Themes
-            merged into ONE violet box so Sales sees the full Solutioning
-            output at a glance instead of two separate fields. */}
-        <div className="rounded-xl border-2 border-beroe-purple/30 bg-beroe-purple/10/60 p-3 mb-3">
-          <div className="text-[10px] uppercase tracking-wider font-bold text-beroe-purple mb-1.5">
-            From Solutioning
-          </div>
-          <div className="text-[11px] font-bold text-beroe-purple mb-0.5">
-            Value definition
-          </div>
-          {form.sh_value_from_solutioning ? (
-            <div className="text-sm text-text-primary whitespace-pre-wrap mb-2">
-              {form.sh_value_from_solutioning}
-            </div>
-          ) : (
-            <div className="text-xs text-text-muted italic mb-2">
-              Lock the Solutioning value definition first — the snapshot will
-              appear here for Sales to validate.
-            </div>
-          )}
-          {form.sh_value_themes_from_solutioning && (
-            <>
-              <div className="text-[11px] font-bold text-beroe-purple mt-2 mb-0.5">
-                Value themes
-              </div>
-              <div className="text-sm text-text-primary">
-                {form.sh_value_themes_from_solutioning}
-              </div>
-            </>
-          )}
-          {form.sh_value_received_at && (
-            <div className="text-[10px] text-beroe-purple/70 mt-2 italic">
-              Received {new Date(form.sh_value_received_at).toLocaleString()}
-            </div>
-          )}
-        </div>
-
-        {/* GROUP 1 — Value Definition Validation form fields.
-            29-May bug 29-14 — the section title now lives above the
-            violet box (added directly under the Sales Hand-off intro).
-            This inner Section keeps the form rendering. */}
-        <Section variant="group" title="">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Sales validation">
-              <select
-                value={form.sh_value_validation ?? ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    sh_value_validation: (e.target.value || null) as ShValidation | null,
-                  })
-                }
-                disabled={!editable}
-                className={inputCls(editable)}
-              >
-                <option value="">— Select —</option>
-                {SH_VALIDATION_OPTIONS.map((v) => (
-                  <option key={v} value={v}>{SH_VALIDATION_LABELS[v]}</option>
-                ))}
-              </select>
-            </Field>
-            {/* 29-May bug 29-15 — Stakeholder sign-off relocated from
-                here (Sales Validation group) to Engagement Timeline,
-                placed after First checkpoint per the prototype
-                screenshot. */}
-          </div>
-
-          <Field label="Validation notes">
-            <textarea
-              rows={3}
-              maxLength={4000}
-              value={form.sh_validation_notes ?? ""}
-              placeholder="Anything Sales pushed back on or refined."
-              onChange={(e) =>
-                setForm({ ...form, sh_validation_notes: e.target.value || null })
-              }
-              disabled={!editable}
-              className={textareaCls(editable)}
-            />
-          </Field>
-        </Section>
-
-        {/* GROUP 2 — Engagement Timeline (prototype line 6015).
-            29-May bug 29-15 — First checkpoint reinstated (was removed
-            in 28-08; the newer 29-May spec keeps it) and Stakeholder
-            sign-off relocated here, placed under the timeline. */}
-        <Section variant="group" title="Engagement Timeline">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Go-live date">
-            <input
-              type="date"
-              value={form.sh_go_live_date ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, sh_go_live_date: e.target.value || null })
-              }
-              disabled={!editable}
-              className={inputCls(editable)}
-            />
-          </Field>
-          <Field label="First checkpoint">
-            <input
-              type="date"
-              value={form.sh_first_checkpoint ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, sh_first_checkpoint: e.target.value || null })
-              }
-              disabled={!editable}
-              className={inputCls(editable)}
-            />
-          </Field>
-        </div>
-
-        <Field label="Stakeholder sign-off">
-          <input
-            type="text"
-            maxLength={600}
-            value={form.sh_stakeholder_signoff ?? ""}
-            placeholder="Who on the client side approved (e.g. Jordan Mills, Dave Kowalski)"
-            onChange={(e) =>
-              setForm({ ...form, sh_stakeholder_signoff: e.target.value || null })
-            }
-            disabled={!editable}
-            className={inputCls(editable)}
-          />
-        </Field>
-
-        {/* 28-May bug 28-08 — Commercial context field removed. */}
-
-        <Field label="Watch-outs & risks">
-          <textarea
-            rows={3}
-            maxLength={4000}
-            value={form.sales_watchouts ?? ""}
-            placeholder="What might bite us between sign and go-live."
-            onChange={(e) =>
-              setForm({ ...form, sales_watchouts: e.target.value || null })
-            }
-            disabled={!editable}
-            className={textareaCls(editable)}
-          />
-        </Field>
-
-        {/* 29-May bug 29-16 — actual file upload affordance for the
-            handoff document (was just a filename text input). Files
-            land under the existing "contract" doc kind and surface in
-            the Account Kit → Documents grid. */}
-        <div className="mt-3">
-          <KindUploadCard
-            accountId={account.id}
-            kind="contract"
-            title="Sales handoff documents"
-            description="Upload the signed handoff doc, ROI deck, commercial brief, or any other artefact Sales is passing to CS."
-            emptyHint="No handoff documents yet. Drag a file onto the card above (hover the ? for supported formats)."
-          />
-        </div>
-
-        </Section>
-
-        {/* Sticky save bar for sh_* fields */}
-        {editable && (
-          <div
-            className={cn(
-              "sticky bottom-0 -mx-5 px-5 py-3 flex items-center gap-3 border-t z-30 mt-3 transition-colors",
-              dirty
-                ? "bg-beroe-amber/15 border-beroe-amber/50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"
-                : "bg-white border-beroe-card-border",
-            )}
-          >
-            {shError && (
-              <span className="text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-1">
-                {shError}
-              </span>
-            )}
-            {!shError && dirty && (
-              <span className="flex items-center gap-1.5 text-xs text-beroe-amber font-bold">
-                <span className="inline-block w-2 h-2 rounded-full bg-beroe-amber/150 animate-pulse" />
-                Unsaved hand-off changes
-              </span>
-            )}
-            {!dirty && !shError && (
-              <span className="text-xs text-text-muted">✓ Hand-off saved</span>
-            )}
-            <button
-              onClick={() => sol && setForm(sol)}
-              disabled={!dirty || saveSh.isPending}
-              className="ml-auto px-3 py-1.5 rounded-lg text-sm border border-beroe-card-border text-text-secondary disabled:opacity-50 bg-white"
-            >
-              Discard
-            </button>
-            <button
-              onClick={saveDirty}
-              disabled={!dirty || saveSh.isPending}
-              className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
-            >
-              {saveSh.isPending ? "Saving…" : "Save hand-off"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ---------- Card 2: CLIENT SIGNED stage gate ----------
-          29-May bug 29-18 — Handover Quality Check now lives inside
-          this card as the `handoverQualityCheck` slot. Renders only
-          when signed (no checklist to show on a pending account). */}
-      <SigningGateCard
-        gate={gate}
-        signForm={signForm}
-        setSignForm={setSignForm}
-        sign={(b) => sign.mutate(b)}
-        unlock={(reason) => unlock.mutate({ reason })}
-        signing={sign.isPending}
-        unlocking={unlock.isPending}
-        error={signError}
-        handoffNote={handoffNote}
-        onDismissHandoffNote={() => setHandoffNote(null)}
-        onContractDoc={(filename) =>
-          contractDoc.mutate({ gate_contract_doc: filename })
-        }
-        handoverQualityCheck={
-          gate.gate_signed && !gate.gate_unlocked ? (
-            <HandoverQualityCheck
-              account={account}
-              gate={gate}
-              onSet={(items) => checklist.mutate({ items })}
-              saving={checklist.isPending}
-            />
-          ) : undefined
-        }
-      />
-
-      {/* H40 — Success Metrics live INSIDE Sales Handoff after signing
-          (was previously just a link card). Read-only summary with a
-          "Manage in Value Tracking →" footer that deep-links the user out. */}
-      {gate.gate_signed && !gate.gate_unlocked && (
-        <InlineSuccessMetricsCard accountId={account.id} />
-      )}
-
-      {gate.gate_signed && !gate.gate_unlocked && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() =>
-              navigate(`/accounts/${account.id}/success-management/contract-goals`)
-            }
-            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-beroe-bg transition-colors"
-          >
-            <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
-              Success Management
-            </div>
-            <div className="text-sm font-bold text-text-primary mt-0.5">
-              Open Success Contract & Goals →
-            </div>
-            <div className="text-[11px] text-text-muted mt-0.5">
-              Three-lock contract + CS goals from the value definition.
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              navigate(`/accounts/${account.id}/success-management/value-tracking`)
-            }
-            className="bg-white rounded-card border border-beroe-card-border px-4 py-3 text-left hover:bg-beroe-bg transition-colors"
-          >
-            <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted">
-              Value Tracking
-            </div>
-            <div className="text-sm font-bold text-text-primary mt-0.5">
-              Manage Success Metrics →
-            </div>
-            <div className="text-[11px] text-text-muted mt-0.5">
-              Add / log values on the full Value Tracking surface.
-            </div>
-          </button>
-        </div>
-      )}
-
-      {guard.pendingHref && (
-        <UnsavedChangesDialog
-          pendingHref={guard.pendingHref}
-          saving={saveSh.isPending}
-          onSaveAndGo={async () => {
-            try {
-              if (form && sol) await saveSh.mutateAsync(shDiff(form, sol));
-              guard.proceed();
-            } catch {
-              /* shError surfaces in UI */
-            }
-          }}
-          onDiscardAndGo={() => {
-            if (sol) setForm(sol);
-            guard.proceed();
-          }}
-          onStay={guard.stay}
-        />
-      )}
-    </div>
-  );
+interface ContactRow {
+  id: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone?: string | null;
+  is_spoc: boolean;
+  is_sponsor: boolean;
+  decision_power: string | null;
+  seniority: string | null;
 }
 
-// ============================================================
-// CLIENT SIGNED card
-// ============================================================
-
-function SigningGateCard({
-  gate,
-  signForm,
-  setSignForm,
-  sign,
-  unlock,
-  signing,
-  unlocking,
-  error,
-  onContractDoc,
-  handoverQualityCheck,
-  handoffNote,
-  onDismissHandoffNote,
-}: {
-  gate: SigningGate;
-  signForm: SignAccountBody;
-  setSignForm: (v: SignAccountBody) => void;
-  sign: (b: SignAccountBody) => void;
-  unlock: (reason: string) => void;
-  signing: boolean;
-  unlocking: boolean;
-  error: string | null;
-  onContractDoc: (filename: string | null) => void;
-  // 29-May bug 29-18 — Handover Quality Check now lives inside the
-  // CLIENT SIGNED card. The standalone slot at the parent level is
-  // removed in favour of this children-style prop so the visual
-  // grouping matches the prototype screenshot.
-  handoverQualityCheck?: React.ReactNode;
-  // Auto-populate banner: shown when KindUploadCard's handoff slice
-  // pre-filled the sign form from an uploaded contract doc.
-  handoffNote?: string | null;
-  onDismissHandoffNote?: () => void;
-}) {
-  const notify = useNotify();
-  const promptDlg = usePrompt();
-  const isSigned = gate.gate_signed;
-  const inEdit = !isSigned || gate.gate_unlocked;
-  const renewalAfterBvd =
-    gate.gate_renewal_date &&
-    gate.gate_bvd_due_date &&
-    gate.gate_bvd_due_date > gate.gate_renewal_date;
-
-  return (
-    <div
-      className={cn(
-        "rounded-card border-2 bg-white p-5",
-        isSigned && !gate.gate_unlocked
-          ? "border-beroe-green/40"
-          : isSigned && gate.gate_unlocked
-            ? "border-beroe-amber/50"
-            : "border-beroe-card-border",
-      )}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-extrabold tracking-wide uppercase">
-          CLIENT SIGNED
-        </h2>
-        {isSigned && !gate.gate_unlocked && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-beroe-green/20 text-beroe-green">
-            ✓ Live
-          </span>
-        )}
-        {isSigned && gate.gate_unlocked && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-beroe-amber/20 text-beroe-amber">
-            🔓 Unlocked — needs re-confirm
-          </span>
-        )}
-        {!isSigned && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-beroe-bg text-text-muted">
-            Pending
-          </span>
-        )}
-      </div>
-
-      {error && (
-        <div className="mb-3 text-xs text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-3 py-2">
-          {error}
-        </div>
-      )}
-
-      {/* Always-visible metadata grid — empty cells when unsigned. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        <SignedStat label="Signed date" value={fmtDate(gate.gate_signed_date)} />
-        <SignedStat label="Contract ACV" value={fmtMoney(gate.gate_contract_acv)} />
-        <SignedStat label="Contract term" value={gate.gate_contract_term ?? "—"} />
-        <SignedStat label="Renewal date" value={fmtDate(gate.gate_renewal_date)} />
-        <SignedStat
-          label="VDD due date"
-          value={fmtDate(gate.gate_bvd_due_date)}
-          warn={!!renewalAfterBvd}
-        />
-        <SignedStat
-          label="Confirmed at"
-          value={gate.gate_confirmed_at ? fmtDateTime(gate.gate_confirmed_at) : "—"}
-        />
-      </div>
-
-      {/* 29-May bug 29-18 — Handover Quality Check rendered inline
-          inside CLIENT SIGNED card. */}
-      {handoverQualityCheck && (
-        <div className="mb-3">{handoverQualityCheck}</div>
-      )}
-
-      {/* Handoff auto-fill banner — surfaces only when the upload
-          card pre-filled the sign form. Dismiss to clear. */}
-      {handoffNote && inEdit && (
-        <div className="mb-3 rounded-md bg-beroe-blue/5 border border-beroe-blue/30 px-3 py-2 flex items-start gap-2">
-          <span className="text-[14px]">✨</span>
-          <div className="flex-1 text-[11px] text-beroe-blue leading-snug">
-            {handoffNote}
-          </div>
-          <button
-            type="button"
-            onClick={() => onDismissHandoffNote?.()}
-            className="text-[11px] text-beroe-blue/60 hover:text-beroe-blue px-1"
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Sign / re-sign form */}
-      {inEdit && gate.can_sign && (
-        <div className="rounded-lg border border-beroe-card-border bg-beroe-bg/50 p-3 mb-3">
-          <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold mb-2">
-            {isSigned ? "Re-confirm signing" : "Confirm signing"}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Signed date">
-              <input
-                type="date"
-                value={signForm.gate_signed_date}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) =>
-                  setSignForm({ ...signForm, gate_signed_date: e.target.value })
-                }
-                className={inputCls(true)}
-              />
-            </Field>
-            <Field label="ACV ($)">
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={signForm.gate_contract_acv}
-                onChange={(e) =>
-                  setSignForm({ ...signForm, gate_contract_acv: e.target.value })
-                }
-                className={inputCls(true)}
-              />
-            </Field>
-            <Field label="Term">
-              <select
-                value={signForm.gate_contract_term}
-                onChange={(e) =>
-                  setSignForm({ ...signForm, gate_contract_term: e.target.value })
-                }
-                className={inputCls(true)}
-              >
-                <option value="">— Select —</option>
-                {TERM_OPTIONS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          {/* R18 — additional metadata captured at signing time so CS Onboarding
-              doesn't need a second PATCH right after. All optional.
-              28-May — picker vocab ported from prototype line 6079-6092:
-              modules = pill toggle list, tier/segment = fixed selects. */}
-          <Field label="Modules contracted">
-            <div className="flex flex-wrap gap-1.5">
-              {MODULE_OPTIONS.map((m) => {
-                const on = (signForm.gate_contract_modules ?? []).includes(m);
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => {
-                      const cur = signForm.gate_contract_modules ?? [];
-                      setSignForm({
-                        ...signForm,
-                        gate_contract_modules: on
-                          ? cur.filter((x) => x !== m)
-                          : [...cur, m],
-                      });
-                    }}
-                    className={cn(
-                      "text-[11px] px-2.5 py-1 rounded-full border font-semibold transition-colors",
-                      on
-                        ? "bg-beroe-blue/10 border-beroe-blue/40 text-beroe-blue"
-                        : "bg-white border-beroe-card-border text-text-secondary hover:border-beroe-blue/30",
-                    )}
-                  >
-                    {on ? "✓ " : ""}{m}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-            <Field label="Platform tier">
-              <select
-                value={signForm.gate_platform_tier ?? ""}
-                onChange={(e) =>
-                  setSignForm({ ...signForm, gate_platform_tier: e.target.value })
-                }
-                className={inputCls(true)}
-              >
-                <option value="">— Select —</option>
-                {PLATFORM_TIER_OPTIONS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Segment">
-              <select
-                value={signForm.gate_account_segment ?? ""}
-                onChange={(e) =>
-                  setSignForm({ ...signForm, gate_account_segment: e.target.value })
-                }
-                className={inputCls(true)}
-              >
-                <option value="">— Select —</option>
-                {SEGMENT_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Subscribers">
-              <input
-                type="text"
-                value={signForm.gate_subscribers ?? ""}
-                onChange={(e) =>
-                  setSignForm({ ...signForm, gate_subscribers: e.target.value })
-                }
-                placeholder="e.g. Unlimited (Enterprise)"
-                className={inputCls(true)}
-              />
-            </Field>
-          </div>
-          <button
-            onClick={() => {
-              if (!signForm.gate_signed_date) {
-                notify({ title: "Pick a signed date", tone: "warning" });
-                return;
-              }
-              if (!signForm.gate_contract_acv) {
-                notify({ title: "Enter the contract ACV", tone: "warning" });
-                return;
-              }
-              if (!signForm.gate_contract_term) {
-                notify({ title: "Pick a term", tone: "warning" });
-                return;
-              }
-              sign(signForm);
-            }}
-            disabled={signing}
-            className="mt-3 px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-50"
-          >
-            {signing ? "Confirming…" : "✓ Confirm signing"}
-          </button>
-          <div className="mt-2 text-[10px] text-text-muted">
-            The signed-by user + timestamp are recorded automatically from
-            your account session.
-          </div>
-        </div>
-      )}
-
-      {/* Signed metadata footer — 22-May Row 47: ALWAYS show all 4 metadata
-          fields in a labelled grid (with "—" placeholder when empty) so the
-          structure is visible even if those fields weren't captured during
-          signing. */}
-      {isSigned && !gate.gate_unlocked && (
-        <>
-          <div className="border-t border-beroe-card-border pt-3 mb-3">
-            <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted mb-1.5">
-              Modules Contracted
-            </div>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {gate.gate_contract_modules.length > 0 ? (
-                gate.gate_contract_modules.map((m) => (
-                  <span
-                    key={m}
-                    className="text-[11px] px-2 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue font-semibold"
-                  >
-                    {m}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-text-muted">None</span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <SignedStat
-                label="Platform Tier"
-                value={gate.gate_platform_tier || "—"}
-              />
-              <SignedStat
-                label="Segment"
-                value={
-                  gate.gate_account_segment
-                    ? `Segment ${gate.gate_account_segment}`
-                    : "—"
-                }
-              />
-              <SignedStat
-                label="Subscribers"
-                value={gate.gate_subscribers || "—"}
-              />
-            </div>
-          </div>
-          {/* H41 — "Confirmed by NAME on DATE" line — always shown when signed. */}
-          <div className="text-[11px] text-text-muted mb-3">
-            ✓ Confirmed by{" "}
-            <b className="text-text-primary">
-              {gate.gate_confirmed_by_name ?? "—"}
-            </b>{" "}
-            on{" "}
-            <b>
-              {gate.gate_confirmed_at
-                ? fmtDateTime(gate.gate_confirmed_at)
-                : "—"}
-            </b>
-          </div>
-          {/* Inline edit hint when fields are empty + user can sign. */}
-          {gate.can_sign &&
-            (gate.gate_contract_modules.length === 0 ||
-              !gate.gate_platform_tier ||
-              !gate.gate_account_segment ||
-              !gate.gate_subscribers) && (
-              <div className="text-[10px] text-beroe-amber mb-3 bg-beroe-amber/15 border border-beroe-amber/40 rounded-md px-2 py-1.5">
-                Some signing-metadata fields are empty. Use{" "}
-                <b>🔓 Unlock for correction</b> below to re-confirm with the
-                missing values.
-              </div>
-            )}
-        </>
-      )}
-
-      {/* Contract document — 25-May Row 50 + 26-May Row 59: real file
-          upload + last-3 download dropdown. Files flow through the
-          Documents API (kind='contract'). The gate_contract_doc scalar
-          stays in sync as the latest-uploaded-filename pointer.
-          canUpload now derives from the documents endpoint's is_editable
-          (server-side `can_write_documents(role, kind='contract')`)
-          rather than the signing capability — CSMs receiving the
-          handoff need to upload too, not just signers. */}
-      {isSigned && (
-        <ContractDocSection
-          accountId={gate.account_id}
-          onLatest={(filename) => onContractDoc(filename)}
-        />
-      )}
-
-      {/* 27-May Row 84 — Unlock button visibility.
-          Always render the button when the account is signed and not
-          yet unlocked, but disable + explain for non-admin roles so
-          stakeholders see the workflow exists rather than wondering
-          where the unlock action lives. Server-side RBAC still
-          enforces the actual permission. */}
-      {isSigned && !gate.gate_unlocked && (
-        <button
-          onClick={async () => {
-            if (!gate.can_unlock) return;
-            const reason = await promptDlg({
-              title: "Unlock the signing gate?",
-              body: "Provide a reason — it's recorded in the audit log. Minimum 10 characters.",
-              placeholder: "e.g. Customer requested term extension; re-signing on Friday.",
-              minLength: 10,
-              maxLength: 600,
-              multiline: true,
-              confirmLabel: "Unlock",
-              tone: "warning",
-            });
-            if (reason && reason.trim().length >= 10) {
-              unlock(reason.trim());
-            }
-          }}
-          disabled={unlocking || !gate.can_unlock}
-          title={
-            !gate.can_unlock
-              ? "Unlock is restricted to Admin / CS Director — ask an admin to re-open the signing gate"
-              : "Reopen the signing gate to amend signed contract details"
-          }
-          className="mt-3 text-xs px-3 py-1 rounded-md border border-beroe-amber/50 bg-beroe-amber/15 text-beroe-amber font-semibold hover:bg-beroe-amber/20 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {unlocking ? "Unlocking…" : "🔓 Unlock for correction"}
-          {!gate.can_unlock && " (admin only)"}
-        </button>
-      )}
-      {gate.gate_unlocked && gate.gate_unlock_reason && (
-        <div className="mt-2 text-[11px] text-beroe-amber bg-beroe-amber/15 border border-beroe-amber/40 rounded px-2 py-1">
-          Unlocked: <b>{gate.gate_unlock_reason}</b>
-        </div>
-      )}
-    </div>
-  );
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+function fd(s: string | null | undefined): string {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+function initials(name: string | null | undefined): string {
+  if (!name) return "??";
+  return name.replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2)
+    .map(w => w[0]?.toUpperCase() ?? "").join("");
+}
+function yearsFromTerm(t: string | null | undefined): number | null {
+  if (!t) return null;
+  const m = /(\d+)/.exec(t);
+  return m ? parseInt(m[1], 10) : null;
 }
 
-// ============================================================
-// Handover Quality Check
-// ============================================================
+// Per-module config status — drives the chip / card colour.
+function moduleConfigStatus(
+  mod: string,
+  cfg: Record<string, unknown> | undefined,
+): { filled: number; total: number; status: "complete" | "partial" | "empty" } {
+  const spec = MODULE_CONFIG_SPECS[mod];
+  if (!spec) return { filled: 0, total: 0, status: "empty" };
+  const conf = cfg ?? {};
+  const visible = spec.fields.filter((f) => !f.showIf || f.showIf(conf));
+  const filled = visible.filter((f) => {
+    const v = conf[f.key];
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== undefined && v !== null && v !== "";
+  }).length;
+  const total = visible.length;
+  const status = total === 0 ? "complete" : filled === total ? "complete" : filled > 0 ? "partial" : "empty";
+  return { filled, total, status };
+}
 
-function HandoverQualityCheck({
+// ─────────────────────────────────────────────────────────────
+// Section A — Sales Handoff (purple card)
+// ─────────────────────────────────────────────────────────────
+function SalesHandoffSection({
   account,
   gate,
-  onSet,
-  saving,
+  solutioning,
+  contacts,
+  contractDocs,
+  onMutate,
 }: {
-  account: { id: string };
+  account: ReturnType<typeof useAccountFromLayout>;
   gate: SigningGate;
-  onSet: (items: Record<string, boolean>) => void;
-  saving: boolean;
+  solutioning: Solutioning | null;
+  contacts: ContactRow[];
+  contractDocs: Document[];
+  onMutate: () => void;
 }) {
-  void account;
-  const overrides = gate.handover_quality_check ?? {};
-  // 28-May — literal port of prototype line 6055-6075. 2-column tile
-  // grid: green (#f0fdf4 / #6EC45730 / #6EC457) when checked, red
-  // (#fff0f2 / #CF454830 / #CF4548) when missing. Bottom status line
-  // flips between red-italic "Incomplete handover" and green "Handover
-  // complete". Tiles are clickable so a user with write access can flip
-  // them in place.
-  const items = HANDOVER_QC_ITEMS.map((it) => ({
-    key: it.key,
-    label: it.label,
-    ok: !!overrides[it.key],
-  }));
-  const allGood = items.every((i) => i.ok);
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+  const promptDlg = usePrompt();
+  const notify = useNotify();
+  const locked = !!gate.sh_locked_at;
+  const isAdmin = gate.can_sh_unlock;
+
+  // Patch the Solutioning row for the sh_* edits (the existing PATCH
+  // /accounts/:id/solutioning accepts sh_* fields).
+  const patchSol = useMutation({
+    mutationFn: (body: SolutioningUpdate) =>
+      api.patch<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Save failed", body: e.message, tone: "error" }),
+  });
+
+  const shLock = useMutation({
+    mutationFn: () =>
+      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sh-lock`, {}),
+    onSuccess: () => {
+      onMutate();
+      notify({ title: "Sales Handoff locked for onboarding", tone: "success" });
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Lock failed", body: e.message, tone: "error" }),
+  });
+  const shUnlock = useMutation({
+    mutationFn: (reason: string) =>
+      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sh-unlock`, { reason }),
+    onSuccess: () => {
+      onMutate();
+      notify({ title: "Sales Handoff unlocked", tone: "info" });
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Unlock failed", body: e.message, tone: "error" }),
+  });
+
+  const spoc = contacts.find((c) => c.is_spoc) ?? null;
+  const budgetOwner =
+    contacts.find((c) => !c.is_spoc && (c.is_sponsor || c.decision_power === "executive_sponsor")) ?? null;
+  const powerUsers = contacts.filter(
+    (c) => !c.is_spoc && !c.is_sponsor && c.decision_power !== "executive_sponsor",
+  ).slice(0, 5);
+
+  // Value definition lead + bullets (from Solutioning's sh_value_from_solutioning).
+  const vfsLead = (solutioning?.sh_value_from_solutioning ?? "").trim();
+  const themes = (solutioning?.sh_value_themes_from_solutioning ?? "")
+    .split(/[,\n]/g).map((t) => t.trim()).filter(Boolean);
+
+  // Sales validation seg-control state. The schema uses snake_case
+  // values; surface the title-cased labels via SH_VALIDATION_LABELS.
+  const validationKeys: ShValidation[] = ["confirmed", "partially_confirmed", "revised"];
+  const validationLabels = validationKeys.map((k) => SH_VALIDATION_LABELS[k]);
+
+  // Ready-check rollup.
+  const checks: Array<[string, boolean]> = [
+    ["Value definition validated",
+      solutioning?.sh_value_validation === "confirmed" ||
+      solutioning?.sh_value_validation === "partially_confirmed"],
+    ["Watch-outs & risks captured", !!solutioning?.sales_watchouts?.trim()],
+    ["SPOC named", !!spoc],
+    ["Budget Owner named", !!budgetOwner],
+    ["≥1 Power User added", powerUsers.length > 0],
+    ["≥1 Contract document uploaded", contractDocs.length > 0],
+  ];
+  const allOk = checks.every(([, ok]) => ok);
+
+  async function onLock() {
+    if (!allOk) return;
+    const ok = await confirm({
+      title: "Lock Sales Handoff for Onboarding?",
+      body: "Contract Operations will audit the deal next. Sales-side fields become read-only until an admin unlocks.",
+      confirmLabel: "Lock & hand off",
+      tone: "info",
+    });
+    if (ok) shLock.mutate();
+  }
+  async function onUnlock() {
+    const reason = await promptDlg({
+      title: "Unlock the Sales Handoff?",
+      body: "Provide a reason — it's recorded in the audit log. Minimum 10 characters.",
+      placeholder: "e.g. Sales needs to add a new power user before audit.",
+      minLength: 10,
+      maxLength: 600,
+      multiline: true,
+      confirmLabel: "Unlock",
+      tone: "warning",
+    });
+    if (reason && reason.trim().length >= 10) shUnlock.mutate(reason.trim());
+  }
+
   return (
-    <Section title="Handover Quality Check">
-      <p className="text-xs text-text-muted mb-3">
-        Manual sign-off on the four things every Pre-Sales handover must
-        deliver. Click a tile to toggle; the audit log records who
-        confirmed what.
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mb-2">
-        {items.map((i) => (
-          <button
-            key={i.key}
-            type="button"
-            disabled={saving}
-            onClick={() => onSet({ [i.key]: !i.ok })}
-            className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium text-left disabled:opacity-60"
-            style={{
-              background: i.ok ? "#f0fdf4" : "#fff0f2",
-              border: `1px solid ${i.ok ? "#6EC45730" : "#CF454830"}`,
-              color: i.ok ? "#6EC457" : "#CF4548",
-            }}
+    <Card opaqueWhenLocked={locked}>
+      <SectionHead
+        n="A"
+        color={C.PURPLE}
+        title="Sales Handoff"
+        tooltip="Sales captures the value-definition validation, client stakeholders, watch-outs/risks, and supporting contract docs. Lock to hand off to Contract Operations for audit."
+        teamLabel="Sales"
+        teamColor={C.PURPLE}
+        trailing={locked ? (
+          <span
+            className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ background: "#d4f5e5", color: "#146a45" }}
           >
-            <span className="text-[10px]">{i.ok ? "✓" : "✗"}</span>
-            {i.label}
-          </button>
-        ))}
-      </div>
-      {allGood ? (
-        <div className="text-[10px]" style={{ color: "#6EC457" }}>
-          ✓ Handover complete
-        </div>
-      ) : (
-        <div className="text-[10px] italic" style={{ color: "#CF4548" }}>
-          ⚠️ Incomplete handover — flag missing items to Sales before
-          proceeding to CS workflow.
+            🔒 Locked · {fd(gate.sh_locked_at)}
+          </span>
+        ) : undefined}
+      />
+      {locked && (
+        <div className="text-[11px] text-text-muted mb-2.5">
+          Locked for onboarding on {fd(gate.sh_locked_at)} by {gate.sh_locked_by_name ?? "—"}. Fields read-only.
         </div>
       )}
-    </Section>
+
+      {/* Value Definition Validation */}
+      <GroupHead>Value Definition Validation</GroupHead>
+      <div
+        className="border rounded-[8px] px-3.5 py-3 mb-2.5"
+        style={{ background: "#f3f0ff", borderColor: "#d0c5f5" }}
+      >
+        <div className="text-[10px] font-semibold mb-1" style={{ color: C.BLUE }}>
+          Received from Solutioning · {fd(solutioning?.sh_value_received_at)}
+        </div>
+        {vfsLead && (
+          <div className="text-[12px] leading-[1.6]" style={{ color: "#2d1870" }}>{vfsLead}</div>
+        )}
+        {themes.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {themes.map((t) => (
+              <span
+                key={t}
+                className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                style={{ background: "#ede6ff", color: "#3800CC" }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+        {!vfsLead && themes.length === 0 && (
+          <div className="text-[11px] text-text-muted italic">
+            No value definition handed over from Solutioning yet.
+          </div>
+        )}
+      </div>
+      <Field label="Sales Validation">
+        <SegControl
+          options={validationLabels}
+          value={
+            solutioning?.sh_value_validation
+              ? SH_VALIDATION_LABELS[solutioning.sh_value_validation]
+              : null
+          }
+          disabled={locked}
+          onChange={(label) => {
+            const key = validationKeys.find((k) => SH_VALIDATION_LABELS[k] === label) ?? null;
+            patchSol.mutate({ sh_value_validation: key });
+          }}
+        />
+      </Field>
+      <Field label="Sales Validation Notes">
+        <TextArea
+          value={solutioning?.sh_validation_notes ?? ""}
+          disabled={locked}
+          onBlur={(v) =>
+            v !== (solutioning?.sh_validation_notes ?? "") &&
+            patchSol.mutate({ sh_validation_notes: v.trim() || null })
+          }
+        />
+      </Field>
+
+      {/* Client Stakeholders */}
+      <GroupHead>Client Stakeholders</GroupHead>
+      <ClientStakeholdersRoster
+        accountId={account.id}
+        spoc={spoc}
+        budgetOwner={budgetOwner}
+        powerUsers={powerUsers}
+        locked={locked}
+        onMutate={onMutate}
+      />
+
+      {/* Engagement Timeline */}
+      <GroupHead>Engagement Timeline</GroupHead>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-2.5">
+        <Field label="Go-Live / Kickoff Date">
+          <Input
+            type="date"
+            value={solutioning?.sh_go_live_date ?? ""}
+            disabled={locked}
+            onBlur={(v) =>
+              v !== (solutioning?.sh_go_live_date ?? "") &&
+              patchSol.mutate({ sh_go_live_date: v || null })
+            }
+          />
+        </Field>
+        <Field label="First Checkpoint">
+          <Select
+            value={solutioning?.sh_first_checkpoint ?? ""}
+            disabled={locked}
+            onChange={(v) => patchSol.mutate({ sh_first_checkpoint: v || null })}
+          >
+            <option value="">--</option>
+            {FIRST_CP_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <Field label="Commercial Context">
+        <TextArea
+          value={solutioning?.sh_commercial_context ?? ""}
+          disabled={locked}
+          onBlur={(v) =>
+            v !== (solutioning?.sh_commercial_context ?? "") &&
+            patchSol.mutate({ sh_commercial_context: v.trim() || null })
+          }
+        />
+      </Field>
+      <Field label="Watch-outs & Risks">
+        <TextArea
+          value={solutioning?.sales_watchouts ?? ""}
+          disabled={locked}
+          onBlur={(v) =>
+            v !== (solutioning?.sales_watchouts ?? "") &&
+            patchSol.mutate({ sales_watchouts: v.trim() || null })
+          }
+        />
+      </Field>
+
+      {/* Contract Documents */}
+      <GroupHead>Contract Documents</GroupHead>
+      <div className="text-[11px] text-text-muted mb-2">
+        Upload the signed contract or supporting files with type tagged. Preferred: <b>Signed Proposal</b> or <b>MSA</b>.
+      </div>
+      <ContractDocsList
+        accountId={account.id}
+        docs={contractDocs}
+        locked={locked}
+        onMutate={onMutate}
+      />
+
+      {/* Lock CTA */}
+      {!locked && gate.can_sh_lock && (
+        <div className="mt-4 pt-3.5 border-t border-beroe-card-border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-2.5">
+            {checks.map(([label, ok]) => (
+              <div
+                key={label}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] text-[11px]"
+                style={{
+                  background: ok ? "#f0fdf4" : "#fff0f2",
+                  color: ok ? "#2fb87a" : "#e63950",
+                }}
+              >
+                <span>{ok ? "✓" : "✗"}</span> {label}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={!allOk || shLock.isPending}
+            onClick={onLock}
+            className="w-full px-4 py-3.5 rounded-[12px] text-white text-left flex items-center gap-3.5 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            style={{
+              background: allOk
+                ? `linear-gradient(135deg,${C.BLUE},#3800CC)`
+                : "linear-gradient(135deg,#94a3b8,#64748b)",
+            }}
+          >
+            <span className="text-[22px]">🔒</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-bold">Lock Sales Handoff for Onboarding</div>
+              <div className="text-[11px] opacity-90 leading-[1.4]">
+                {allOk
+                  ? "All checks passed. Once locked, Contract Operations will audit the deal."
+                  : "Complete the checks above to enable locking."}
+              </div>
+            </div>
+            <span className="text-[18px]">→</span>
+          </button>
+        </div>
+      )}
+      {locked && isAdmin && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={onUnlock}
+            disabled={shUnlock.isPending}
+            className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold border bg-white text-beroe-amber"
+            style={{ borderColor: `${C.AMBER}50` }}
+          >
+            🔓 Unlock for edits (admin)
+          </button>
+        </div>
+      )}
+    </Card>
   );
 }
 
-// ============================================================
-// Sub-components / helpers
-// ============================================================
-
-function Section({
-  title,
-  children,
-  variant = "card",
+// ─────────────────────────────────────────────────────────────
+// Client stakeholders roster — SPOC + Budget Owner + 5 power users
+// ─────────────────────────────────────────────────────────────
+function ClientStakeholdersRoster({
+  accountId,
+  spoc,
+  budgetOwner,
+  powerUsers,
+  locked,
+  onMutate,
 }: {
-  title: string;
-  children: React.ReactNode;
-  /**
-   * "card"  → white card with border (legacy default).
-   * "group" → 28-May port of prototype line 5985-format. UPPERCASE
-   *           grey-blue label, no card border. Used inside the outer
-   *           C) Sales Hand-off card to mirror the prototype's grouped
-   *           layout.
-   */
-  variant?: "card" | "group";
+  accountId: string;
+  spoc: ContactRow | null;
+  budgetOwner: ContactRow | null;
+  powerUsers: ContactRow[];
+  locked: boolean;
+  onMutate: () => void;
 }) {
-  if (variant === "group") {
+  // Inline-edit each row's name/title/email + add/remove via the
+  // existing /contacts endpoints.
+  const qc = useQueryClient();
+  const notify = useNotify();
+
+  const patchContact = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<ContactRow> }) =>
+      api.patch(`/api/v1/contacts/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["contacts", accountId] }),
+    onError: (e: ApiError) =>
+      notify({ title: "Save failed", body: e.message, tone: "error" }),
+  });
+  const createContact = useMutation({
+    mutationFn: (body: { name: string; title?: string | null; is_spoc?: boolean; is_sponsor?: boolean }) =>
+      api.post(`/api/v1/accounts/${accountId}/contacts`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contacts", accountId] });
+      onMutate();
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Add failed", body: e.message, tone: "error" }),
+  });
+  const deleteContact = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/v1/contacts/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["contacts", accountId] }),
+  });
+
+  function RoleRow({
+    label, c, role,
+  }: { label: string; c: ContactRow | null; role: "spoc" | "budget_owner" }) {
+    const [name, setName] = useState(c?.name ?? "");
+    const [title, setTitle] = useState(c?.title ?? "");
+    const [email, setEmail] = useState(c?.email ?? "");
+    useEffect(() => { setName(c?.name ?? ""); setTitle(c?.title ?? ""); setEmail(c?.email ?? ""); }, [c]);
+
+    const flagBody = role === "spoc" ? { is_spoc: true } : { is_sponsor: true };
+
+    async function saveRow() {
+      if (c) {
+        const body: Partial<ContactRow> = {};
+        if (name !== (c.name ?? "")) body.name = name;
+        if (title !== (c.title ?? "")) body.title = title;
+        if (email !== (c.email ?? "")) body.email = email;
+        if (Object.keys(body).length > 0) patchContact.mutate({ id: c.id, body });
+      } else if (name.trim().length >= 3) {
+        createContact.mutate({
+          name: name.trim(),
+          title: title.trim() || null,
+          ...flagBody,
+        });
+      }
+    }
+
     return (
-      <div className="mb-3">
-        <div
-          className="text-[12px] font-bold uppercase tracking-[0.05em] mb-2"
-          style={{ color: "#6b7fa0" }}
-        >
-          {title}
+      <div className="mb-2.5">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{label}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr_1.2fr] gap-2">
+          <Input value={name} disabled={locked} onChange={setName} onBlur={saveRow} placeholder="Name" />
+          <Input value={title} disabled={locked} onChange={setTitle} onBlur={saveRow} placeholder="Title" />
+          <Input type="email" value={email} disabled={locked} onChange={setEmail} onBlur={saveRow} placeholder="Email" />
         </div>
-        {children}
       </div>
     );
   }
-  return (
-    <div className="bg-white rounded-card border border-beroe-card-border p-5">
-      <h2 className="text-sm font-bold text-text-primary mb-2">{title}</h2>
-      {children}
-    </div>
-  );
-}
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-3 last:mb-0">
-      <label className="block text-[11px] uppercase tracking-wider text-text-muted font-bold mb-1">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function SignedStat({
-  label,
-  value,
-  warn,
-}: {
-  label: string;
-  value: string;
-  warn?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border px-3 py-2",
-        warn ? "border-beroe-amber/50 bg-beroe-amber/15/40" : "border-beroe-card-border bg-beroe-bg/40",
-      )}
-    >
-      <div className="text-[10px] uppercase tracking-wider text-text-muted font-bold mb-0.5">
-        {label}
-      </div>
-      <div
-        className={cn(
-          "text-sm font-bold",
-          warn ? "text-beroe-amber" : "text-text-primary",
-        )}
-      >
-        {value}
-        {warn && <span className="ml-1" aria-label="warning">⚠</span>}
-      </div>
-    </div>
-  );
-}
-
-function inputCls(enabled: boolean) {
-  return cn(
-    "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
-  );
-}
-
-function textareaCls(enabled: boolean) {
-  return cn(
-    "w-full px-3 py-2 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue",
-    !enabled && "bg-beroe-bg text-text-secondary cursor-not-allowed",
-  );
-}
-
-function fmtDate(d: string | null): string {
-  if (!d) return "—";
-  // ISO yyyy-mm-dd or full ISO datetime — both parse.
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return d;
-  return dt.toLocaleDateString();
-}
-
-function fmtDateTime(d: string | null): string {
-  if (!d) return "—";
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return d;
-  return dt.toLocaleString();
-}
-
-function fmtMoney(v: string | number | null): string {
-  if (v == null || v === "") return "—";
-  const n = typeof v === "number" ? v : parseFloat(v);
-  if (isNaN(n)) return String(v);
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
-const SH_KEYS = [
-  "sh_value_validation",
-  "sh_validation_notes",
-  "sh_go_live_date",
-  "sh_first_checkpoint",
-  "sh_stakeholder_signoff",
-  "sh_commercial_context",
-  "sales_watchouts",
-  "handoff_file_name",
-] as const;
-
-/** Pull only the sh_* slice for dirty/diff comparison. */
-function shSlice(s: Solutioning): Partial<Solutioning> {
-  const out: Partial<Solutioning> = {};
-  for (const k of SH_KEYS) {
-    // @ts-expect-error — index into typed shape
-    out[k] = s[k];
-  }
-  return out;
-}
-
-function shDiff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
-  const out: Record<string, unknown> = {};
-  for (const k of SH_KEYS) {
-    if (JSON.stringify(next[k]) !== JSON.stringify(prev[k])) {
-      out[k] = next[k];
-    }
-  }
-  return out as SolutioningUpdate;
-}
-
-// H40 — inline Success Metrics summary embedded in Sales Handoff. Read-only;
-// edits go through the full Value Tracking surface via the deep-link below.
-function InlineSuccessMetricsCard({ accountId }: { accountId: string }) {
-  type Met = {
-    id: string;
-    name: string;
-    metric_type: string;
-    target_value: string | null;
-    current_value: string | null;
-    status: "green" | "amber" | "red" | "grey";
-  };
-  const { data, isLoading } = useQuery<{ items: Met[]; total: number }>({
-    queryKey: ["metrics", accountId],
-    queryFn: () =>
-      api.get<{ items: Met[]; total: number }>(
-        `/api/v1/accounts/${accountId}/metrics`,
-      ),
-  });
-  const navigate = useNavigate();
-  const items = data?.items ?? [];
-  const counts = {
-    green: items.filter((m) => m.status === "green").length,
-    amber: items.filter((m) => m.status === "amber").length,
-    red: items.filter((m) => m.status === "red").length,
-    grey: items.filter((m) => m.status === "grey").length,
-  };
-  const dot = (s: Met["status"]) =>
-    s === "green"
-      ? "bg-beroe-green/150"
-      : s === "amber"
-        ? "bg-beroe-amber/150"
-        : s === "red"
-          ? "bg-beroe-red/100"
-          : "bg-text-subtle";
-  // 2-June bug — Success Metrics box restyled per stakeholder spec:
-  //   * Green-tinted card (bg-beroe-green/10 + green border)
-  //   * Metrics rendered as a single PARAGRAPH (not bullet list)
-  //   * "View in Success Management →" link sits OUTSIDE the box below.
-  const sentence = (m: Met) => {
-    const cur = m.current_value?.trim() || "not yet captured";
-    const tgt = m.target_value?.trim();
-    const verb =
-      m.status === "green"
-        ? "on track"
-        : m.status === "amber"
-          ? "tracking close"
-          : m.status === "red"
-            ? "off target"
-            : "pending baseline";
-    return tgt
-      ? `${m.name} — target ${tgt}, currently ${cur} (${verb})`
-      : `${m.name} — ${cur} (${verb})`;
-  };
   return (
     <>
-    <div className="bg-beroe-green/10 border border-beroe-green/40 rounded-card p-4">
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div>
-          <h3 className="text-sm font-bold text-beroe-green">Success Metrics</h3>
-          <p className="text-[11px] text-text-secondary">
-            Agreed at signing — tracked live. Edits happen on the Value Tracking tab.
-          </p>
+      <RoleRow label="Primary Contact (SPOC / Gatekeeper)" c={spoc} role="spoc" />
+      <RoleRow label="Budget Owner" c={budgetOwner} role="budget_owner" />
+      <div className="mt-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Power Users to Track{" "}
+            <span className="font-medium normal-case tracking-normal">(max 5 · adoption metrics)</span>
+          </span>
+          <span className="text-[10px] font-semibold text-text-muted">
+            {powerUsers.filter((u) => u.name).length}/5
+          </span>
         </div>
-        <div className="flex items-center gap-2 text-[11px]">
-          <span className="px-1.5 py-0.5 rounded bg-beroe-green/20 text-beroe-green font-semibold">
-            ✓ {counts.green}
-          </span>
-          <span className="px-1.5 py-0.5 rounded bg-beroe-amber/15 text-beroe-amber font-semibold">
-            ⚠ {counts.amber}
-          </span>
-          <span className="px-1.5 py-0.5 rounded bg-beroe-red/10 text-beroe-red font-semibold">
-            ✕ {counts.red}
-          </span>
-          {counts.grey > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-white/70 text-text-secondary font-semibold">
-              ○ {counts.grey}
-            </span>
-          )}
-        </div>
+        {powerUsers.map((u) => (
+          <PowerUserRow
+            key={u.id}
+            user={u}
+            locked={locked}
+            onPatch={(body) => patchContact.mutate({ id: u.id, body })}
+            onRemove={() => deleteContact.mutate(u.id)}
+          />
+        ))}
+        {!locked && powerUsers.length < 5 && (
+          <button
+            type="button"
+            onClick={() => {
+              const name = window.prompt("Power user name (min 3 chars):");
+              if (name && name.trim().length >= 3) {
+                createContact.mutate({ name: name.trim() });
+              }
+            }}
+            className="text-[11px] px-2.5 py-1 rounded-[6px] font-semibold mt-1"
+            style={{ background: "#ede6ff", color: C.BLUE, border: "1px solid #c9b5ff" }}
+          >
+            + Add power user ({powerUsers.length}/5)
+          </button>
+        )}
       </div>
-      {isLoading ? (
-        <div className="text-xs text-text-secondary italic">Loading metrics…</div>
-      ) : items.length === 0 ? (
-        <div className="text-xs text-text-secondary italic">
-          No metrics captured yet. Define them on the Value Tracking tab so the
-          signing snapshot has measurement teeth.
-        </div>
-      ) : (
-        <p className="text-[12px] text-text-primary leading-relaxed">
-          {items.slice(0, 6).map((m, i) => (
-            <span key={m.id}>
-              <span
-                className={cn(
-                  "inline-block w-2 h-2 rounded-full align-middle mr-1.5",
-                  dot(m.status),
-                )}
-                aria-hidden
-              />
-              <b className="font-semibold">{sentence(m).split(" — ")[0]}</b>
-              {" — "}
-              {sentence(m).split(" — ").slice(1).join(" — ")}
-              {i < Math.min(items.length, 6) - 1 ? ". " : "."}
-              {i < Math.min(items.length, 6) - 1 && " "}
-            </span>
-          ))}
-          {items.length > 6 && (
-            <span className="text-[11px] text-text-secondary italic">
-              {" "}+ {items.length - 6} more on Value Tracking.
-            </span>
-          )}
-        </p>
-      )}
-    </div>
-    {/* 2-June bug — "View in Success Management" link moved OUT of the
-        green Success Metrics box and below it per stakeholder spec. */}
-    <div className="mt-2 px-1">
-      <button
-        type="button"
-        onClick={() =>
-          navigate(`/accounts/${accountId}/success-management/value-tracking`)
-        }
-        className="text-[11px] text-beroe-blue font-semibold hover:underline"
-      >
-        View in Success Management →
-      </button>
-    </div>
     </>
   );
 }
 
-// ============================================================
-// Row 50 — Contract document upload + last-3 download dropdown
-// ============================================================
-
-function ContractDocSection({
-  accountId,
-  onLatest,
+function PowerUserRow({
+  user, locked, onPatch, onRemove,
 }: {
-  accountId: string;
-  onLatest: (filename: string | null) => void;
+  user: ContactRow;
+  locked: boolean;
+  onPatch: (body: Partial<ContactRow>) => void;
+  onRemove: () => void;
 }) {
-  const qc = useQueryClient();
-  const notify = useNotify();
-  const queryKey = ["documents", accountId, "contract"];
-  const { data, isLoading } = useQuery<{
-    items: ContractDoc[];
-    total: number;
-    is_editable: boolean;
-  }>({
-    queryKey,
-    queryFn: () =>
-      api.get<{ items: ContractDoc[]; total: number; is_editable: boolean }>(
-        `/api/v1/accounts/${accountId}/documents?kind=contract`,
-      ),
-  });
-  const canUpload = !!data?.is_editable;
-  const [open, setOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploadErr, setUploadErr] = useState<string | null>(null);
-  const upload = useMutation({
-    mutationFn: async (file: File) => {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("kind", "contract");
-      return api.postForm<{ document: ContractDoc }>(
-        `/api/v1/accounts/${accountId}/documents`,
-        fd,
-      );
-    },
-    onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey });
-      // Keep gate_contract_doc in sync as the "latest filename" pointer
-      // so the existing scalar-based logic elsewhere still works.
-      onLatest(r.document.filename);
-      setUploadErr(null);
-    },
-    onError: (e: ApiError) => setUploadErr(e.message),
-  });
+  const [name, setName] = useState(user.name);
+  const [title, setTitle] = useState(user.title ?? "");
+  useEffect(() => { setName(user.name); setTitle(user.title ?? ""); }, [user]);
 
-  const items = (data?.items ?? [])
-    .filter((d) => !d.deleted_at)
-    .slice(0, 3);
+  function save() {
+    const body: Partial<ContactRow> = {};
+    if (name !== user.name) body.name = name;
+    if (title !== (user.title ?? "")) body.title = title;
+    if (Object.keys(body).length > 0) onPatch(body);
+  }
 
   return (
-    <div className="border-t border-beroe-card-border pt-3 mt-3">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="text-[11px] uppercase tracking-wider text-text-muted font-bold">
-          Contract document
-        </div>
-        <div className="flex items-center gap-2 relative">
-          {canUpload && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".pdf,.docx,.doc,.png,.jpg,.jpeg"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) upload.mutate(f);
-                  if (e.target) e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={upload.isPending}
-                className="text-[11px] px-2.5 py-1 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
-              >
-                {upload.isPending ? "Uploading…" : "📤 Upload"}
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            disabled={items.length === 0}
-            className="text-[11px] px-2.5 py-1 rounded-md border border-beroe-card-border font-semibold disabled:opacity-50"
-            title={
-              items.length === 0
-                ? "No contract documents uploaded yet"
-                : `Download from last ${items.length} upload(s)`
-            }
-          >
-            ⬇ Download
-          </button>
-          {open && items.length > 0 && (
-            <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-beroe-card-border rounded-md shadow-lg min-w-[280px]">
-              <div className="text-[10px] uppercase tracking-wider font-bold text-text-muted px-3 py-1.5 border-b border-beroe-card-border/60">
-                Last {items.length} upload{items.length === 1 ? "" : "s"}
-              </div>
-              <ul className="py-1">
-                {items.map((d) => (
-                  <li key={d.id}>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setOpen(false);
-                        try {
-                          const r = await api.get<{ url: string }>(
-                            `/api/v1/documents/${d.id}/download-url`,
-                          );
-                          window.open(r.url, "_blank", "noopener");
-                        } catch (e) {
-                          notify({
-                            title: "Download failed",
-                            body: e instanceof ApiError ? e.message : undefined,
-                            tone: "error",
-                          });
-                        }
-                      }}
-                      className="w-full text-left px-3 py-2 hover:bg-beroe-bg flex items-center gap-2 text-[12px]"
-                    >
-                      <span>📄</span>
-                      <span className="flex-1 truncate font-medium">
-                        {d.filename}
-                      </span>
-                      <span className="text-[10px] text-text-muted whitespace-nowrap">
-                        {new Date(d.uploaded_at).toLocaleDateString()}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+    <div
+      className="grid grid-cols-[24px_1fr_1fr_30px] gap-2 items-center px-2.5 py-1.5 bg-white border border-beroe-card-border rounded-[7px] mb-1"
+    >
+      <div
+        className="w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-extrabold"
+        style={{ background: `${C.PURPLE}25`, color: C.PURPLE, border: `1.5px solid ${C.PURPLE}` }}
+      >
+        {initials(name)}
       </div>
-      {uploadErr && (
-        <div className="text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded px-2 py-1 mb-2">
-          {uploadErr}
-        </div>
-      )}
-      {isLoading ? (
-        <div className="text-xs text-text-muted italic">Loading…</div>
-      ) : items.length === 0 ? (
-        <div className="text-xs text-text-muted italic">
-          {canUpload
-            ? "No contract documents uploaded yet — click Upload to add one."
-            : "No contract documents uploaded yet."}
-        </div>
-      ) : (
-        <div className="text-[11px] text-text-muted">
-          Latest:{" "}
-          <b className="text-text-primary">{items[0].filename}</b>{" "}
-          · uploaded{" "}
-          {new Date(items[0].uploaded_at).toLocaleString()}
-        </div>
+      <Input value={name} disabled={locked} onChange={setName} onBlur={save} placeholder="Name" />
+      <Input value={title} disabled={locked} onChange={setTitle} onBlur={save} placeholder="Title" />
+      {locked ? <span /> : (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-[14px] text-text-muted hover:text-beroe-red"
+          aria-label="Remove power user"
+        >
+          ×
+        </button>
       )}
     </div>
   );
 }
 
-type ContractDoc = {
-  id: string;
-  filename: string;
-  uploaded_at: string;
-  deleted_at: string | null;
-};
+// ─────────────────────────────────────────────────────────────
+// Contract documents — typed upload + list + download/remove
+// ─────────────────────────────────────────────────────────────
+function ContractDocsList({
+  accountId,
+  docs,
+  locked,
+  onMutate,
+}: {
+  accountId: string;
+  docs: Document[];
+  locked: boolean;
+  onMutate: () => void;
+}) {
+  const qc = useQueryClient();
+  const notify = useNotify();
+  const confirm = useConfirm();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [docType, setDocType] = useState<DocType>("Signed Proposal");
+  const [chosenFile, setChosenFile] = useState<File | null>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!chosenFile) return null;
+      const fd = new FormData();
+      fd.append("kind", "contract");
+      fd.append("contract_subtype", docType);
+      fd.append("file", chosenFile);
+      return api.postForm(`/api/v1/accounts/${accountId}/documents`, fd);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents", accountId, "contract"] });
+      setChosenFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+      onMutate();
+      notify({ title: "Document uploaded", tone: "success" });
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Upload failed", body: e.message, tone: "error" }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/v1/documents/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", accountId, "contract"] }),
+  });
+
+  async function downloadDoc(d: Document) {
+    try {
+      const r = await api.get<{ url: string }>(`/api/v1/documents/${d.id}/download-url`);
+      window.open(r.url, "_blank", "noopener");
+    } catch (e) {
+      notify({
+        title: "Download failed",
+        body: e instanceof ApiError ? e.message : undefined,
+        tone: "error",
+      });
+    }
+  }
+
+  return (
+    <>
+      {docs.map((d) => (
+        <div
+          key={d.id}
+          className="grid grid-cols-[140px_1fr_auto_auto] gap-2 items-center px-2.5 py-2 border rounded-[8px] mb-1.5"
+          style={{ background: "#f0fdf4", borderColor: `${C.GREEN}40` }}
+        >
+          <span
+            className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-center"
+            style={{ background: "#ede6ff", color: "#3800CC" }}
+          >
+            {d.contract_subtype ?? "Untagged"}
+          </span>
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold truncate" style={{ color: "#2fb87a" }}>
+              📄 {d.filename}
+            </div>
+            <div className="text-[10px] text-text-muted">
+              Uploaded {fd(d.uploaded_at)}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => downloadDoc(d)}
+            className="text-[10px] px-2 py-1 rounded-[6px] font-semibold"
+            style={{ background: "#ede6ff", color: C.BLUE, border: "1px solid #c9b5ff" }}
+          >
+            ⬇ Download
+          </button>
+          {!locked && (
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Remove this document?",
+                  body: `Soft-delete "${d.filename}". Admins can restore within 30 days.`,
+                  confirmLabel: "Remove",
+                  danger: true,
+                });
+                if (ok) deleteMutation.mutate(d.id);
+              }}
+              className="text-[10px] px-2 py-1 rounded-[6px] font-semibold border bg-white text-text-secondary"
+              style={{ borderColor: C.CB }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      ))}
+      {!locked && (
+        <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr_auto] gap-2.5 items-end mt-2">
+          <Field label="Document Type">
+            <Select
+              value={docType}
+              disabled={false}
+              onChange={(v) => setDocType(v as DocType)}
+            >
+              {DOC_TYPES.map((t) => <option key={t}>{t}</option>)}
+            </Select>
+          </Field>
+          <Field label="File">
+            <div
+              className="border-[1.5px] border-dashed rounded-[10px] px-3 py-2 text-center cursor-pointer transition"
+              style={{ background: "#fafbfe", borderColor: C.CB }}
+              onClick={() => fileRef.current?.click()}
+            >
+              <span className="text-[11px] text-text-secondary">
+                📁 {chosenFile ? chosenFile.name : "Choose file (PDF, DOCX)"}
+              </span>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.docx,.doc,.txt"
+              onChange={(e) => setChosenFile(e.target.files?.[0] ?? null)}
+            />
+          </Field>
+          <button
+            type="button"
+            disabled={!chosenFile || uploadMutation.isPending}
+            onClick={() => uploadMutation.mutate()}
+            className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold text-white disabled:opacity-50 self-end h-[34px]"
+            style={{ background: C.BLUE }}
+          >
+            {uploadMutation.isPending ? "Uploading…" : "+ Add"}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Section B — Contract Audit (amber card)
+// ─────────────────────────────────────────────────────────────
+function ContractAuditSection({
+  account,
+  gate,
+  onMutate,
+}: {
+  account: ReturnType<typeof useAccountFromLayout>;
+  gate: SigningGate;
+  onMutate: () => void;
+}) {
+  const notify = useNotify();
+  const confirm = useConfirm();
+  const promptDlg = usePrompt();
+  const locked = gate.gate_signed && !gate.gate_unlocked;
+  const showCard = !!gate.sh_locked_at; // Section B unlocks once Sales locks.
+  const audited_at = (gate.gate_contract_extras as { audited_at?: string } | undefined)?.audited_at
+    ?? gate.gate_confirmed_at;
+  const audited_by =
+    (gate.gate_contract_extras as { audited_by?: string } | undefined)?.audited_by
+    ?? gate.gate_confirmed_by_name
+    ?? "—";
+
+  const patchExtras = useMutation({
+    mutationFn: (extras: Record<string, unknown>) =>
+      api.patch<SigningGate>(`/api/v1/accounts/${account.id}/contract-extras`, { extras }),
+    onSuccess: onMutate,
+    onError: (e: ApiError) =>
+      notify({ title: "Save failed", body: e.message, tone: "error" }),
+  });
+  const patchSignMeta = useMutation({
+    // PATCH /api/v1/accounts/:id — for the typed gate_* fields (acv, term, dates, modules, tier, segment).
+    mutationFn: (body: Record<string, unknown>) =>
+      api.patch(`/api/v1/accounts/${account.id}`, body),
+    onSuccess: onMutate,
+    onError: (e: ApiError) =>
+      notify({ title: "Save failed", body: e.message, tone: "error" }),
+  });
+  const patchModuleConfigs = useMutation({
+    mutationFn: (configs: Record<string, Record<string, unknown>>) =>
+      api.patch<SigningGate>(`/api/v1/accounts/${account.id}/module-configs`, { configs }),
+    onSuccess: onMutate,
+    onError: (e: ApiError) =>
+      notify({ title: "Save failed", body: e.message, tone: "error" }),
+  });
+
+  const signMutation = useMutation({
+    mutationFn: (body: SignAccountBody) =>
+      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sign`, body),
+    onSuccess: () => {
+      onMutate();
+      notify({ title: "Audited & handed off to CS", tone: "success" });
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Audit failed", body: e.message, tone: "error" }),
+  });
+  const unlockMutation = useMutation({
+    mutationFn: (reason: string) =>
+      api.post<SigningGate>(`/api/v1/accounts/${account.id}/sign/unlock`, { reason }),
+    onSuccess: () => {
+      onMutate();
+      notify({ title: "Audit unlocked", tone: "info" });
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Unlock failed", body: e.message, tone: "error" }),
+  });
+
+  if (!showCard) return null;
+
+  const extras = gate.gate_contract_extras ?? {};
+  const cfgs = gate.gate_module_configs ?? {};
+  const acvNum = parseFloat(String(gate.gate_contract_acv ?? "")) || 0;
+  const yrs = yearsFromTerm(gate.gate_contract_term) ?? 0;
+  const autoTcv = yrs * acvNum;
+
+  const modules = gate.gate_contract_modules ?? [];
+  const allConfigsFilled = modules.every(
+    (m) => moduleConfigStatus(m, cfgs[m] as Record<string, unknown>).status === "complete",
+  );
+
+  // Defaults shown in the dropdowns but only persisted after the user
+  // either picks them OR clicks Complete Audit (the onCompleteAudit
+  // handler eager-PATCHes any unset defaults before /sign fires).
+  const effectiveBilling = (extras.billing_freq as string | undefined) ?? "Annual";
+  const effectivePayment = (extras.payment_terms as string | undefined) ?? "Net 30";
+  const effectiveGeography = (extras.geography as string | undefined) ?? "Global";
+
+  const checks: Array<[string, boolean]> = [
+    ["Signed date", !!gate.gate_signed_date],
+    ["Contract term", !!gate.gate_contract_term],
+    ["ACV", !!gate.gate_contract_acv],
+    ["Billing frequency", !!effectiveBilling],
+    ["Payment terms", !!effectivePayment],
+    ["≥1 module contracted", modules.length > 0],
+    ["All module configs filled", modules.length > 0 && allConfigsFilled],
+    ["Geography defined", !!effectiveGeography],
+  ];
+  const allOk = checks.every(([, ok]) => ok);
+
+  async function onCompleteAudit() {
+    if (!allOk) return;
+    const ok = await confirm({
+      title: "Complete audit & hand off to CS?",
+      body: "Locks the audit. CS team will be notified and the account moves into the CS workflow.",
+      confirmLabel: "Complete & hand off",
+      tone: "success",
+    });
+    if (!ok) return;
+    // Persist any dropdown defaults the user didn't explicitly touch
+    // so the saved audit record matches what was on screen.
+    const pendingExtras: Record<string, unknown> = {};
+    if (!extras.billing_freq)   pendingExtras.billing_freq   = effectiveBilling;
+    if (!extras.payment_terms)  pendingExtras.payment_terms  = effectivePayment;
+    if (!extras.geography)      pendingExtras.geography      = effectiveGeography;
+    if (Object.keys(pendingExtras).length > 0) {
+      try {
+        await patchExtras.mutateAsync(pendingExtras);
+      } catch {
+        // Toast already raised by the mutation's onError; bail.
+        return;
+      }
+    }
+    signMutation.mutate({
+      gate_signed_date: gate.gate_signed_date ?? new Date().toISOString().slice(0, 10),
+      gate_contract_acv: gate.gate_contract_acv ?? 0,
+      gate_contract_term: gate.gate_contract_term ?? "1 year",
+      gate_contract_modules: gate.gate_contract_modules,
+      gate_platform_tier: gate.gate_platform_tier,
+      gate_account_segment: gate.gate_account_segment,
+      gate_subscribers: gate.gate_subscribers,
+    });
+  }
+
+  async function onUnlock() {
+    const reason = await promptDlg({
+      title: "Unlock the contract audit?",
+      body: "Reason is recorded in the audit log. Minimum 10 characters.",
+      placeholder: "e.g. Customer requested addendum; re-audit on Friday.",
+      minLength: 10,
+      maxLength: 600,
+      multiline: true,
+      confirmLabel: "Unlock",
+      tone: "warning",
+    });
+    if (reason && reason.trim().length >= 10) unlockMutation.mutate(reason.trim());
+  }
+
+  function toggleModule(m: ModuleName) {
+    const next = modules.includes(m) ? modules.filter((x) => x !== m) : [...modules, m];
+    patchSignMeta.mutate({ gate_contract_modules: next });
+    if (modules.includes(m)) {
+      // Clear that module's config too.
+      const cleared = { ...cfgs };
+      delete cleared[m];
+      patchModuleConfigs.mutate({ [m]: {} });
+    } else if (!cfgs[m]) {
+      patchModuleConfigs.mutate({ [m]: {} });
+    }
+  }
+
+  return (
+    <Card leftBorderColor={C.AMBER}>
+      <SectionHead
+        n="B"
+        color={C.AMBER}
+        title="Contract Audit"
+        tooltip="Contract Operations — verify every field against the executed contract document. Capture per-module config so analytics can later answer 'how many accounts have X, configured how.' Once complete, click Complete Audit & Hand off to CS."
+        teamLabel="Contract Ops"
+        teamColor={C.AMBER}
+        trailing={
+          locked ? (
+            <span
+              className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: "#d4f5e5", color: "#146a45" }}
+            >
+              🔒 Audited · {fd(audited_at)}
+            </span>
+          ) : (
+            <span
+              className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: "#fff3e0", color: "#b85b00" }}
+            >
+              In progress
+            </span>
+          )
+        }
+      />
+      {locked && (
+        <div className="text-[11px] text-text-muted mb-2.5">
+          Audited by {audited_by} on {fd(audited_at)}. Fields read-only.
+        </div>
+      )}
+
+      {/* Contract Dates */}
+      <GroupHead>Contract Dates</GroupHead>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-2.5">
+        <Field label="Signed Date">
+          <Input
+            type="date"
+            value={gate.gate_signed_date ?? ""}
+            disabled={locked}
+            onBlur={(v) => v !== (gate.gate_signed_date ?? "") &&
+              patchSignMeta.mutate({ gate_signed_date: v || null })}
+          />
+        </Field>
+        <Field label="Contract Term">
+          <Select
+            value={gate.gate_contract_term ?? ""}
+            disabled={locked}
+            onChange={(v) => patchSignMeta.mutate({ gate_contract_term: v || null })}
+          >
+            <option value="">--</option>
+            {["1 year","2 years","3 years","4 years","5 years","Custom"].map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Renewal Date">
+          <Input
+            type="date"
+            value={gate.gate_renewal_date ?? ""}
+            disabled={locked}
+            onBlur={(v) => v !== (gate.gate_renewal_date ?? "") &&
+              patchSignMeta.mutate({ gate_renewal_date: v || null })}
+          />
+        </Field>
+      </div>
+
+      {/* Commercial Terms */}
+      <GroupHead>Commercial Terms</GroupHead>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-2.5">
+        <Field label="ACV (USD)">
+          <Input
+            type="number"
+            value={gate.gate_contract_acv != null ? String(gate.gate_contract_acv) : ""}
+            disabled={locked}
+            placeholder="310000"
+            onBlur={(v) => v !== String(gate.gate_contract_acv ?? "") &&
+              patchSignMeta.mutate({ gate_contract_acv: v ? parseFloat(v) : null })}
+          />
+        </Field>
+        <Field label="TCV (auto: ACV × years)">
+          <Input
+            type="number"
+            value={(extras.tcv as string | undefined) ?? (autoTcv ? String(autoTcv) : "")}
+            disabled={locked}
+            placeholder={autoTcv ? String(autoTcv) : "—"}
+            onBlur={(v) => v !== ((extras.tcv as string | undefined) ?? "") &&
+              patchExtras.mutate({ tcv: v || null })}
+          />
+          {autoTcv > 0 && !extras.tcv && (
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Auto = ${autoTcv.toLocaleString("en-US")}. Override if needed.
+            </div>
+          )}
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-2.5">
+        <Field label="Billing Frequency">
+          <Select
+            value={(extras.billing_freq as string | undefined) ?? "Annual"}
+            disabled={locked}
+            onChange={(v) => patchExtras.mutate({ billing_freq: v })}
+          >
+            {BILLING_FREQ_OPTIONS.map((f) => <option key={f}>{f}</option>)}
+          </Select>
+        </Field>
+        <Field label="Payment Terms">
+          <Select
+            value={(extras.payment_terms as string | undefined) ?? "Net 30"}
+            disabled={locked}
+            onChange={(v) => patchExtras.mutate({ payment_terms: v })}
+          >
+            {PAYMENT_TERM_OPTIONS.map((p) => <option key={p}>{p}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-2.5 mb-2.5">
+        <Field label="Discount">
+          <div className="flex items-center">
+            <Input
+              type="number"
+              value={(extras.discount as string | undefined) ?? ""}
+              disabled={locked}
+              placeholder="0"
+              onBlur={(v) => v !== ((extras.discount as string | undefined) ?? "") &&
+                patchExtras.mutate({ discount: v || null })}
+              className="rounded-r-none"
+            />
+            <span
+              className="px-2.5 py-1.5 border border-l-0 rounded-r-[7px] text-[12px] text-text-secondary self-stretch flex items-center"
+              style={{ background: C.CB, borderColor: C.CB }}
+            >
+              %
+            </span>
+          </div>
+        </Field>
+        <Field label="Discount Reason">
+          <Input
+            type="text"
+            value={(extras.discount_reason as string | undefined) ?? ""}
+            disabled={locked}
+            placeholder="Multi-year prepay, early-signing incentive, etc."
+            onBlur={(v) => v !== ((extras.discount_reason as string | undefined) ?? "") &&
+              patchExtras.mutate({ discount_reason: v.trim() || null })}
+          />
+        </Field>
+      </div>
+
+      {/* What Was Sold — module picker + per-module config cards */}
+      <GroupHead>
+        What Was Sold{" "}
+        <span className="font-medium text-text-muted normal-case tracking-normal">
+          — tick modules, then fill each module&rsquo;s config below for analytics
+        </span>
+      </GroupHead>
+      <ModulePicker
+        modules={modules}
+        cfgs={cfgs as Record<string, Record<string, unknown>>}
+        disabled={locked}
+        onToggle={(m) => toggleModule(m as ModuleName)}
+      />
+      {modules.length > 0 ? (
+        <div className="mb-3">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
+            Module Configuration{" "}
+            <span className="font-medium normal-case tracking-normal">
+              — {modules.filter((m) => moduleConfigStatus(m, cfgs[m] as Record<string, unknown>).status === "complete").length} of {modules.length} complete
+            </span>
+          </div>
+          {modules.map((m) => (
+            <ModuleConfigCard
+              key={m}
+              mod={m}
+              cfg={(cfgs[m] as Record<string, unknown>) ?? {}}
+              locked={locked}
+              onPatch={(next) => patchModuleConfigs.mutate({ [m]: next })}
+              onRemove={() => toggleModule(m as ModuleName)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="border border-dashed rounded-[8px] px-5 py-5 text-center text-[12px] text-text-muted mb-3"
+          style={{ background: "#fafbfd", borderColor: C.CB }}
+        >
+          Pick at least one module above to begin configuration capture.
+        </div>
+      )}
+
+      <Field label="Caveats for Modules (carry-overs, side-letter commitments)">
+        <TextArea
+          value={(extras.module_caveats as string | undefined) ?? ""}
+          disabled={locked}
+          placeholder="E.g. Custom Credits capped at 400 hrs/year. Power BI connector to be delivered within 90d of go-live."
+          onBlur={(v) => v !== ((extras.module_caveats as string | undefined) ?? "") &&
+            patchExtras.mutate({ module_caveats: v.trim() || null })}
+        />
+      </Field>
+      <Field label="Notes">
+        <TextArea
+          value={(extras.audit_notes as string | undefined) ?? ""}
+          disabled={locked}
+          placeholder="Pricing protection, rate-card terms, etc."
+          onBlur={(v) => v !== ((extras.audit_notes as string | undefined) ?? "") &&
+            patchExtras.mutate({ audit_notes: v.trim() || null })}
+        />
+      </Field>
+      <Field label="Geography / Region Coverage">
+        <Select
+          value={(extras.geography as string | undefined) ?? "Global"}
+          disabled={locked}
+          onChange={(v) => patchExtras.mutate({ geography: v })}
+        >
+          {GEO_OPTIONS.map((g) => <option key={g}>{g}</option>)}
+        </Select>
+      </Field>
+      <Field label="Any Other Specific Term to be Noted">
+        <TextArea
+          value={(extras.other_terms as string | undefined) ?? ""}
+          disabled={locked}
+          placeholder="Exit clauses, audit rights, QBR cadence, side-letter commitments, etc."
+          onBlur={(v) => v !== ((extras.other_terms as string | undefined) ?? "") &&
+            patchExtras.mutate({ other_terms: v.trim() || null })}
+        />
+      </Field>
+
+      {!locked && gate.can_sign && (
+        <div className="mt-4 pt-3.5 border-t border-beroe-card-border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-2.5">
+            {checks.map(([label, ok]) => (
+              <div
+                key={label}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] text-[11px]"
+                style={{
+                  background: ok ? "#f0fdf4" : "#fff0f2",
+                  color: ok ? "#2fb87a" : "#e63950",
+                }}
+              >
+                <span>{ok ? "✓" : "✗"}</span> {label}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={!allOk || signMutation.isPending}
+            onClick={onCompleteAudit}
+            className="w-full px-4 py-3.5 rounded-[12px] text-white text-left flex items-center gap-3.5 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            style={{
+              background: allOk
+                ? `linear-gradient(135deg,${C.AMBER},#d57400)`
+                : "linear-gradient(135deg,#94a3b8,#64748b)",
+            }}
+          >
+            <span className="text-[22px]">🔒</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-bold">Complete Audit & Hand off to CS</div>
+              <div className="text-[11px] opacity-90 leading-[1.4]">
+                {allOk
+                  ? "All fields verified. CS team will be notified and the account moves into the CS workflow."
+                  : "Complete all checks above. Module configs included."}
+              </div>
+            </div>
+            <span className="text-[18px]">→</span>
+          </button>
+        </div>
+      )}
+      {locked && gate.can_unlock && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={onUnlock}
+            disabled={unlockMutation.isPending}
+            className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold border bg-white text-beroe-amber"
+            style={{ borderColor: `${C.AMBER}50` }}
+          >
+            🔓 Unlock for corrections (admin)
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Module picker (20 chips) + per-module config card
+// ─────────────────────────────────────────────────────────────
+function ModulePicker({
+  modules, cfgs, disabled, onToggle,
+}: {
+  modules: string[];
+  cfgs: Record<string, Record<string, unknown>>;
+  disabled: boolean;
+  onToggle: (m: string) => void;
+}) {
+  return (
+    <div
+      className="flex flex-wrap gap-1.5 mb-3 p-2.5 border rounded-[9px]"
+      style={{ background: "#fafbfd", borderColor: C.CB }}
+    >
+      {ALL_MODULES.map((m) => {
+        const sel = modules.includes(m);
+        const st = sel ? moduleConfigStatus(m, cfgs[m]).status : null;
+        const unfilled = sel && st !== "complete";
+        return (
+          <button
+            key={m}
+            type="button"
+            disabled={disabled}
+            onClick={() => onToggle(m)}
+            className={cn(
+              "px-3 py-1 rounded-full border-[1.5px] text-[11.5px] font-medium transition inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed",
+              sel ? "font-bold" : "hover:border-beroe-blue/40 hover:text-beroe-blue",
+            )}
+            style={
+              !sel
+                ? { background: "#fff", borderColor: C.CB, color: C.T2 }
+                : unfilled
+                  ? { background: "#fff8eb", borderColor: C.AMBER, color: "#854F0B" }
+                  : { background: "#ede6ff", borderColor: C.BLUE, color: "#3800CC" }
+            }
+          >
+            {sel && (st === "complete" ? "✓" : "⚠")} {m}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ModuleConfigCard({
+  mod, cfg, locked, onPatch, onRemove,
+}: {
+  mod: string;
+  cfg: Record<string, unknown>;
+  locked: boolean;
+  onPatch: (next: Record<string, unknown>) => void;
+  onRemove: () => void;
+}) {
+  const spec = MODULE_CONFIG_SPECS[mod];
+  if (!spec) return null;
+  const st = moduleConfigStatus(mod, cfg);
+
+  function updateField(key: string, val: unknown) {
+    onPatch({ ...cfg, [key]: val });
+  }
+  function toggleMulti(key: string, opt: string) {
+    const cur = (cfg[key] as string[] | undefined) ?? [];
+    const next = cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt];
+    onPatch({ ...cfg, [key]: next });
+  }
+
+  return (
+    <div
+      className="border rounded-[9px] p-3 mb-2"
+      style={{
+        background: st.status === "empty" ? "#fffbf2" : "#fff",
+        borderColor: C.CB,
+        borderLeft: `3px solid ${st.status === "empty" ? C.AMBER : C.BLUE}`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-dashed border-beroe-card-border">
+        <div
+          className="w-[26px] h-[26px] rounded-[6px] inline-flex items-center justify-center text-[15px]"
+          style={{ background: "#f3f0ff" }}
+        >
+          {spec.icon}
+        </div>
+        <div className="text-[13px] font-bold flex-1 truncate">{mod}</div>
+        <span
+          className="text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+          style={
+            st.status === "complete"
+              ? { background: "#d4f5e5", color: "#146a45" }
+              : st.status === "partial"
+                ? { background: "#fef0c0", color: "#8a4510" }
+                : { background: "#fff0e5", color: "#c45010" }
+          }
+        >
+          {st.status === "complete"
+            ? "✓ Complete"
+            : st.status === "partial"
+              ? `${st.filled}/${st.total} filled`
+              : "Empty"}
+        </span>
+        {!locked && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-[10px] px-2 py-0.5 rounded-[6px] border bg-white text-text-secondary"
+            style={{ borderColor: C.CB }}
+            title="Remove module"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {spec.fields.map((f) => (
+          <ConfigField
+            key={f.key}
+            field={f}
+            value={cfg[f.key]}
+            cfg={cfg}
+            locked={locked}
+            onUpdate={(v) => updateField(f.key, v)}
+            onToggleMulti={(opt) => toggleMulti(f.key, opt)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConfigField({
+  field, value, cfg, locked, onUpdate, onToggleMulti,
+}: {
+  field: ModuleField;
+  value: unknown;
+  cfg: Record<string, unknown>;
+  locked: boolean;
+  onUpdate: (v: unknown) => void;
+  onToggleMulti: (opt: string) => void;
+}) {
+  if (field.showIf && !field.showIf(cfg)) return null;
+  const full = field.full ? "sm:col-span-2" : "";
+  const inputStyle = "w-full px-2.5 py-1.5 border rounded-[7px] text-[12px] focus:outline-none focus:border-beroe-blue disabled:bg-beroe-bg/40 disabled:cursor-not-allowed";
+
+  if (field.type === "number") {
+    return (
+      <div className={full}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{field.label}</div>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            placeholder={field.ph}
+            value={(value as string | number | undefined) ?? ""}
+            disabled={locked}
+            onChange={(e) => onUpdate(e.target.value)}
+            className={inputStyle}
+            style={{ borderColor: C.CB }}
+          />
+          {field.suffix && (
+            <span className="text-[11px] text-text-muted font-semibold whitespace-nowrap">{field.suffix}</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (field.type === "text") {
+    return (
+      <div className={full}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{field.label}</div>
+        <input
+          type="text"
+          placeholder={field.ph}
+          value={(value as string | undefined) ?? ""}
+          disabled={locked}
+          onChange={(e) => onUpdate(e.target.value)}
+          className={inputStyle}
+          style={{ borderColor: C.CB }}
+        />
+      </div>
+    );
+  }
+  if (field.type === "select") {
+    return (
+      <div className={full}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{field.label}</div>
+        <select
+          value={(value as string | undefined) ?? ""}
+          disabled={locked}
+          onChange={(e) => onUpdate(e.target.value)}
+          className={inputStyle + " bg-white"}
+          style={{ borderColor: C.CB }}
+        >
+          <option value="">--</option>
+          {field.options?.map((o) => <option key={o}>{o}</option>)}
+        </select>
+      </div>
+    );
+  }
+  if (field.type === "seg") {
+    return (
+      <div className={full}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{field.label}</div>
+        <SegControl
+          options={field.options ? [...field.options] : []}
+          value={(value as string | undefined) ?? null}
+          disabled={locked}
+          onChange={(v) => onUpdate(v)}
+        />
+      </div>
+    );
+  }
+  if (field.type === "multi") {
+    const arr = (value as string[] | undefined) ?? [];
+    return (
+      <div className={full}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1 flex items-center">
+          {field.label}
+          {arr.length > 0 && (
+            <span
+              className="ml-1.5 text-[10px] font-semibold"
+              style={{ color: C.BLUE }}
+            >
+              {arr.length} selected
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1 mt-0.5">
+          {field.options?.map((o) => {
+            const sel = arr.includes(o);
+            return (
+              <button
+                key={o}
+                type="button"
+                disabled={locked}
+                onClick={() => onToggleMulti(o)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[10.5px] font-semibold border transition",
+                  !sel && "hover:border-beroe-blue/40 hover:text-beroe-blue",
+                )}
+                style={
+                  sel
+                    ? { background: "#ede6ff", borderColor: C.BLUE, color: C.BLUE }
+                    : { background: "#fff", borderColor: C.CB, color: C.T2 }
+                }
+              >
+                {sel ? "✓ " : ""}{o}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Stage indicator + handed-off banner
+// ─────────────────────────────────────────────────────────────
+function StageIndicator({ gate }: { gate: SigningGate }) {
+  const s1 = !!gate.sh_locked_at;
+  const s2 = gate.gate_signed && !gate.gate_unlocked;
+  const s3 = s2;
+  return (
+    <div className="flex items-center gap-1.5 mb-4 bg-white rounded-[12px] border border-beroe-card-border px-3.5 py-2.5">
+      <StageStep label="Sales Handoff" sub="Sales" done={s1} current={!s1} />
+      <StageConn done={s1} />
+      <StageStep label="Contract Audit" sub="Contract Ops" done={s2} current={s1 && !s2} pending={!s1} />
+      <StageConn done={s2} />
+      <StageStep label="Handed off to CS" sub="CS lead" done={s3} pending={!s2} />
+    </div>
+  );
+}
+function StageStep({
+  label, sub, done, current, pending,
+}: { label: string; sub: string; done: boolean; current?: boolean; pending?: boolean }) {
+  return (
+    <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div
+        className="w-6 h-6 rounded-full text-[11px] font-extrabold text-white flex items-center justify-center flex-shrink-0"
+        style={{
+          background: done ? C.GREEN : pending ? "#cbd5e1" : current ? C.AMBER : C.BLUE,
+          boxShadow: current ? `0 0 0 4px ${C.BLUE}20` : undefined,
+        }}
+      >
+        {done ? "✓" : "·"}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold text-text-primary truncate">{label}</div>
+        <div className="text-[9px] text-text-muted truncate">{sub}</div>
+      </div>
+    </div>
+  );
+}
+function StageConn({ done }: { done: boolean }) {
+  return (
+    <div className="flex-1 h-[2px] max-w-[60px]" style={{ background: done ? C.GREEN : C.CB }} />
+  );
+}
+
+function HandedOffBanner({
+  gate, modulesCount,
+}: { gate: SigningGate; modulesCount: number }) {
+  if (!gate.gate_signed) return null;
+  const handedAt = gate.gate_confirmed_at;
+  return (
+    <div
+      className="rounded-[12px] border-[1.5px] p-4 mb-3 flex items-center gap-3.5"
+      style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)", borderColor: C.GREEN }}
+    >
+      <span className="text-[30px]">🤝</span>
+      <div className="flex-1 min-w-0">
+        <div className="text-[14px] font-bold" style={{ color: "#146a45" }}>
+          Audited and handed off to CS · {fd(handedAt)}
+        </div>
+        <div className="text-[11px] mt-0.5" style={{ color: "#2fb87a" }}>
+          {modulesCount} module{modulesCount === 1 ? "" : "s"} configured · ready for Success Management.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Demo state toggle (mirrors prototype line 132-141)
+// ─────────────────────────────────────────────────────────────
+function DemoStateToggle({
+  accountId,
+  gate,
+  onGateUpdate,
+  notify,
+}: {
+  accountId: string;
+  gate: SigningGate;
+  onGateUpdate: (next: SigningGate) => void;
+  notify: (o: { title: string; body?: string; tone?: "info" | "success" | "warning" | "error" }) => void;
+}) {
+  const stage: 1 | 2 | 3 = gate.gate_signed && !gate.gate_unlocked
+    ? 3 : !!gate.sh_locked_at ? 2 : 1;
+  const [pending, setPending] = useState<1 | 2 | 3 | null>(null);
+
+  // Treat 409 from /sign as already-signed success.
+  async function tolerant409<T>(p: () => Promise<T>): Promise<T | null> {
+    try { return await p(); }
+    catch (e) {
+      if (e instanceof ApiError && e.status === 409) return null;
+      throw e;
+    }
+  }
+
+  async function setStage(s: 1 | 2 | 3) {
+    if (pending || stage === s) return;
+    setPending(s);
+    try {
+      // One live read at the start. The subsequent calls touch independent
+      // state (sh_locked vs gate_signed), so we don't need to re-read
+      // between them — saves 1-2 round-trips per click.
+      const live = await api.get<SigningGate>(`/api/v1/accounts/${accountId}/sign`);
+      let next: SigningGate = live;
+
+      if (s === 1) {
+        if (live.gate_signed && !live.gate_unlocked) {
+          next = await api.post<SigningGate>(
+            `/api/v1/accounts/${accountId}/sign/unlock`,
+            { reason: "Demo reset — back to stage 1" },
+          );
+        }
+        if (next.sh_locked_at) {
+          next = await api.post<SigningGate>(
+            `/api/v1/accounts/${accountId}/sh-unlock`,
+            { reason: "Demo reset — back to stage 1" },
+          );
+        }
+        notify({ title: "Reset to stage 1 (Sales Handoff)", tone: "info" });
+      } else if (s === 2) {
+        if (live.gate_signed && !live.gate_unlocked) {
+          next = await api.post<SigningGate>(
+            `/api/v1/accounts/${accountId}/sign/unlock`,
+            { reason: "Demo state change — back to stage 2" },
+          );
+        }
+        if (!next.sh_locked_at) {
+          next = await api.post<SigningGate>(
+            `/api/v1/accounts/${accountId}/sh-lock`, {},
+          );
+        }
+        notify({ title: "Moved to stage 2 (Audit in progress)", tone: "info" });
+      } else {
+        if (!live.sh_locked_at) {
+          next = await api.post<SigningGate>(
+            `/api/v1/accounts/${accountId}/sh-lock`, {},
+          );
+        }
+        const signResult = await tolerant409(() =>
+          api.post<SigningGate>(`/api/v1/accounts/${accountId}/sign`, {
+            gate_signed_date: next.gate_signed_date ?? new Date().toISOString().slice(0, 10),
+            gate_contract_acv: next.gate_contract_acv ?? 310000,
+            gate_contract_term: next.gate_contract_term ?? "3 years",
+            gate_contract_modules: next.gate_contract_modules,
+            gate_platform_tier: next.gate_platform_tier,
+            gate_account_segment: next.gate_account_segment,
+            gate_subscribers: next.gate_subscribers,
+          }),
+        );
+        if (signResult) next = signResult;
+        notify({ title: "Moved to stage 3 (Handed off to CS)", tone: "success" });
+      }
+
+      // Each backend mutation returns the freshly-serialised SigningGate.
+      // Push it straight into the cache so the UI updates without waiting
+      // for a separate background refetch — same final state, ~150ms
+      // faster perceived response.
+      onGateUpdate(next);
+    } catch (e) {
+      notify({
+        title: "Demo state change failed",
+        body: e instanceof ApiError ? e.message : undefined,
+        tone: "error",
+      });
+    } finally {
+      setPending(null);
+    }
+  }
+
+  const StageBtn = ({ n, label }: { n: 1 | 2 | 3; label: string }) => {
+    const active = stage === n;
+    const isPending = pending === n;
+    return (
+      <button
+        type="button"
+        disabled={!!pending || active}
+        onClick={() => setStage(n)}
+        className={cn(
+          "px-2.5 py-1 rounded-[6px] text-[11px] font-semibold border transition disabled:cursor-not-allowed",
+          active ? "border-transparent text-white" : "border-white/15 text-white/85 hover:bg-white/10",
+          pending && !isPending && "opacity-60",
+        )}
+        style={active ? { background: C.BLUE, borderColor: C.BLUE } : { background: "rgba(255,255,255,0.10)" }}
+      >
+        {isPending ? "…" : `${n}. ${label}`}
+      </button>
+    );
+  };
+  return (
+    <div
+      className="fixed top-3.5 right-3.5 z-[90] rounded-[10px] px-3 py-2 flex flex-wrap gap-1.5 items-center shadow-lg max-w-[560px]"
+      style={{ background: C.NAVY }}
+    >
+      <span className="text-[9px] font-bold uppercase tracking-wider mr-1" style={{ color: "#8496b0" }}>
+        Demo State
+      </span>
+      <StageBtn n={1} label="Sales Handoff" />
+      <StageBtn n={2} label="Audit in progress" />
+      <StageBtn n={3} label="Handed off to CS" />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Shared atoms
+// ─────────────────────────────────────────────────────────────
+function Card({
+  children, leftBorderColor, opaqueWhenLocked,
+}: {
+  children: React.ReactNode;
+  leftBorderColor?: string;
+  opaqueWhenLocked?: boolean;
+}) {
+  return (
+    <div
+      className={cn("bg-white rounded-[14px] border border-beroe-card-border px-5 py-4 mb-3",
+        opaqueWhenLocked && "opacity-85")}
+      style={leftBorderColor ? { borderLeft: `4px solid ${leftBorderColor}` } : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+function SectionHead({
+  n, color, title, tooltip, teamLabel, teamColor, trailing,
+}: {
+  n: string;
+  color: string;
+  title: string;
+  tooltip?: string;
+  teamLabel?: string;
+  teamColor?: string;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <div className="text-[14px] font-bold mb-3 flex items-center gap-2 flex-wrap">
+      <span
+        className="w-[22px] h-[22px] rounded-[6px] text-white text-[10px] font-extrabold flex items-center justify-center flex-shrink-0"
+        style={{ background: color }}
+      >
+        {n}
+      </span>
+      <span>{title}</span>
+      {tooltip && <InlineTooltip text={tooltip} />}
+      {teamLabel && teamColor && (
+        <span
+          className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border"
+          style={{ background: `${teamColor}15`, color: teamColor, borderColor: `${teamColor}40` }}
+        >
+          {teamLabel}
+        </span>
+      )}
+      {trailing}
+    </div>
+  );
+}
+function InlineTooltip({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex items-center group">
+      <span
+        className="w-[18px] h-[18px] rounded-full border flex items-center justify-center text-[11px] font-bold cursor-help italic"
+        style={{ background: "#f1f5f9", color: C.T2, borderColor: C.CB, fontFamily: "Georgia, serif" }}
+      >
+        i
+      </span>
+      <span
+        className="pointer-events-none absolute left-0 bottom-[calc(100%+8px)] z-50 w-[340px] rounded-[8px] px-3 py-2.5 text-[11px] leading-[1.6] opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ background: "#0d1b2e", color: "#fff", fontWeight: 400 }}
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+function GroupHead({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[11px] font-bold text-text-muted mt-3.5 mb-2 uppercase tracking-wider">
+      {children}
+    </div>
+  );
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-2.5">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+function Input({
+  type = "text", value, disabled, placeholder, onChange, onBlur, className,
+}: {
+  type?: string;
+  value: string;
+  disabled?: boolean;
+  placeholder?: string;
+  onChange?: (v: string) => void;
+  onBlur?: (v: string) => void;
+  className?: string;
+}) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  return (
+    <input
+      type={type}
+      value={v}
+      disabled={disabled}
+      placeholder={placeholder}
+      onChange={(e) => { setV(e.target.value); onChange?.(e.target.value); }}
+      onBlur={() => onBlur?.(v)}
+      className={cn(
+        "w-full px-2.5 py-1.5 border rounded-[7px] text-[12px] focus:outline-none focus:border-beroe-blue disabled:bg-beroe-bg/40 disabled:cursor-not-allowed",
+        className,
+      )}
+      style={{ borderColor: C.CB }}
+    />
+  );
+}
+function TextArea({
+  value, disabled, placeholder, onBlur,
+}: { value: string; disabled?: boolean; placeholder?: string; onBlur: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  return (
+    <textarea
+      value={v}
+      disabled={disabled}
+      placeholder={placeholder}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => onBlur(v)}
+      className="w-full px-2.5 py-1.5 border rounded-[7px] text-[12px] focus:outline-none focus:border-beroe-blue disabled:bg-beroe-bg/40 disabled:cursor-not-allowed leading-[1.6] resize-y min-h-[50px]"
+      style={{ borderColor: C.CB }}
+    />
+  );
+}
+function Select({
+  value, disabled, onChange, children,
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-2.5 py-1.5 border rounded-[7px] text-[12px] bg-white focus:outline-none focus:border-beroe-blue disabled:bg-beroe-bg/40 disabled:cursor-not-allowed"
+      style={{ borderColor: C.CB }}
+    >
+      {children}
+    </select>
+  );
+}
+function SegControl({
+  options, value, disabled, onChange,
+}: {
+  options: string[];
+  value: string | null;
+  disabled?: boolean;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="inline-flex gap-0.5 p-0.5 rounded-[6px]" style={{ background: "#edf0f9" }}>
+      {options.map((o) => {
+        const active = value === o;
+        return (
+          <button
+            key={o}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(o)}
+            className={cn(
+              "px-2.5 py-1 rounded-[5px] text-[10px] font-semibold transition disabled:opacity-60",
+              active ? "bg-white font-bold shadow-sm" : "text-text-secondary hover:text-beroe-blue bg-transparent",
+            )}
+            style={active ? { color: C.BLUE } : undefined}
+          >
+            {o}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Default export
+// ─────────────────────────────────────────────────────────────
+export default function SalesHandoffTab() {
+  const account = useAccountFromLayout();
+  const qc = useQueryClient();
+  const notify = useNotify();
+
+  const gateQ = useQuery<SigningGate>({
+    queryKey: ["signing-gate", account.id],
+    queryFn: () => api.get<SigningGate>(`/api/v1/accounts/${account.id}/sign`),
+    staleTime: 15_000,
+  });
+  const solQ = useQuery<Solutioning>({
+    queryKey: ["solutioning", account.id],
+    queryFn: () => api.get<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`),
+    staleTime: 30_000,
+  });
+  const contactsQ = useQuery<{ items: ContactRow[]; total: number }>({
+    queryKey: ["contacts", account.id],
+    queryFn: () => api.get(`/api/v1/accounts/${account.id}/contacts`),
+    staleTime: 30_000,
+  });
+  const docsQ = useQuery<{ items: Document[]; total: number; is_editable: boolean }>({
+    queryKey: ["documents", account.id, "contract"],
+    queryFn: () => api.get(`/api/v1/accounts/${account.id}/documents?kind=contract`),
+    staleTime: 15_000,
+  });
+
+  // Force auth header injection — same as KindUploadCard for postForm.
+  useEffect(() => { void authProvider.getAccessToken().catch(() => null); }, []);
+
+  function invalidateAll() {
+    qc.invalidateQueries({ queryKey: ["signing-gate", account.id] });
+    qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
+    qc.invalidateQueries({ queryKey: ["contacts", account.id] });
+    qc.invalidateQueries({ queryKey: ["documents", account.id, "contract"] });
+    qc.invalidateQueries({ queryKey: ["account", account.id] });
+  }
+
+  if (gateQ.isLoading || !gateQ.data) {
+    return <div className="text-[12px] text-text-muted">Loading Sales Handoff…</div>;
+  }
+  const gate = gateQ.data;
+  const contacts = contactsQ.data?.items ?? [];
+  const contractDocs = (docsQ.data?.items ?? []).filter((d) => !d.deleted_at);
+
+  return (
+    <div>
+      <DemoStateToggle
+        accountId={account.id}
+        gate={gate}
+        onGateUpdate={(next) => {
+          // Cheap path — write straight into the cache; nothing else
+          // (contacts/solutioning/docs) is affected by a stage flip.
+          qc.setQueryData(["signing-gate", account.id], next);
+          qc.invalidateQueries({ queryKey: ["account", account.id] });
+        }}
+        notify={notify}
+      />
+      <StageIndicator gate={gate} />
+      <HandedOffBanner gate={gate} modulesCount={(gate.gate_contract_modules ?? []).length} />
+      <SalesHandoffSection
+        account={account}
+        gate={gate}
+        solutioning={solQ.data ?? null}
+        contacts={contacts}
+        contractDocs={contractDocs}
+        onMutate={invalidateAll}
+      />
+      <ContractAuditSection
+        account={account}
+        gate={gate}
+        onMutate={invalidateAll}
+      />
+    </div>
+  );
+}

@@ -481,6 +481,14 @@ async def get_account(
         gate_renewal_date=a.gate_renewal_date,
         gate_bvd_due_date=a.gate_bvd_due_date,
         gate_unlocked=a.gate_unlocked,
+        # 03-Jun — extended contract snapshot for the CS Handoff Commercial block.
+        gate_confirmed_at=a.gate_confirmed_at,
+        gate_contract_acv=a.gate_contract_acv,
+        gate_contract_term=a.gate_contract_term,
+        gate_contract_modules=list(a.gate_contract_modules or []),
+        gate_platform_tier=a.gate_platform_tier,
+        gate_account_segment=a.gate_account_segment,
+        gate_subscribers=a.gate_subscribers,
         can_view_sales_handoff=True,
         # CS Onboarding (M14) — entry type drives the inner view; the tab
         # itself is always visible so the picker is reachable.

@@ -54,6 +54,12 @@ class CSOnboardingOut(BaseModel):
     cs_handover_checklist: dict[str, bool] = Field(default_factory=dict)
     cs_stakeholders: dict[str, Stakeholder] = Field(default_factory=dict)
 
+    # 03-Jun — CS Handoff state (realignment in flight, success journey
+    # started). Shape: { realignment: {block,note,sent_at,sent_to} | null,
+    # started: bool, started_at: timestamptz | null }. Permissive on the
+    # wire so prototype tweaks flow through.
+    cs_handoff: dict = Field(default_factory=dict)
+
     # Convenience derived flag — true once the CS Onboarding tab should
     # show its inner content (rather than just the Entry picker).
     activated: bool = False
@@ -67,7 +73,8 @@ class CSOnboardingUpdate(BaseModel):
     cs_handover_checklist + cs_stakeholders merge into the existing dict
     in the route handler (so two users editing different roles / items
     don't race). To CLEAR a stakeholder, post the role with all fields
-    explicitly null.
+    explicitly null. cs_handoff is REPLACED whole, not merged — it's a
+    state machine, not an accumulating dict.
     """
 
     cs_entry_type: CSEntryType | None = None
@@ -76,3 +83,4 @@ class CSOnboardingUpdate(BaseModel):
 
     cs_handover_checklist: dict[str, bool] | None = None
     cs_stakeholders: dict[str, Stakeholder] | None = None
+    cs_handoff: dict | None = None

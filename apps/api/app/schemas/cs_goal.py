@@ -148,9 +148,20 @@ class CSGoalOut(BaseModel):
     owner: str | None
     alignment_status: CSGoalAlignment
 
+    # 03-Jun — CSM per-goal sign-off, independent of Phase A/B/C progress.
+    validation_status: Literal["pending", "accepted", "flagged", "removed"] = (
+        "pending"
+    )
+    flag_note: str | None = None
+
     phase_a: PhaseA = Field(default_factory=PhaseA)
     phase_b: PhaseB = Field(default_factory=PhaseB)
     phase_c: PhaseC = Field(default_factory=PhaseC)
+    # 03-Jun — explicit per-phase completion timestamps drive the
+    # prototype's "Done" badge + auto-advance logic.
+    phase_a_completed_at: datetime | None = None
+    phase_b_completed_at: datetime | None = None
+    phase_c_completed_at: datetime | None = None
 
     initiatives: list[Initiative] = Field(default_factory=list)
     history: list[HistoryAction] = Field(default_factory=list)
@@ -188,9 +199,21 @@ class CSGoalUpdate(BaseModel):
     owner: str | None = Field(None, max_length=200)
     alignment_status: CSGoalAlignment | None = None
 
+    # 03-Jun — CSM per-goal sign-off + flag note.
+    validation_status: (
+        Literal["pending", "accepted", "flagged", "removed"] | None
+    ) = None
+    flag_note: str | None = Field(None, max_length=2000)
+
     phase_a: PhaseA | None = None
     phase_b: PhaseB | None = None
     phase_c: PhaseC | None = None
+    # 03-Jun — explicit per-phase completion timestamps. The PATCH handler
+    # stamps these alongside the phase_*_complete bool inside the phase
+    # object so the prototype's auto-advance + "Done" badge work.
+    phase_a_completed_at: datetime | None = None
+    phase_b_completed_at: datetime | None = None
+    phase_c_completed_at: datetime | None = None
 
     initiatives: list[Initiative] | None = None
 

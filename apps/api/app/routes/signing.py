@@ -37,8 +37,12 @@ from app.models.account import Account
 from app.routes.accounts import _team_member_ids
 from app.schemas.signing import (
     ContractDocUpdate,
+    ContractExtrasUpdate,
     HandoverChecklistUpdate,
+    ModuleConfigsUpdate,
     SignAccountIn,
+    ShLockIn,
+    ShUnlockIn,
     SigningGateOut,
     UnlockSigningIn,
 )
@@ -117,6 +121,10 @@ def _serialise(acc: Account, *, can_sign: bool, can_unlock: bool) -> SigningGate
     out = SigningGateOut.model_validate(acc)
     out.can_sign = can_sign
     out.can_unlock = can_unlock
+    # 04-Jun — Sales Handoff stage-1 lock capabilities. Sales (or higher)
+    # can lock; admin can unlock.
+    out.can_sh_lock = can_sign  # whoever can sign can lock-for-onboarding too
+    out.can_sh_unlock = can_unlock
     return out
 
 
@@ -128,9 +136,11 @@ async def _serialise_with_name(
     can_unlock: bool,
 ) -> SigningGateOut:
     """Same as _serialise but resolves gate_confirmed_by → user.full_name
-    (H41 — surfaces the Sales person's name on the signed display)."""
+    (H41 — surfaces the Sales person's name on the signed display) +
+    sh_locked_by → name (04-Jun)."""
     out = _serialise(acc, can_sign=can_sign, can_unlock=can_unlock)
     out.gate_confirmed_by_name = await _resolve_user_name(db, acc.gate_confirmed_by)
+    out.sh_locked_by_name = await _resolve_user_name(db, acc.sh_locked_by)
     return out
 
 
@@ -356,6 +366,156 @@ async def patch_contract_doc(
 
     return _serialise(
         real,
+        can_sign=can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team),
+        can_unlock=can_unlock_signing(user.role),
+    )
+
+
+# ============================================================
+# 04-Jun — Sales Handoff stage-1 lock / unlock
+# ============================================================
+
+
+@router.post("/{account_id}/sh-lock", response_model=SigningGateOut)
+async def lock_sales_handoff(
+    account_id: Annotated[UUID, Path()],
+    body: ShLockIn,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SigningGateOut:
+    """Stage 1 → 2 — Sales locks the handoff for onboarding (Contract Ops
+    audit phase begins). Idempotent if already locked."""
+    del body  # empty body — locking is a state flip
+    _scoped, is_assigned, is_team = await _scope(db, user, account_id)
+    del _scoped  # only used for permission inputs
+    if not can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Your role cannot lock the Sales Handoff")
+    # Re-fetch as a session-tracked row (scope cache returns a detached
+    # instance that SQLAlchemy can't commit + refresh through).
+    real = (await db.execute(select(Account).where(Account.id == account_id))).scalar_one()
+    if real.sh_locked_at is None:
+        real.sh_locked_at = datetime.now(timezone.utc)
+        real.sh_locked_by = user.id
+        await db.commit()
+        await db.refresh(real)
+        from app.core.scope import invalidate_account
+        invalidate_account(account_id)
+    return await _serialise_with_name(
+        real, db,
+        can_sign=can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team),
+        can_unlock=can_unlock_signing(user.role),
+    )
+
+
+@router.post("/{account_id}/sh-unlock", response_model=SigningGateOut)
+async def unlock_sales_handoff(
+    account_id: Annotated[UUID, Path()],
+    body: ShUnlockIn,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SigningGateOut:
+    """Admin reopens the Sales Handoff. Reason logged via audit listener."""
+    del body  # reason is audited by SQLAlchemy event listener via context
+    _scoped, is_assigned, is_team = await _scope(db, user, account_id)
+    del _scoped
+    if not can_unlock_signing(user.role):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can unlock the Sales Handoff")
+    real = (await db.execute(select(Account).where(Account.id == account_id))).scalar_one()
+    if real.sh_locked_at is not None:
+        real.sh_locked_at = None
+        real.sh_locked_by = None
+        await db.commit()
+        await db.refresh(real)
+        from app.core.scope import invalidate_account
+        invalidate_account(account_id)
+    return await _serialise_with_name(
+        real, db,
+        can_sign=can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team),
+        can_unlock=can_unlock_signing(user.role),
+    )
+
+
+# ============================================================
+# 04-Jun — Per-module configs + audit-only extras (Contract Ops)
+# ============================================================
+
+
+@router.patch("/{account_id}/module-configs", response_model=SigningGateOut)
+async def patch_module_configs(
+    account_id: Annotated[UUID, Path()],
+    body: ModuleConfigsUpdate,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SigningGateOut:
+    """Merge per-module configs into accounts.gate_module_configs.
+    Modules absent from the body are left unchanged; pass an empty
+    dict to clear a module's config."""
+    _scoped, is_assigned, is_team = await _scope(db, user, account_id)
+    del _scoped
+    if not can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Your role cannot edit module configs",
+        )
+    real = (await db.execute(select(Account).where(Account.id == account_id))).scalar_one()
+    if real.gate_signed and not real.gate_unlocked:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Contract audit is locked. Admin must unlock signing before editing module configs.",
+        )
+    import copy
+    merged = copy.deepcopy(real.gate_module_configs or {})
+    for mod, cfg in body.configs.items():
+        merged[mod] = cfg
+    real.gate_module_configs = merged
+    await db.commit()
+    await db.refresh(real)
+    from app.core.scope import invalidate_account
+    invalidate_account(account_id)
+    return await _serialise_with_name(
+        real, db,
+        can_sign=can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team),
+        can_unlock=can_unlock_signing(user.role),
+    )
+
+
+@router.patch("/{account_id}/contract-extras", response_model=SigningGateOut)
+async def patch_contract_extras(
+    account_id: Annotated[UUID, Path()],
+    body: ContractExtrasUpdate,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SigningGateOut:
+    """Merge audit-only extras (billing_freq, payment_terms, discount,
+    geography, module_caveats, audit_notes, other_terms, tcv_override,
+    audited_by name) into accounts.gate_contract_extras."""
+    _scoped, is_assigned, is_team = await _scope(db, user, account_id)
+    del _scoped
+    if not can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Your role cannot edit contract extras",
+        )
+    real = (await db.execute(select(Account).where(Account.id == account_id))).scalar_one()
+    if real.gate_signed and not real.gate_unlocked:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Contract audit is locked. Admin must unlock signing before editing contract extras.",
+        )
+    import copy
+    merged = copy.deepcopy(real.gate_contract_extras or {})
+    for k, v in body.extras.items():
+        if v is None:
+            merged.pop(k, None)
+        else:
+            merged[k] = v
+    real.gate_contract_extras = merged
+    await db.commit()
+    await db.refresh(real)
+    from app.core.scope import invalidate_account
+    invalidate_account(account_id)
+    return await _serialise_with_name(
+        real, db,
         can_sign=can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team),
         can_unlock=can_unlock_signing(user.role),
     )
