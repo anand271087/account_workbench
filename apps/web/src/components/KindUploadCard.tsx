@@ -45,12 +45,17 @@ export function KindUploadCard({
   title,
   description,
   emptyHint,
+  headerAction,
 }: {
   accountId: string;
   kind: DocKind;
   title: string;
   description: string;
   emptyHint: string;
+  // 03-Jun bug 8 — slot for a button rendered to the right of the
+  // card title (used by Pre-Sales to surface the Pre-Meeting Brief
+  // overlay next to the MoM upload, per the prototype).
+  headerAction?: React.ReactNode;
 }) {
   const qc = useQueryClient();
   const confirm = useConfirm();
@@ -352,8 +357,18 @@ export function KindUploadCard({
         <div className="flex items-start gap-3 mb-3">
           <div className="text-2xl shrink-0">📄</div>
           <div className="flex-1">
-            <h2 className="text-sm font-bold text-text-primary">{title}</h2>
-            <p className="text-xs text-text-muted mt-0.5">{description}</p>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-bold text-text-primary">{title}</h2>
+                {/* 03-Jun bug 6 — long description is now a hover-tooltip
+                    on the (i) icon next to the title, not inline text. */}
+                <HeaderHelpTooltip text={description} />
+              </div>
+              {headerAction}
+            </div>
+            {/* Hidden — kept around so removing description doesn't break
+                downstream consumers; replaced by the tooltip above. */}
+            <p className="sr-only">{description}</p>
             {!isLoading && !canUpload && (
               <p className="text-[11px] mt-1 text-beroe-amber bg-beroe-amber/15 border border-beroe-amber/40 rounded px-2 py-1 inline-block">
                 Read-only — your role can't upload {kind === "vpd" ? "VPDs" : kind === "mom" ? "MoMs" : "this"} on this account.
@@ -991,4 +1006,33 @@ async function createExtractedContacts(
       }),
   );
   return { created, skipped, failed };
+}
+
+// ─────────────────────────────────────────────────────────────
+// 03-Jun bug 6 — Inline section descriptions become a hover tooltip
+// on a small ⓘ icon next to the title. Same visual pattern as the
+// Sales Hand-off / Contract Audit InlineTooltip atoms.
+// ─────────────────────────────────────────────────────────────
+function HeaderHelpTooltip({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <span className="relative inline-flex items-center group">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label="Show section description"
+        className="cursor-help w-3.5 h-3.5 inline-flex items-center justify-center rounded-full border border-beroe-card-border text-[10px] text-text-muted hover:text-beroe-blue hover:border-beroe-blue/40 focus:outline-none focus:ring-1 focus:ring-beroe-blue/40 italic"
+        style={{ fontFamily: "Georgia, serif" }}
+      >
+        i
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-0 top-[140%] z-50 w-[340px] rounded-md bg-beroe-navy text-white text-[11px] leading-[1.55] px-2.5 py-2 shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+      >
+        {text}
+        <span className="absolute left-3 bottom-full w-0 h-0 border-x-4 border-x-transparent border-b-4 border-b-beroe-navy" />
+      </span>
+    </span>
+  );
 }

@@ -922,6 +922,8 @@ function BulkReassignModal({
 // 03-Jun bug — Add Account form simplified per stakeholder spec:
 // removed Segment / Category / Health; new dropdowns for Industry /
 // Country / Tier / Account Type / Commercial Owner / CSM Owner.
+// All dropdowns use SearchablePicker (same UX as Currency / Spend Pool
+// pickers on Pre-Sales).
 import {
   INDUSTRY_OPTIONS,
   COUNTRY_OPTIONS,
@@ -930,6 +932,7 @@ import {
   COMMERCIAL_OWNER_OPTIONS,
   CSM_OWNER_OPTIONS,
 } from "@/types/account_options";
+import { SearchablePicker } from "@/components/SearchablePicker";
 
 interface CreateAccountForm {
   name: string;
@@ -1033,56 +1036,52 @@ function CreateAccountModal({
           </ModalField>
 
           <ModalField label="Industry">
-            <select
+            <SearchablePicker
               value={form.industry}
-              onChange={(e) => setForm({ ...form, industry: e.target.value })}
-              className={modalInputCls}
-            >
-              <option value="">— Select —</option>
-              {INDUSTRY_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}
-            </select>
+              options={INDUSTRY_OPTIONS}
+              placeholder="Select industry"
+              onChange={(v) => setForm({ ...form, industry: v })}
+              testId="add-account-industry"
+            />
           </ModalField>
           <ModalField label="Country">
-            <select
+            <SearchablePicker
               value={form.country}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
-              className={modalInputCls}
-            >
-              <option value="">— Select —</option>
-              {COUNTRY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+              options={COUNTRY_OPTIONS}
+              placeholder="Select country"
+              pinned={["United States", "United Kingdom", "India", "Germany", "Singapore", "Australia"]}
+              onChange={(v) => setForm({ ...form, country: v })}
+              testId="add-account-country"
+            />
           </ModalField>
 
           <ModalField label="Region">
-            <select
+            <SearchablePicker
               value={form.region}
-              onChange={(e) => setForm({ ...form, region: e.target.value })}
-              className={modalInputCls}
-            >
-              <option value="">— Select —</option>
-              {REGION_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
+              options={REGION_OPTIONS}
+              placeholder="Select region"
+              onChange={(v) => setForm({ ...form, region: v })}
+              testId="add-account-region"
+            />
           </ModalField>
           <ModalField label="Tier">
-            <select
+            <SearchablePicker
               value={form.tier}
-              onChange={(e) => setForm({ ...form, tier: e.target.value })}
-              className={modalInputCls}
-            >
-              <option value="">— Select —</option>
-              {NEW_TIER_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+              options={NEW_TIER_OPTIONS}
+              placeholder="Select tier"
+              onChange={(v) => setForm({ ...form, tier: v })}
+              testId="add-account-tier"
+            />
           </ModalField>
 
           <ModalField label="CSM owner *" full>
-            <select
+            <SearchablePicker
               value={form.csm_owner_name}
-              onChange={(e) => setForm({ ...form, csm_owner_name: e.target.value })}
-              className={modalInputCls}
-            >
-              <option value="">— Pick a CSM —</option>
-              {CSM_OWNER_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+              options={CSM_OWNER_OPTIONS}
+              placeholder="Pick a CSM"
+              onChange={(v) => setForm({ ...form, csm_owner_name: v })}
+              testId="add-account-csm"
+            />
           </ModalField>
 
           <button
@@ -1096,24 +1095,22 @@ function CreateAccountModal({
           {showMore && (
             <>
               <ModalField label="Account type">
-                <select
+                <SearchablePicker
                   value={form.account_type}
-                  onChange={(e) => setForm({ ...form, account_type: e.target.value })}
-                  className={modalInputCls}
-                >
-                  <option value="">— Select —</option>
-                  {NEW_ACCOUNT_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                  options={NEW_ACCOUNT_TYPE_OPTIONS}
+                  placeholder="Select type"
+                  onChange={(v) => setForm({ ...form, account_type: v })}
+                  testId="add-account-type"
+                />
               </ModalField>
               <ModalField label="Commercial Owner">
-                <select
+                <SearchablePicker
                   value={form.commercial_owner_name}
-                  onChange={(e) => setForm({ ...form, commercial_owner_name: e.target.value })}
-                  className={modalInputCls}
-                >
-                  <option value="">— None —</option>
-                  {COMMERCIAL_OWNER_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+                  options={COMMERCIAL_OWNER_OPTIONS}
+                  placeholder="Pick a Commercial Owner"
+                  onChange={(v) => setForm({ ...form, commercial_owner_name: v })}
+                  testId="add-account-co"
+                />
               </ModalField>
 
               <ModalField label="Current ACV ($)">
