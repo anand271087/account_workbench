@@ -1,0 +1,22 @@
+# Don't ship node_modules or build artefacts into the build context — the
+# Dockerfile re-installs deps in a clean layer for reproducibility.
+node_modules
+dist
+.vite
+.next
+.cache
+
+# Local env files (build args are supplied via --build-arg at build time)
+.env
+.env.local
+.env.development
+.env.production
+
+# Editor + OS clutter
+.vscode
+.idea
+.DS_Store
+
+# Source-control metadata
+.git
+.gitignore
