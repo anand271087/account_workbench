@@ -73,6 +73,24 @@ managed cache (ElastiCache / Memorystore) — set REDIS_URL accordingly.
 
 ## 3. One-time setup
 
+> **Short path — reusing the existing Supabase project that the dev
+> instance already runs against**
+>
+> If the deploy points at the same Supabase project Anand has been using
+> during development, then **everything in 3c → 3f is already done**:
+> 63 migrations applied, the 3 storage buckets exist, seed users are in
+> `public.users`, demo accounts (Mondelez / Siemens / Test1 / Sanofi /
+> Novo Nordisk) are seeded.
+>
+> In that case the deploy collapses to: **clone → fill .env.prod →
+> build → run**. Steps 3c, 3d, 3e, 3f below can be skipped. Lift the
+> Supabase secrets straight out of the existing `apps/api/.env` and
+> `apps/web/.env` files on the dev machine.
+>
+> If you DO want a separate prod-isolated Supabase project (recommended
+> long-term so prod data isn't mixed with dev experimentation), follow
+> 3c → 3f against the new project before launch.
+
 ### 3a. Clone the repo
 
 ```bash
