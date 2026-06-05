@@ -297,7 +297,12 @@ def _real_extract(text: str) -> MomExtractionResult:
     raw = llm.chat_text(
         system=_SYSTEM_PROMPT,
         user_content=f"MOM TEXT:\n\n{_truncate_for_prompt(text)}",
-        max_tokens=4000,
+        # 05-Jun — bumped from 4000 to 8000. The brief section grew (added
+        # objectives / minefields / closing_scenarios + call_time / call_
+        # platform / categories + cheat_sheet_win_condition_short on the
+        # MoM prompt) and Claude was hitting the cap on rich SDR templates
+        # → truncated JSON → parse fail → silent fallback to regex stub.
+        max_tokens=8000,
     )
     cleaned = _JSON_FENCE_RE.sub("", raw).strip()
     m = _JSON_OBJECT_RE.search(cleaned)

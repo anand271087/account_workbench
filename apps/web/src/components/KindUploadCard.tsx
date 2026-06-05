@@ -109,12 +109,14 @@ export function KindUploadCard({
       (d) =>
         !d.deleted_at &&
         d.mom_extracted_fields &&
-        !sessionStorage.getItem(appliedKey(d.id)) &&
-        !localStorage.getItem(appliedKey(d.id)),
+        !sessionStorage.getItem(appliedKey(d.id, d.mom_extracted_at)) &&
+        !localStorage.getItem(appliedKey(d.id, d.mom_extracted_at)),
     );
     if (pending.length === 0) return;
     // Mark synchronously to prevent re-entry while the async work runs.
-    pending.forEach((d) => sessionStorage.setItem(appliedKey(d.id), "1"));
+    pending.forEach((d) =>
+      sessionStorage.setItem(appliedKey(d.id, d.mom_extracted_at), "1"),
+    );
     void Promise.all(pending.map(async (d) => {
       const r = d.mom_extracted_fields as unknown as MomExtractionResult;
       saveExtractionDraft(accountId, {
@@ -132,7 +134,10 @@ export function KindUploadCard({
         r.account_fields,
       );
       // Persist the applied marker so reloads don't re-create contacts.
-      localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+      localStorage.setItem(
+        appliedKey(d.id, d.mom_extracted_at),
+        new Date().toISOString(),
+      );
       const parts: string[] = [];
       if (hasAnyEngagement(r.engagement)) parts.push("engagement");
       if (hasAnyBrief(r.brief)) parts.push("brief");
@@ -165,15 +170,20 @@ export function KindUploadCard({
       (d) =>
         !d.deleted_at &&
         d.vpd_extracted_fields &&
-        !sessionStorage.getItem(appliedKey(d.id)) &&
-        !localStorage.getItem(appliedKey(d.id)),
+        !sessionStorage.getItem(appliedKey(d.id, d.vpd_extracted_at)) &&
+        !localStorage.getItem(appliedKey(d.id, d.vpd_extracted_at)),
     );
     if (pending.length === 0) return;
-    pending.forEach((d) => sessionStorage.setItem(appliedKey(d.id), "1"));
+    pending.forEach((d) =>
+      sessionStorage.setItem(appliedKey(d.id, d.vpd_extracted_at), "1"),
+    );
     pending.forEach((d) => {
       const v = d.vpd_extracted_fields as unknown as ExtractedVpd;
       if (!hasAnyVpd(v)) {
-        localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+        localStorage.setItem(
+          appliedKey(d.id, d.vpd_extracted_at),
+          new Date().toISOString(),
+        );
         return;
       }
       saveExtractionDraft(accountId, {
@@ -181,7 +191,10 @@ export function KindUploadCard({
         appliedAt: new Date().toISOString(),
         solutioning: v,
       });
-      localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+      localStorage.setItem(
+        appliedKey(d.id, d.vpd_extracted_at),
+        new Date().toISOString(),
+      );
       setExtractionToast(
         `Populated Solutioning fields from "${d.filename}". Review on the Solutioning tab and click Save.`,
       );
@@ -201,15 +214,20 @@ export function KindUploadCard({
       (d) =>
         !d.deleted_at &&
         d.handoff_extracted_fields &&
-        !sessionStorage.getItem(appliedKey(d.id)) &&
-        !localStorage.getItem(appliedKey(d.id)),
+        !sessionStorage.getItem(appliedKey(d.id, d.handoff_extracted_at)) &&
+        !localStorage.getItem(appliedKey(d.id, d.handoff_extracted_at)),
     );
     if (pending.length === 0) return;
-    pending.forEach((d) => sessionStorage.setItem(appliedKey(d.id), "1"));
+    pending.forEach((d) =>
+      sessionStorage.setItem(appliedKey(d.id, d.handoff_extracted_at), "1"),
+    );
     pending.forEach((d) => {
       const h = d.handoff_extracted_fields as unknown as HandoffExtractionResult;
       if (!hasAnyHandoff(h)) {
-        localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+        localStorage.setItem(
+          appliedKey(d.id, d.handoff_extracted_at),
+          new Date().toISOString(),
+        );
         return;
       }
       saveExtractionDraft(accountId, {
@@ -217,7 +235,10 @@ export function KindUploadCard({
         appliedAt: new Date().toISOString(),
         handoff: h,
       });
-      localStorage.setItem(appliedKey(d.id), new Date().toISOString());
+      localStorage.setItem(
+        appliedKey(d.id, d.handoff_extracted_at),
+        new Date().toISOString(),
+      );
       setExtractionToast(
         `Populated Client Signed fields from "${d.filename}". Review on Sales Hand-off and click Save.`,
       );
@@ -266,8 +287,7 @@ export function KindUploadCard({
       // useEffect will pick up the fresh extracted fields when the worker
       // finishes. Without this, a doc that was applied once (possibly
       // with stub data) is locked out from re-apply on subsequent reruns.
-      sessionStorage.removeItem(appliedKey(docId));
-      localStorage.removeItem(appliedKey(docId));
+      wipeAppliedFlags(docId);
       qc.invalidateQueries({ queryKey });
     },
   });
@@ -847,8 +867,29 @@ function formatBytes(b: number | null): string {
 
 // ---------- Extraction helpers ----------
 
-function appliedKey(docId: string): string {
-  return `awb:extraction-applied:${docId}`;
+/** Per-doc applied marker.
+ *
+ * 05-Jun — keyed by `(docId, extractedAt)` so a re-extraction (worker
+ * ran again, new mom_extracted_at / vpd_extracted_at / handoff_extracted_at)
+ * invalidates the marker and the auto-apply re-fires with the fresh
+ * payload. Without the timestamp, the first run wins forever — even if
+ * the first run came back empty because of a transient Claude error. */
+function appliedKey(docId: string, stamp?: string | null): string {
+  const base = `awb:extraction-applied:${docId}`;
+  return stamp ? `${base}:${stamp}` : base;
+}
+
+/** Scan localStorage / sessionStorage and wipe every applied marker for
+ *  this doc — regardless of which extraction stamp was used. Called when
+ *  the doc is soft-deleted so a re-upload with the same id starts fresh. */
+function wipeAppliedFlags(docId: string): void {
+  const prefix = `awb:extraction-applied:${docId}`;
+  for (const store of [localStorage, sessionStorage]) {
+    for (let i = store.length - 1; i >= 0; i--) {
+      const k = store.key(i);
+      if (k && k.startsWith(prefix)) store.removeItem(k);
+    }
+  }
 }
 
 function hasAnyEngagement(e: MomExtractionResult["engagement"] | undefined): boolean {
