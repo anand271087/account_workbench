@@ -42,15 +42,23 @@ export interface ExtractedContact {
   is_internal_beroe: boolean;
 }
 
-// Subset of MeetingBriefUpdate the extraction populates.
+// Subset of MeetingBriefUpdate the extraction populates. 05-Jun —
+// expanded to cover nearly every brief-tab field with MoM signal.
 export interface ExtractedBrief
   extends Pick<
     MeetingBriefUpdate,
     | "call_date"
     | "call_duration_minutes"
+    | "call_time"
+    | "call_platform"
+    | "categories"
     | "win_condition"
+    | "cheat_sheet_win_condition_short"
     | "company_snapshot"
     | "attendees"
+    | "objectives"
+    | "minefields"
+    | "closing_scenarios"
     | "news"
     | "public_signals"
     | "value_anchors"

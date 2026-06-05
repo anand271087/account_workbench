@@ -17,8 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.contact import ContactDecisionPower, ContactFunction, ContactSeniority
 from app.schemas.meeting_brief import (
     Attendee,
+    ClosingScenario,
     EmailInsight,
+    Minefield,
     NewsItem,
+    Objective,
     PublicSignal,
     SnapshotStat,
     ValueAnchor,
@@ -87,18 +90,28 @@ class ExtractedContact(BaseModel):
 
 
 class ExtractedBrief(BaseModel):
-    """Maps onto MeetingBriefUpdate — only the collections the AI can reliably
-    populate from an MoM. Other brief collections (objectives, discovery_questions,
-    minefields, call_timer, closing_scenarios) stay manual."""
+    """Maps onto MeetingBriefUpdate — the collections the AI can reliably
+    populate from an MoM. discovery_questions / annual_reports / call_timer
+    stay manual (no signal in the MoM)."""
 
     model_config = ConfigDict(extra="allow")
 
     call_date: date | None = None
     call_type: ExtractedCallType | None = None
     call_duration_minutes: int | None = Field(None, ge=0, le=1440)
+    # 05-Jun — Brief-tab fields the editor + presentation already render but
+    # the MoM extractor wasn't populating. With these added, an MoM upload
+    # auto-fills nearly every brief field that has signal in the document.
+    call_time: str | None = Field(None, max_length=120)
+    call_platform: str | None = Field(None, max_length=120)
+    categories: list[str] = Field(default_factory=list)
     win_condition: str | None = Field(None, max_length=1200)
+    cheat_sheet_win_condition_short: str | None = Field(None, max_length=400)
     company_snapshot: list[SnapshotStat] = Field(default_factory=list)
     attendees: list[Attendee] = Field(default_factory=list)
+    objectives: list[Objective] = Field(default_factory=list)
+    minefields: list[Minefield] = Field(default_factory=list)
+    closing_scenarios: list[ClosingScenario] = Field(default_factory=list)
     news: list[NewsItem] = Field(default_factory=list)
     public_signals: list[PublicSignal] = Field(default_factory=list)
     value_anchors: list[ValueAnchor] = Field(default_factory=list)

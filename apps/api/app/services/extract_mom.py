@@ -149,10 +149,23 @@ You output a SINGLE JSON object with this exact shape (omit fields you can't inf
   "brief": {
     "call_date": <"YYYY-MM-DD"|null>,
     "call_type": <"first_discovery"|"qbr"|"renewal"|"expansion"|"other"|null — "Regular"+"Lost Client"=first_discovery, QBR=qbr, Renewal=renewal>,
-    "call_duration_minutes": <int|null — parsed from "(30 minutes)" / "(60 mins)">,
+    "call_duration_minutes": <int|null — parsed from "(30 minutes)" / "(60 mins)" / "Duration: 45 minutes">,
+    "call_time": <string|null — verbatim e.g. "10:00 AM IST" / "2pm UTC" / "14:30 CET". Parse from "Time:" lines or in-text time references. Omit if no time given.>,
+    "call_platform": <string|null — meeting platform. Parse from "Location: Virtual (Microsoft Teams)" / "Zoom link" / "Teams meeting" / "Google Meet" / "Webex" / "On-site". Output the platform name only — e.g. "Microsoft Teams", "Zoom", "Google Meet", "On-site".>,
+    "categories": [<list of category strings — same as engagement.target_categories. Pull from "Categories of interest", "Primary spend", "Direct Materials", "Indirect categories". Strip ($M) annotations.>],
     "win_condition": <string|null — 1-2 sentence "what does a successful meeting look like" inferred from Meeting Type + Trigger>,
+    "cheat_sheet_win_condition_short": <string|null — terse 6-10 word version of win_condition for the cheat sheet, e.g. "Get demo approved within Q3 + executive sponsor introduced">,
     "company_snapshot": [{"num": <string>, "label": <string>, "sub": <string|null>}],
     "attendees": [{"initials": <up-to-4-char>, "name": <string>, "role": <string|null>, "company": <"client"|"beroe">, "is_self": false, "objectives": []}],
+    "objectives": [
+      {"rank": <int 1-9 — priority>, "name": <string ≤200 — meeting goal>, "confidence": <int 1-5 — how confident this is the right priority>, "bullets": [<≤3 strings>], "beroe": <string|null — "What Beroe will say / do" — what we should bring to land this>, "sources": []}
+    ],
+    "minefields": [
+      {"severity": <"high"|"caution">, "type": <string|null — short category like "BUDGET" / "TIMING" / "STAKEHOLDER" / "COMPETE">, "text": <string ≤400 — the risk in plain English>, "why": <string|null ≤400 — why it matters>}
+    ],
+    "closing_scenarios": [
+      {"type": <"good"|"neutral"|"poor">, "label": <string|null ≤80 — short summary>, "text": <string ≤1200 — the scenario>}
+    ],
     "news": [{"days_ago": <int|null>, "headline": <string>, "url": <string|null>, "signal": <string|null — 1-line "so what">}],
     "public_signals": [{"person": <string|null>, "headline": <string>, "url": <string|null>, "tag": <string|null>}],
     "value_anchors": [{"objective": <string>, "points": [{"text": <string>, "note": <string|null>}]}],
@@ -220,6 +233,35 @@ GUIDANCE:
   does a successful next step from this meeting look like.
 - brief.attendees: ONE row per named human in the doc. company="beroe"
   for the Beroe team, "client" otherwise. initials from first letters.
+- brief.call_time / call_platform: parse from any meeting metadata —
+  "Time: 10am IST", "10:00 AM PT", "Location: Virtual (Microsoft Teams)",
+  "Zoom" / "Teams" / "Google Meet" / "Webex" / "On-site at customer
+  office". If only platform is given, set call_time=null.
+- brief.categories: same as engagement.target_categories — pull from
+  "Categories of interest", "Primary spend", etc. Free-form strings
+  (e.g. "Copper", "Aluminium", "Rare Earth Elements").
+- brief.cheat_sheet_win_condition_short: terse 6-10 word version of
+  win_condition — what would a cheat-card on the laptop show. e.g.
+  "Confirm 3-vendor consolidation + Eastern Europe coverage".
+- brief.objectives: 3-6 objectives extracted from the AGENDA, "DISCUSSION
+  SUMMARY", or "Goals" sections. rank=1 for the highest-priority goal
+  the meeting was scheduled to land. confidence reflects how certain the
+  doc makes the priority — high if the agenda explicitly leads with it,
+  medium if it's surfaced once, low if implied. bullets are 1-3 lines of
+  concrete sub-goals. `beroe` is what we'd bring to land it.
+- brief.minefields: pull from "RISK FLAGS", "Watch-outs", "Concerns",
+  "Risks", "Issues". severity="high" for explicit blockers / deadlines
+  missed / lost-client scenarios. severity="caution" for items flagged
+  as "to monitor" / "could become a risk". type is a 1-2 word category
+  (BUDGET / TIMING / COMPETE / STAKEHOLDER / SCOPE / TECH / LEGAL).
+  `why` is one sentence — why this matters for the next meeting.
+- brief.closing_scenarios: derive 1-3 scenarios from "NEXT STEPS",
+  "ACTION ITEMS", "Outcome", or "Decision". type="good" for the path
+  forward the client clearly committed to; "neutral" for a follow-up
+  meeting / continued evaluation; "poor" for stalls / objections raised.
+  `label` is a 4-6 word summary. `text` is the scenario in 1-3
+  sentences ("If we send the ROI deck by next Friday, Dr. Richter is
+  willing to sign off on a 3-week trial across Copper + Aluminium").
 - brief.news, public_signals, value_anchors, email_insights, cheat_sheet_*:
   fill ONLY when the doc surfaces signals worth carrying forward (trigger
   intel / market events / explicit asks). Empty `[]` is fine when nothing
@@ -398,13 +440,25 @@ def _stub_extract(text: str) -> MomExtractionResult:
 
     # --- brief ---
     call_date, call_duration = _parse_meeting_date(s.get("meeting date"))
+    # 05-Jun — also try the full doc for the date when the "Meeting Date:"
+    # heading isn't present (SDR templates use it; freeform MoMs say "Date:").
+    if not call_date:
+        call_date = _parse_discovery_date(text)
+    win = _compose_win_condition(s)
     brief = ExtractedBrief(
         call_date=call_date,
         call_type=_infer_call_type(s.get("meeting type")),
-        call_duration_minutes=call_duration,
-        win_condition=_compose_win_condition(s),
+        call_duration_minutes=call_duration or _parse_duration(text),
+        call_time=_parse_call_time(text),
+        call_platform=_parse_call_platform(text),
+        categories=intent[:6] if intent else _extract_categories_from_text(text),
+        win_condition=win,
+        cheat_sheet_win_condition_short=_short_win(win),
         company_snapshot=_build_snapshot(s),
         attendees=_build_attendees(s),
+        objectives=_build_objectives(text),
+        minefields=_build_minefields(text),
+        closing_scenarios=_build_closing_scenarios(text),
         news=_build_news(s.get("additional info")),
         public_signals=[],
         value_anchors=_build_value_anchors(s),
@@ -823,6 +877,252 @@ def _compose_win_condition(s: dict[str, str]) -> str | None:
     if mt:
         return f"A successful {mt} call surfaces 2-3 concrete category priorities and a follow-up date."
     return None
+
+
+# ---------- Brief field stub helpers (05-Jun) ----------
+
+
+def _short_win(win: str | None) -> str | None:
+    """Compress a 1-2 sentence win condition to a 6-10 word cheat-sheet line."""
+    if not win:
+        return None
+    # Take the first clause + trim to ~80 chars; safe fallback when AI isn't on.
+    first = re.split(r"[.!?]", win, maxsplit=1)[0].strip()
+    if len(first) > 80:
+        return first[:77].rstrip() + "…"
+    return first
+
+
+_TIME_RE = re.compile(
+    r"\bTime\s*[:\-]\s*([^\n]{2,80})",
+    re.IGNORECASE,
+)
+_TIME_INLINE_RE = re.compile(
+    r"\b("
+    r"(?:[01]?\d|2[0-3])[:.]\d{2}\s*(?:am|pm|AM|PM)?"
+    r"\s*(?:[A-Z]{2,4})?"
+    r"|"
+    r"(?:[01]?\d|2[0-3])\s*(?:am|pm|AM|PM)\s*(?:[A-Z]{2,4})?"
+    r")\b",
+)
+
+
+def _parse_call_time(text: str) -> str | None:
+    head = text[:2000]
+    m = _TIME_RE.search(head)
+    if m:
+        return m.group(1).strip()[:120]
+    m = _TIME_INLINE_RE.search(head)
+    if m:
+        return m.group(1).strip()[:120]
+    return None
+
+
+_PLATFORM_RE = re.compile(
+    r"\b(?:Location|Platform|Meeting)\s*[:\-]\s*([^\n]+)",
+    re.IGNORECASE,
+)
+_PLATFORM_TOKENS = (
+    ("microsoft teams", "Microsoft Teams"),
+    ("ms teams", "Microsoft Teams"),
+    (" teams", "Microsoft Teams"),
+    ("google meet", "Google Meet"),
+    ("gmeet", "Google Meet"),
+    ("zoom", "Zoom"),
+    ("webex", "Webex"),
+    ("on-site", "On-site"),
+    ("onsite", "On-site"),
+    ("phone call", "Phone"),
+)
+
+
+def _parse_call_platform(text: str) -> str | None:
+    head = text[:2000].lower()
+    # Explicit Location:/Platform: header takes priority.
+    m = _PLATFORM_RE.search(text[:2000])
+    if m:
+        line = m.group(1).strip()
+        # Look for known tokens inside the value, else return verbatim.
+        ll = line.lower()
+        for token, canonical in _PLATFORM_TOKENS:
+            if token in ll:
+                return canonical
+        return line[:120]
+    for token, canonical in _PLATFORM_TOKENS:
+        if token in head:
+            return canonical
+    return None
+
+
+_DURATION_RE = re.compile(
+    r"\bDuration\s*[:\-]\s*(\d{1,3})\s*(?:minutes?|mins?|m\b|hours?|hrs?|h\b)",
+    re.IGNORECASE,
+)
+_DURATION_INLINE_RE = re.compile(
+    r"\((\d{1,3})\s*(?:minutes?|mins?)\)",
+    re.IGNORECASE,
+)
+
+
+def _parse_duration(text: str) -> int | None:
+    head = text[:2000]
+    for pat in (_DURATION_RE, _DURATION_INLINE_RE):
+        m = pat.search(head)
+        if m:
+            try:
+                n = int(m.group(1))
+            except ValueError:
+                continue
+            if 5 <= n <= 480:
+                return n
+    return None
+
+
+_CATEGORY_SECTION_RE = re.compile(
+    r"(?:CATEGORIES\s+OF\s+INTEREST|Primary\s+Categories|Direct\s+Materials|"
+    r"Focus\s+Categories|Top\s+Categories|Categories?\s*[:\-])\s*([^\n]+(?:\n[ \t]*[-•*][^\n]+)*)",
+    re.IGNORECASE,
+)
+
+
+def _extract_categories_from_text(text: str) -> list[str]:
+    m = _CATEGORY_SECTION_RE.search(text)
+    if not m:
+        return []
+    body = m.group(1)
+    out: list[str] = []
+    for raw in body.splitlines():
+        line = raw.strip(" \t-•*")
+        if not line:
+            continue
+        # Drop currency / spend annotations like "(EUR 8M annual spend)".
+        line = re.sub(r"\(.+?\)", "", line).strip()
+        # Skip block headers like "Primary :" / "Secondary —" / "Direct
+        # Materials — 72% of focus" that have no real category name.
+        if line.endswith(":") or line.endswith("—"):
+            continue
+        if not re.search(r"[A-Za-z]{3,}", line):
+            continue
+        # Trim trailing punctuation / em-dashes.
+        line = re.sub(r"[\s\-—:]+$", "", line)
+        if line and len(out) < 8:
+            out.append(line[:80])
+    # Dedup, preserve order
+    seen: set[str] = set()
+    unique = []
+    for c in out:
+        k = c.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        unique.append(c)
+    return unique
+
+
+_AGENDA_RE = re.compile(
+    r"^[ \t]*AGENDA\s*:?\s*$\n(?:[-=_]+\n)?((?:[ \t]*\d+\.[ \t]+[^\n]+\n?){1,8})",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _build_objectives(text: str) -> list[dict]:
+    """Pull a 1-5 objective list from an AGENDA block. Falls back to empty."""
+    m = _AGENDA_RE.search(text)
+    if not m:
+        return []
+    out: list[dict] = []
+    for line in m.group(1).splitlines():
+        ln = line.strip()
+        if not ln:
+            continue
+        # Strip the "1.", "2." prefix
+        ln = re.sub(r"^\d+\.\s*", "", ln)
+        if not ln or len(ln) < 4:
+            continue
+        out.append({
+            "rank": len(out) + 1,
+            "name": ln[:200],
+            "confidence": 4 if len(out) == 0 else 3,
+            "bullets": [],
+            "beroe": None,
+            "sources": [],
+        })
+        if len(out) >= 5:
+            break
+    return out
+
+
+_RISK_SECTION_RE = re.compile(
+    r"^[ \t]*(?:RISK\s+FLAGS?|Watch-?outs?|Risks?(?:\s+&\s+\w+)?)\s*:?\s*$\n"
+    r"(?:[-=_]+\n)?((?:[ \t]*[-•*][^\n]+\n?){1,12})",
+    re.IGNORECASE | re.MULTILINE,
+)
+_RISK_TYPE_KEYWORDS = [
+    (re.compile(r"\b(budget|spend|cost|pricing|ROI)\b", re.I), "BUDGET"),
+    (re.compile(r"\b(renewal|expire|deadline|window|timing|Q[1-4])\b", re.I), "TIMING"),
+    (re.compile(r"\b(CPO|VP|exec|sponsor|stakeholder|engaged)\b", re.I), "STAKEHOLDER"),
+    (re.compile(r"\b(competitor|displace|incumbent|vs\.?\s)\b", re.I), "COMPETE"),
+    (re.compile(r"\b(SSO|IT|integration|InfoSec|security|sign-?off)\b", re.I), "TECH"),
+    (re.compile(r"\b(legal|contract|terms|MSA|GDPR|compliance)\b", re.I), "LEGAL"),
+]
+
+
+def _classify_risk(line: str) -> str | None:
+    for pat, label in _RISK_TYPE_KEYWORDS:
+        if pat.search(line):
+            return label
+    return None
+
+
+def _build_minefields(text: str) -> list[dict]:
+    m = _RISK_SECTION_RE.search(text)
+    if not m:
+        return []
+    out: list[dict] = []
+    for raw in m.group(1).splitlines():
+        line = raw.strip(" \t-•*")
+        if not line or len(line) < 6:
+            continue
+        # Severity: "high" when the line carries blocker language; else "caution".
+        is_high = bool(re.search(
+            r"\b(critical|blocker|deal-?breaker|must|hard stop|lost|missed|"
+            r"won't|cannot|denied)\b", line, re.I,
+        ))
+        out.append({
+            "severity": "high" if is_high else "caution",
+            "type": _classify_risk(line),
+            "text": line[:400],
+            "why": None,
+        })
+        if len(out) >= 8:
+            break
+    return out
+
+
+_NEXT_STEPS_RE = re.compile(
+    r"^[ \t]*(?:NEXT\s+STEPS?|ACTION\s+ITEMS?|Closing|Outcome)\s*:?\s*$\n"
+    r"(?:[-=_]+\n)?((?:[ \t]*[-•*\[][^\n]+\n?){1,12})",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _build_closing_scenarios(text: str) -> list[dict]:
+    m = _NEXT_STEPS_RE.search(text)
+    if not m:
+        return []
+    bullets: list[str] = []
+    for raw in m.group(1).splitlines():
+        line = raw.strip(" \t-•*[]")
+        if line and len(line) > 4:
+            bullets.append(line)
+    if not bullets:
+        return []
+    summary = " · ".join(bullets[:4])
+    return [{
+        "type": "good",
+        "label": "Forward path",
+        "text": summary[:1200],
+    }]
 
 
 def _build_snapshot(s: dict[str, str]) -> list[dict[str, Any]]:

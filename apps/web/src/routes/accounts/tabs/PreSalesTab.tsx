@@ -10,6 +10,7 @@ import { useConfirm } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { MeetingBriefEditor } from "@/components/MeetingBriefEditor";
+import { MeetingBriefPresentation } from "@/components/MeetingBriefPresentation";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeEngagementSlice,
@@ -224,25 +225,22 @@ export default function PreSalesTab() {
         </div>
       )}
 
-      {/* 05-Jun — Pre-Meeting Brief inline ABOVE the MoM upload. The brief
-          auto-populates from the most recent MoM upload (same wiring as
-          the previous overlay). User explicitly asked for the entire
-          presentation + edit experience to live above the MoM, not as a
-          separate popup. */}
-      <PreMeetingBriefInline accountId={account.id} />
-
-      {/* MoM uploads — sits BELOW the brief now. The brief reads from the
-          most recent MoM extraction draft and merges it section by section. */}
+      {/* 05-Jun — Pre-Meeting Brief is a popup button on the MoM card's
+          top-right corner. The popup now hosts BOTH presentation + edit
+          modes (the entire feature that used to live on the standalone
+          Brief tab — that tab has been removed). Brief auto-populates
+          from any uploaded MoM via the existing extraction draft. */}
       <KindUploadCard
         accountId={account.id}
         kind="mom"
         title="Meeting Minutes (MoM)"
         description="Upload discovery / kick-off / cadence MoMs. Claude will summarise each and auto-extract structured fields into Engagement, Brief, and Contacts."
         emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt, .vtt or .eml onto the card above."
+        headerAction={<BriefOverlayButton accountId={account.id} accountName={account.name} />}
       />
 
-      {/* 05-Jun — Pre-Meeting Brief no longer lives as a separate overlay.
-          Component sits above the MoM upload card (PreMeetingBriefInline). */}
+      {/* Standalone Brief tab removed (05-Jun) — entire brief feature
+          lives inside the BriefOverlayButton popup above. */}
 
       {/* 28-May — Wrap all Pre-Sales fields inside the prototype's outer
           A) Pre-Sales & Discovery card (line 5848-5912). Single white
@@ -1565,75 +1563,135 @@ function BeroeUserPicker({
 // the <details>) so future styling tweaks specific to the inline
 // presentation have a clean attach point.
 // ─────────────────────────────────────────────────────────────
-// 05-Jun — Pre-Meeting Brief INLINE above the MoM upload card.
-// Replaces the old BriefOverlayButton popup. Stakeholders explicitly
-// asked for the entire brief experience (presentation + edit) to live
-// in-page above the MoM uploader instead of behind a button. Same
-// MeetingBriefEditor underneath — just sits in a collapsible card.
-// The brief auto-populates from any uploaded MoM via the existing
-// extraction draft pipeline (consumeBriefSlice).
+// 05-Jun — Pre-Meeting Brief popup. Click button → modal opens with the
+// brief in PRESENTATION mode by default. Toggle to EDIT mode for the
+// field-by-field editor. This is the same Presentation/Edit toggle that
+// previously lived on the standalone /account-kit/brief tab — the user
+// asked for the entire brief feature (both modes) to live here, and
+// for the separate Brief tab to be removed.
 // ─────────────────────────────────────────────────────────────
-function PreMeetingBriefInline({ accountId }: { accountId: string }) {
-  // Default to expanded so the user lands on the populated brief without
-  // an extra click. localStorage keeps the per-account preference.
-  const storageKey = `awb:pre-brief-expanded:${accountId}`;
-  const [expanded, setExpanded] = useState<boolean>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      return raw === null ? true : raw === "1";
-    } catch {
-      return true;
-    }
-  });
+type BriefMode = "presentation" | "edit";
+
+function BriefOverlayButton({
+  accountId,
+  accountName,
+}: {
+  accountId: string;
+  accountName: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<BriefMode>("presentation");
+
+  // Lock body scroll while the overlay is open + ESC closes.
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, expanded ? "1" : "0");
-    } catch {
-      /* swallow */
-    }
-  }, [storageKey, expanded]);
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   return (
-    <div className="rounded-card border border-beroe-card-border bg-white overflow-hidden">
-      {/* Indigo header strip with the brand pill + chevron */}
+    <>
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left"
-        style={{ background: "#001137" }}
-        aria-expanded={expanded}
+        onClick={() => setOpen(true)}
+        className="text-[11.5px] font-semibold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-white hover:opacity-90 transition-opacity"
+        style={{ background: "#4A00F8" }}
+        title="Open the auto-populated Pre-Meeting Brief"
       >
-        <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className="px-2.5 py-0.5 rounded-md text-[11px] font-bold text-white"
-            style={{ background: "#4A00F8" }}
-          >
-            Brief
-          </span>
-          <span className="text-[13px] text-white font-semibold">
-            📝 Pre-Meeting Brief
-          </span>
-          <span className="text-[10.5px] text-white/55">
-            Auto-populated from the most recent MoM upload · edit any section inline
-          </span>
-        </div>
-        <span
-          className="text-white/80 text-[14px] transition-transform"
-          style={{ transform: expanded ? "rotate(180deg)" : undefined }}
-          aria-hidden
-        >
-          ▼
-        </span>
+        📝 Pre-Meeting Brief
       </button>
-      {expanded && (
-        <div className="px-4 py-3 bg-white border-t border-beroe-card-border">
-          {/* MeetingBriefEditor renders each brief section as a collapsible
-              <details>, so within this inline panel sections can still be
-              collapsed/expanded independently. */}
-          <MeetingBriefEditor accountId={accountId} />
+      {open && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/50 flex items-stretch justify-center p-3 sm:p-6"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setOpen(false);
+          }}
+        >
+          <div
+            className="bg-beroe-bg rounded-2xl shadow-2xl w-full max-w-[1100px] flex flex-col overflow-hidden"
+            style={{ maxHeight: "92vh" }}
+          >
+            <div
+              className="flex items-center justify-between gap-3 px-5 py-3 border-b flex-wrap"
+              style={{ background: "#001137", borderColor: "#0d1b2e" }}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="px-2.5 py-0.5 rounded-md text-[11px] font-bold text-white shrink-0"
+                  style={{ background: "#4A00F8" }}
+                >
+                  Brief
+                </span>
+                <span className="text-[12px] text-white/85 font-semibold truncate">
+                  Pre-Meeting Brief ·{" "}
+                  {mode === "presentation"
+                    ? "Presentation Mode"
+                    : "Edit Mode"}
+                </span>
+                <span className="hidden sm:inline ml-2 text-[10px] text-white/55">
+                  Auto-populated from the most recent MoM upload
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Mode toggle — same shape + a11y as BriefTab's toggle. */}
+                <div className="flex gap-1 bg-white/10 rounded-md p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setMode("presentation")}
+                    className={cn(
+                      "text-[11px] px-2.5 py-1 rounded font-semibold transition-colors",
+                      mode === "presentation"
+                        ? "bg-white text-text-primary shadow-sm"
+                        : "text-white/70 hover:text-white",
+                    )}
+                  >
+                    📄 Presentation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("edit")}
+                    className={cn(
+                      "text-[11px] px-2.5 py-1 rounded font-semibold transition-colors",
+                      mode === "edit"
+                        ? "bg-white text-text-primary shadow-sm"
+                        : "text-white/70 hover:text-white",
+                    )}
+                  >
+                    ✏️ Edit
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close brief"
+                  className="text-white/70 hover:text-white text-[20px] leading-none px-2"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 bg-white">
+              {mode === "presentation" ? (
+                <MeetingBriefPresentation
+                  accountId={accountId}
+                  accountName={accountName}
+                />
+              ) : (
+                <MeetingBriefEditor accountId={accountId} />
+              )}
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

@@ -19,7 +19,6 @@ import IntelReportsLayout from "@/routes/accounts/IntelReportsLayout";
 import IntelligenceTab from "@/routes/accounts/tabs/ir/IntelligenceTab";
 import AnalyticsTab from "@/routes/accounts/tabs/ir/AnalyticsTab";
 import DocumentsReportsTab from "@/routes/accounts/tabs/ir/DocumentsReportsTab";
-import BriefTab from "@/routes/accounts/tabs/BriefTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
 import HomeTab from "@/routes/accounts/tabs/HomeTab";
 import PreSalesSolutioningTab from "@/routes/accounts/tabs/PreSalesSolutioningTab";
@@ -162,12 +161,15 @@ export default function App() {
           <Route path="solutioning"   element={<Navigate to="../pre-sales-solutioning" replace />} />
           <Route path="sales-handoff" element={<SalesHandoffTab />} />
           <Route path="cs-onboarding" element={<CSOnboardingTab />} />
-          <Route path="brief"         element={<BriefTab />} />
+          {/* 05-Jun — standalone Brief tab removed. The brief lives in a
+              popup on the MoM upload card (Pre-Sales & Solutioning).
+              Back-compat redirects keep old /brief deep-links working. */}
+          <Route path="brief"         element={<Navigate to="../account-kit/pre-sales-solutioning" replace />} />
         </Route>
 
         {/* Back-compat: old deep links → new Account Kit URLs */}
         <Route path="pre-sales"     element={<Navigate to="../account-kit/pre-sales-solutioning" replace />} />
-        <Route path="brief"         element={<Navigate to="../account-kit/brief"         replace />} />
+        <Route path="brief"         element={<Navigate to="../account-kit/pre-sales-solutioning" replace />} />
         <Route path="solutioning"   element={<Navigate to="../account-kit/pre-sales-solutioning"   replace />} />
         <Route path="sales-handoff" element={<Navigate to="../account-kit/sales-handoff" replace />} />
         <Route path="cs-onboarding" element={<Navigate to="../account-kit/cs-onboarding" replace />} />

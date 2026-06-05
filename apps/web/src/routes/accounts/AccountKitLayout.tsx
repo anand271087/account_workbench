@@ -25,9 +25,10 @@ interface KitSubTab {
   show: (a: AccountDetail) => boolean;
 }
 
-// 27-May Row 73 — Pre-Sales + Solutioning merged into one tab; new
-// order: Pre-Sales & Solutioning → Sales Hand-off & Signing → CS
-// Onboarding → Brief (Brief moves to the end).
+// 05-Jun — Brief tab removed. Pre-Meeting Brief now lives as a popup
+// on the MoM upload card inside Pre-Sales & Solutioning (presentation +
+// edit modes inside one modal). Old /account-kit/brief URLs still work
+// via the back-compat redirect in App.tsx.
 const KIT_SUB_NAV: KitSubTab[] = [
   {
     to: "pre-sales-solutioning",
@@ -36,7 +37,6 @@ const KIT_SUB_NAV: KitSubTab[] = [
   },
   { to: "sales-handoff", label: "Sales Hand-off & Signing", show: (a) => a.can_view_sales_handoff },
   { to: "cs-onboarding", label: "CS Onboarding", show: (a) => a.can_view_cs_onboarding },
-  { to: "brief",         label: "Brief",         show: (a) => a.can_view_pre_sales },
 ];
 
 export default function AccountKitLayout() {
