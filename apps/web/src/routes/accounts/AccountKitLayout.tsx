@@ -36,7 +36,7 @@ const KIT_SUB_NAV: KitSubTab[] = [
     show: (a) => a.can_view_pre_sales || a.can_view_solutioning,
   },
   { to: "sales-handoff", label: "Sales Hand-off & Signing", show: (a) => a.can_view_sales_handoff },
-  { to: "cs-onboarding", label: "CS Onboarding", show: (a) => a.can_view_cs_onboarding },
+  { to: "cs-onboarding", label: "CS Handoff",    show: (a) => a.can_view_cs_onboarding },
 ];
 
 export default function AccountKitLayout() {

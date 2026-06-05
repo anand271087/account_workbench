@@ -163,7 +163,7 @@ function BlockEntry({
 }) {
   return (
     <Card>
-      <SectionHead n="1" color={C.BLUE} title="CS Onboarding Entry" teamLabel="CS" teamColor={C.BLUE} />
+      <SectionHead n="1" color={C.BLUE} title="CS Handoff Entry" teamLabel="CS" teamColor={C.BLUE} />
       <div className="grid sm:grid-cols-2 gap-2.5">
         {(["A", "B"] as const).map((t) => {
           const selected = form.cs_entry_type === t;
