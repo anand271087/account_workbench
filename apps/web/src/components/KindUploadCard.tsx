@@ -133,6 +133,12 @@ export function KindUploadCard({
         accountId,
         r.account_fields,
       );
+      // 05-Jun — auto-PATCH the brief to the server so the Presentation
+      // mode shows populated data immediately (no "click Generate" step).
+      // Fill-blank-only so manual edits aren't trampled by re-uploads.
+      const briefApplied = hasAnyBrief(r.brief)
+        ? await autoApplyExtractedBrief(accountId, r.brief)
+        : 0;
       // Persist the applied marker so reloads don't re-create contacts.
       localStorage.setItem(
         appliedKey(d.id, d.mom_extracted_at),
@@ -140,7 +146,8 @@ export function KindUploadCard({
       );
       const parts: string[] = [];
       if (hasAnyEngagement(r.engagement)) parts.push("engagement");
-      if (hasAnyBrief(r.brief)) parts.push("brief");
+      if (briefApplied > 0)
+        parts.push(`${briefApplied} brief field${briefApplied === 1 ? "" : "s"}`);
       if (accountUpdated > 0) {
         parts.push(`${accountUpdated} account field${accountUpdated === 1 ? "" : "s"}`);
       }
@@ -148,7 +155,7 @@ export function KindUploadCard({
       const skipped = stats.skipped > 0 ? ` · ${stats.skipped} duplicate contact skipped` : "";
       setExtractionToast(
         parts.length
-          ? `Populated ${parts.join(", ")} from "${d.filename}". Review on Pre-Sales and Brief and click Save.${skipped}`
+          ? `Populated ${parts.join(", ")} from "${d.filename}". Brief is ready to view; review engagement on Pre-Sales and click Save.${skipped}`
           : `Extraction from "${d.filename}" found no new fields to apply.${skipped}`,
       );
       qc.invalidateQueries({ queryKey: ["engagement", accountId] });
@@ -993,6 +1000,84 @@ async function applyExtractedAccountFields(
   if (Object.keys(patch).length === 0) return 0;
   try {
     await api.patch(`/api/v1/accounts/${accountId}`, patch);
+    return Object.keys(patch).length;
+  } catch {
+    return 0;
+  }
+}
+
+// 05-Jun — auto-apply the MoM-extracted brief slice to the server so
+// the Pre-Meeting Brief popup (Presentation mode) shows populated data
+// immediately. Fill-blank-only semantics — if a field is already set
+// (manual edit OR previous extraction), leave it alone. Returns the
+// count of fields actually patched so the toast can mention it.
+async function autoApplyExtractedBrief(
+  accountId: string,
+  brief: MomExtractionResult["brief"] | undefined,
+): Promise<number> {
+  if (!brief) return 0;
+
+  type AnyRec = Record<string, unknown>;
+  let current: AnyRec;
+  try {
+    current = (await api.get(
+      `/api/v1/accounts/${accountId}/meeting-brief`,
+    )) as AnyRec;
+  } catch {
+    return 0;
+  }
+
+  const patch: AnyRec = {};
+  const briefRec = brief as unknown as AnyRec;
+
+  // Scalars — set only when current is blank/null.
+  const scalarKeys = [
+    "call_date",
+    "call_type",
+    "call_duration_minutes",
+    "call_time",
+    "call_platform",
+    "win_condition",
+    "cheat_sheet_win_condition_short",
+  ] as const;
+  for (const k of scalarKeys) {
+    const incoming = briefRec[k];
+    const existing = current[k];
+    if (incoming != null && incoming !== "" && (existing == null || existing === "")) {
+      patch[k] = incoming;
+    }
+  }
+
+  // List fields — replace when current list is empty.
+  const listKeys = [
+    "company_snapshot",
+    "attendees",
+    "objectives",
+    "minefields",
+    "closing_scenarios",
+    "news",
+    "public_signals",
+    "value_anchors",
+    "email_insights",
+    "cheat_sheet_never_say",
+    "cheat_sheet_opening_asks",
+    "categories",
+  ] as const;
+  for (const k of listKeys) {
+    const incoming = briefRec[k] as unknown[] | undefined;
+    const existing = current[k] as unknown[] | undefined;
+    if (
+      incoming &&
+      incoming.length > 0 &&
+      (!existing || existing.length === 0)
+    ) {
+      patch[k] = incoming;
+    }
+  }
+
+  if (Object.keys(patch).length === 0) return 0;
+  try {
+    await api.patch(`/api/v1/accounts/${accountId}/meeting-brief`, patch);
     return Object.keys(patch).length;
   } catch {
     return 0;
