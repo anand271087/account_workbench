@@ -612,6 +612,42 @@ function TrialSummarySection({
               </button>
             );
           })}
+          {/* 04-Jun bug — chips that came from "+ Add other" go here too.
+              The free-text input adds them; they render with a × to remove. */}
+          {Object.keys(modules)
+            .filter((m) => !TRIAL_MODULES.includes(m as (typeof TRIAL_MODULES)[number]))
+            .map((m) => (
+              <span
+                key={m}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full border-[1.5px] text-[11.5px] font-bold bg-[#ede6ff] border-beroe-blue text-beroe-blue"
+              >
+                ✓ {m}
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() => toggleModule(m)}
+                    className="text-beroe-blue/70 hover:text-beroe-blue text-[12px] leading-none"
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+          {/* 04-Jun bug — free-text Other entry so Sales can capture
+              modules that aren't on the canonical list. */}
+          {editable && (
+            <TrialModuleOtherInput
+              onAdd={(name) => {
+                const trimmed = name.trim();
+                if (!trimmed || trimmed in modules) return;
+                setForm({
+                  ...form,
+                  trial_modules_tested: { ...modules, [trimmed]: {} },
+                });
+              }}
+            />
+          )}
         </div>
         {Object.keys(modules).length > 0 && (
           <div className="space-y-1.5">
@@ -901,5 +937,69 @@ function VpdMetricsAutofillButton({ accountId }: { accountId: string }) {
         />
       )}
     </div>
+  );
+}
+
+// 04-Jun bug — free-text "Other" capture for the Trial Summary's What-was-Tested
+// chip group. Click "+ Add other" → small input appears → Enter or click Add
+// commits. Cleared and collapsed after a successful add.
+function TrialModuleOtherInput({ onAdd }: { onAdd: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="px-3 py-1 rounded-full border-[1.5px] border-dashed border-beroe-blue/40 text-[11.5px] font-medium text-beroe-blue hover:bg-beroe-blue/5"
+      >
+        + Add other
+      </button>
+    );
+  }
+  const commit = () => {
+    if (!value.trim()) return;
+    onAdd(value);
+    setValue("");
+    setOpen(false);
+  };
+  return (
+    <span className="inline-flex items-center gap-1 border-[1.5px] border-beroe-blue rounded-full bg-white pl-3 pr-1 py-0.5">
+      <input
+        type="text"
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            setOpen(false);
+            setValue("");
+          }
+        }}
+        placeholder="Module name…"
+        className="text-[11.5px] outline-none bg-transparent w-[140px]"
+      />
+      <button
+        type="button"
+        onClick={commit}
+        className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-beroe-blue text-white"
+      >
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(false);
+          setValue("");
+        }}
+        className="text-text-muted hover:text-text-primary text-[12px] leading-none px-1"
+        title="Cancel"
+      >
+        ×
+      </button>
+    </span>
   );
 }

@@ -614,6 +614,28 @@ function DocumentRow({
             })()}
         </div>
         <div className="flex gap-3 shrink-0">
+          {/* 04-Jun bug — Download the source file via a signed 5-min URL
+              from /api/v1/documents/:id/download-url. Click triggers a
+              fresh fetch each time (URLs expire). */}
+          <button
+            onClick={async () => {
+              try {
+                const r = await api.get<{ url: string }>(
+                  `/api/v1/documents/${doc.id}/download-url`,
+                );
+                window.open(r.url, "_blank");
+              } catch (e) {
+                alert(
+                  "Couldn't fetch the download link: " +
+                    (e instanceof Error ? e.message : String(e)),
+                );
+              }
+            }}
+            className="text-xs text-beroe-blue hover:underline font-semibold"
+            title="Download the original file"
+          >
+            Download
+          </button>
           <button
             onClick={onRerun}
             disabled={inFlight}

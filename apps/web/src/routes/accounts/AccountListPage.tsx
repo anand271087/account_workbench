@@ -929,8 +929,8 @@ import {
   COUNTRY_OPTIONS,
   TIER_OPTIONS as NEW_TIER_OPTIONS,
   ACCOUNT_TYPE_OPTIONS as NEW_ACCOUNT_TYPE_OPTIONS,
-  COMMERCIAL_OWNER_OPTIONS,
-  CSM_OWNER_OPTIONS,
+  // 04-Jun bug — CSM_OWNER_OPTIONS + COMMERCIAL_OWNER_OPTIONS no longer
+  // used inside the create-account modal (both fields removed).
 } from "@/types/account_options";
 import { SearchablePicker } from "@/components/SearchablePicker";
 
@@ -983,7 +983,6 @@ function CreateAccountModal({
   async function submit() {
     setError(null);
     if (form.name.trim().length < 2) return setError("Name must be at least 2 characters.");
-    if (!form.csm_owner_name) return setError("Pick a CSM owner.");
     setSubmitting(true);
     try {
       const body: Record<string, unknown> = {
@@ -993,12 +992,15 @@ function CreateAccountModal({
         form[k] && (body[k] = (form[k] as string).trim());
       optStr("industry"); optStr("country"); optStr("region");
       optStr("tier"); optStr("account_type");
-      optStr("csm_owner_name"); optStr("commercial_owner_name");
+      // 04-Jun bug — csm_owner_name / commercial_owner_name / renewal_date
+      // intentionally NOT sent. CSM is assigned via Admin → Reassign
+      // (admin-only); Commercial Owner gets picked at signing; Renewal
+      // date auto-derives from signed_date + term on the Sales Hand-off
+      // tab. Keeping them on the create modal was double-entry.
       if (form.current_acv) body.current_acv = form.current_acv;
       if (form.target_acv) body.target_acv = form.target_acv;
       if (form.contract_start) body.contract_start = form.contract_start;
       if (form.contract_end) body.contract_end = form.contract_end;
-      if (form.renewal_date) body.renewal_date = form.renewal_date;
 
       const created = await api.post<AccountListItem>("/api/v1/accounts", body);
       onCreated(created.id);
@@ -1044,6 +1046,16 @@ function CreateAccountModal({
               testId="add-account-industry"
             />
           </ModalField>
+          {/* 04-Jun bug — Region comes BEFORE Country (stakeholder spec). */}
+          <ModalField label="Region">
+            <SearchablePicker
+              value={form.region}
+              options={REGION_OPTIONS}
+              placeholder="Select region"
+              onChange={(v) => setForm({ ...form, region: v })}
+              testId="add-account-region"
+            />
+          </ModalField>
           <ModalField label="Country">
             <SearchablePicker
               value={form.country}
@@ -1055,16 +1067,7 @@ function CreateAccountModal({
             />
           </ModalField>
 
-          <ModalField label="Region">
-            <SearchablePicker
-              value={form.region}
-              options={REGION_OPTIONS}
-              placeholder="Select region"
-              onChange={(v) => setForm({ ...form, region: v })}
-              testId="add-account-region"
-            />
-          </ModalField>
-          <ModalField label="Tier">
+          <ModalField label="Tier" full>
             <SearchablePicker
               value={form.tier}
               options={NEW_TIER_OPTIONS}
@@ -1074,15 +1077,8 @@ function CreateAccountModal({
             />
           </ModalField>
 
-          <ModalField label="CSM owner *" full>
-            <SearchablePicker
-              value={form.csm_owner_name}
-              options={CSM_OWNER_OPTIONS}
-              placeholder="Pick a CSM"
-              onChange={(v) => setForm({ ...form, csm_owner_name: v })}
-              testId="add-account-csm"
-            />
-          </ModalField>
+          {/* 04-Jun bug — CSM Owner field removed. Assignment happens via
+              Admin → Reassign (admin-only) after the account is created. */}
 
           <button
             type="button"
@@ -1103,15 +1099,8 @@ function CreateAccountModal({
                   testId="add-account-type"
                 />
               </ModalField>
-              <ModalField label="Commercial Owner">
-                <SearchablePicker
-                  value={form.commercial_owner_name}
-                  options={COMMERCIAL_OWNER_OPTIONS}
-                  placeholder="Pick a Commercial Owner"
-                  onChange={(v) => setForm({ ...form, commercial_owner_name: v })}
-                  testId="add-account-co"
-                />
-              </ModalField>
+              {/* 04-Jun bug — Commercial Owner field removed. Assignment
+                  happens during the Sales Hand-off / Signing flow. */}
 
               <ModalField label="Current ACV ($)">
                 <input
@@ -1154,14 +1143,9 @@ function CreateAccountModal({
                   className={modalInputCls}
                 />
               </ModalField>
-              <ModalField label="Renewal date">
-                <input
-                  type="date"
-                  value={form.renewal_date}
-                  onChange={(e) => setForm({ ...form, renewal_date: e.target.value })}
-                  className={modalInputCls}
-                />
-              </ModalField>
+              {/* 04-Jun bug — Renewal date field removed from the create
+                  modal. It auto-derives from signed_date + term once the
+                  account is signed on Sales Hand-off. */}
               {/* 03-Jun bug — Health score / Segment / Category fields
                   removed from the Add Account modal per stakeholder spec. */}
             </>
