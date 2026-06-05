@@ -81,6 +81,11 @@ class AccountDetail(BaseModel):
     gate_platform_tier: str | None = None
     gate_account_segment: str | None = None
     gate_subscribers: str | None = None
+    # 04-Jun bug 15 — surface the Commercial extras (billing, payment,
+    # discount, geography, module caveats, audit notes, other terms,
+    # TCV) on AccountDetail so the CS Handoff Commercial block can
+    # render them instead of hardcoding "Annual / Net 45".
+    gate_contract_extras: dict = {}
 
     # New top-level tabs (M13)
     can_view_sales_handoff: bool = True

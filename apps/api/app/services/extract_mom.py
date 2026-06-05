@@ -123,7 +123,7 @@ You output a SINGLE JSON object with this exact shape (omit fields you can't inf
   "engagement": {
     "meeting_type": <string|null — verbatim, e.g. "1-3B Regular" or "3-5B Trigger + Lost Client">,
     "engagement_objective": <string|null — bullet list, 4-8 short bullets each on its own line prefixed with '- ', explaining why this meeting matters; reference category, trigger, value angle. NEVER a paragraph; NEVER copy headings verbatim.>,
-    "target_categories": [<≤4 strings from Intent Signals + Top categories>],
+    "target_categories": [<every distinct category mentioned in the doc, up to ~12. NEVER truncate after 4 — the Teva-style MoM lists 8-10 priority categories and they all matter>],
     "geographies": [<countries / regions, e.g. ["Netherlands", "APAC"]>],
     "spoc_text": <string|null — the named meeting attendee with title>,
     "sponsor_text": <string|null — most senior procurement contact named>,
@@ -188,11 +188,16 @@ GUIDANCE:
   meeting. is_sponsor=true on that contact.
 - Beroe / internal MI Team attendees: is_internal_beroe=true so they're
   excluded from the client-contact create flow.
-- engagement.target_categories: pull from any "Categories of interest",
-  "Focus areas", "Primary spend", "Direct Materials", "Indirect categories"
-  section. Bulleted or in-line. Pick the top 4 most material categories.
-  Strip commodity-spend annotations (drop "(EUR 8M annual spend)" from
-  "Copper").
+- engagement.target_categories: pull EVERY category mentioned in any
+  categories section ("Categories of Interest", "Priority categories",
+  "Focus areas", "Primary spend", "Direct Materials", "Indirect categories",
+  "Top categories"). Numbered lists (1., 2., a., b.) and bulleted lists
+  both count. Cap at ~12 entries — if the doc lists more, prefer the
+  ones flagged with a priority/ranking/explicit dollar value. NEVER
+  truncate the list to 4 — Teva-style pharma MoMs routinely list 8-10
+  procurement categories and dropping half of them loses the engagement
+  story. Strip commodity-spend annotations (drop "(EUR 8M annual spend)"
+  from "Copper"). Strip the leading list marker too ("a. APIs" → "APIs").
 - engagement.geographies: pull from explicit geography sections OR from
   the headquarters, nearshoring references ("Eastern Europe nearshoring"
   → ["Eastern Europe"]), or category-level country mentions.
@@ -401,7 +406,10 @@ def _stub_extract(text: str) -> MomExtractionResult:
     engagement = ExtractedEngagement(
         meeting_type=_first_nonempty(s.get("meeting type")),
         engagement_objective=_compose_objective(s),
-        target_categories=intent[:4],
+        # 04-Jun bug 10 — was [:4]; bumped to keep the full list (pharma
+        # MoMs routinely list 8-10 categories) — only trimmed at 12 to
+        # avoid runaway prompts.
+        target_categories=intent[:12],
         geographies=geos,
         spoc_text=spoc_text,
         sponsor_text=_strip_url_markup(sponsor_line) if sponsor_line else None,
@@ -548,11 +556,34 @@ def _parse_tier_band(meeting_type: str | None) -> str | None:
 
 
 def _split_csv_or_lines(value: str | None) -> list[str]:
+    """Split a value into discrete category tokens.
+
+    04-Jun bug 10 — handles three list shapes:
+      - CSV: "Copper, Aluminium, REE"
+      - Bulleted lines: "- Copper\n- Aluminium\n- REE"
+      - Numbered/lettered lines: "a. APIs\n b. Excipients\n c. Solvents"
+    Strips the list marker + trailing em-dash annotations (the bit after
+    " — " is usually a parenthetical, e.g. "APIs — generic molecules,
+    highest risk")."""
     if not value:
         return []
-    if "," in value:
-        return [x.strip(" •-*") for x in value.split(",") if x.strip(" •-*")]
-    return [x.strip(" •-*") for x in value.splitlines() if x.strip(" •-*")]
+
+    def _clean(s: str) -> str:
+        s = s.strip(" •-*\t")
+        # Strip a leading list marker — "a." / "1." / "(1)" / "a)" etc.
+        s = re.sub(r"^\s*(?:\(?[a-z]\)?[.)]\s*|\(?\d+\)?[.)]\s*)", "", s, flags=re.I)
+        # Drop em-dash / hyphen annotations after the category name.
+        s = re.split(r"\s*[—–-]\s+", s, maxsplit=1)[0]
+        # Trim trailing punctuation.
+        return s.strip(" ,.;:")
+
+    raw = value.split(",") if ("," in value and "\n" not in value) else value.splitlines()
+    out: list[str] = []
+    for r in raw:
+        c = _clean(r)
+        if c and c not in out:
+            out.append(c)
+    return out
 
 
 def _infer_geographies(headquarters: str | None, contacts_breakdown: str | None) -> list[str]:

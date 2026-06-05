@@ -495,6 +495,10 @@ async def get_account(
         gate_platform_tier=a.gate_platform_tier,
         gate_account_segment=a.gate_account_segment,
         gate_subscribers=a.gate_subscribers,
+        # 04-Jun bug 15 — surface contract-extras jsonb on AccountDetail
+        # so the CS Handoff Commercial block can render Billing / Payment /
+        # Discount / Geography / Other Terms / Module Caveats / Audit Notes.
+        gate_contract_extras=dict(a.gate_contract_extras or {}),
         can_view_sales_handoff=True,
         # CS Onboarding (M14) — entry type drives the inner view; the tab
         # itself is always visible so the picker is reachable.

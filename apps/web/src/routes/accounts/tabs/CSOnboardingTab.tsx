@@ -13,7 +13,7 @@
 //   5) Goal Alignment & Validation (cs_goals × Phase A/B/C × Accept/Flag/Remove) →
 //   Final actions (Ready check + Start Success Journey + Re-align modal)
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -31,9 +31,9 @@ import { CS_HANDOVER_GROUPS } from "@/types/cs_onboarding";
 import type {
   CSGoal,
   CSGoalCategory,
-  CSGoalUpdate,
 } from "@/types/cs_goal";
-import { CATEGORY_LABELS } from "@/types/cs_goal";
+// 04-Jun bug 11 — CATEGORY_LABELS import removed; only consumer was
+// the legacy BlockGoals function that moved to Success Management.
 
 // ─────────────────────────────────────────────────────────────
 // Brand-locked palette (maps prototype off-brand colours to the
@@ -82,20 +82,6 @@ interface MetricRow {
 // ─────────────────────────────────────────────────────────────
 // Per-category Phase A question + options (prototype lines 305-322).
 // ─────────────────────────────────────────────────────────────
-function phaseAQuestion(category: CSGoalCategory): string {
-  switch (category) {
-    case "cost_savings":
-      return "What baseline spend are we measuring savings against? Has the client confirmed the start point?";
-    case "risk_mitigation":
-      return "What type of risk is in scope?";
-    case "base_rationalization":
-      return "Does the client know their current supplier count per category?";
-    case "adoption":
-      return "What does 'active usage' mean — logins, depth, or both?";
-    default:
-      return "What does success look like for this goal?";
-  }
-}
 function phaseAOptions(category: CSGoalCategory): string[] {
   switch (category) {
     case "cost_savings":
@@ -110,12 +96,6 @@ function phaseAOptions(category: CSGoalCategory): string[] {
       return ["Confirmed", "Partial", "Unclear"];
   }
 }
-const PHASE_B_OPTIONS: Array<[string, string]> = [
-  ["done_current", "✅ Done & current"],
-  ["done_outdated", "⚠️ Done but outdated"],
-  ["not_done", "❌ Not done"],
-  ["unknown", "❓ Don't know"],
-];
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -629,717 +609,47 @@ function BlockCommitment({
     </Card>
   );
 }
-
 // ─────────────────────────────────────────────────────────────
-// Block 5 — Goal Alignment & Validation
+// Block 5 (NEW · 04-Jun bug 11) — Shortcut to Success Management.
+// The full Goal Validation & Alignment block + its supporting
+// GoalCard/Pill helpers were moved to Success Management → Goal
+// Validation and Alignment. This card just deep-links there.
 // ─────────────────────────────────────────────────────────────
-function BlockGoals({
+function BlockGoalsShortcut({
   accountId,
-  locked,
+  goalsCount,
 }: {
   accountId: string;
-  locked: boolean;
+  goalsCount: number;
 }) {
-  const qc = useQueryClient();
-  const { data } = useQuery<{ items: CSGoal[] }>({
-    queryKey: ["cs-goals", accountId, false],
-    queryFn: () =>
-      api.get(`/api/v1/accounts/${accountId}/cs-goals?include_deleted=false`),
-    staleTime: 30_000,
-  });
-  const goals = useMemo(() => data?.items ?? [], [data]);
-  const counts = useMemo(() => {
-    const c = { aligned: 0, in_progress: 0, not_started: 0, accepted: 0, flagged: 0, removed: 0 };
-    for (const g of goals) {
-      const al = goalAlignment(g);
-      c[al.status]++;
-      if (g.validation_status === "accepted") c.accepted++;
-      if (g.validation_status === "flagged") c.flagged++;
-      if (g.validation_status === "removed") c.removed++;
-    }
-    return c;
-  }, [goals]);
-  const allAligned = goals.every(
-    (g) => goalAlignment(g).status === "aligned" || g.validation_status === "removed",
-  );
-  const validated = allAligned && counts.accepted > 0 && counts.flagged === 0;
-
-  if (goals.length === 0) {
-    return (
-      <Card leftBorderColor={C.BLUE}>
-        <SectionHead n="5" color={C.BLUE} title="Goal Alignment & Validation" teamLabel="CS" teamColor={C.BLUE} />
-        <EmptyHint>
-          No goals captured yet. <Link to={`/accounts/${accountId}/success-management/contract-goals`} className="text-beroe-blue font-semibold hover:underline">Manage Goals →</Link>
-        </EmptyHint>
-      </Card>
-    );
-  }
-
   return (
-    <Card leftBorderColor={validated ? C.GREEN : C.BLUE}>
+    <Card leftBorderColor={C.BLUE}>
       <SectionHead
         n="5"
-        color={validated ? C.GREEN : C.BLUE}
-        title="Goal Alignment & Validation"
+        color={C.BLUE}
+        title="Goal Validation & Alignment"
         teamLabel="CS"
         teamColor={C.BLUE}
         trailing={
-          <div className="ml-auto flex gap-1.5 flex-wrap text-[10px]">
-            <Pill bg="#d4f5e5" color="#146a45">{counts.aligned} aligned</Pill>
-            {counts.in_progress > 0 && <Pill bg="#ede6ff" color="#3800CC">{counts.in_progress} in-progress</Pill>}
-            {counts.not_started > 0 && <Pill bg="#f1f5f9" color="#64748b">{counts.not_started} not started</Pill>}
-            {counts.flagged > 0 && <Pill bg="#fef0c0" color="#8a4510">{counts.flagged} flagged</Pill>}
-            {counts.removed > 0 && <Pill bg="#f1f5f9" color="#64748b">{counts.removed} removed</Pill>}
-          </div>
+          <Link
+            to={`/accounts/${accountId}/success-management/goal-alignment`}
+            className="ml-auto text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white"
+            style={{ background: C.BLUE }}
+          >
+            Open Goal Validation →
+          </Link>
         }
       />
-      <div
-        className="rounded-[9px] border px-3.5 py-2.5 mb-3 text-[11px] leading-[1.65]"
-        style={{
-          background: validated ? "#f0fdf4" : "#f3f0ff",
-          borderColor: validated ? `${C.GREEN}40` : "#d0c5f5",
-          color: validated ? "#146a45" : "#2d1870",
-        }}
-      >
-        {validated ? (
-          <>
-            <b>✓ All goals aligned and accepted.</b> {counts.aligned} goals will be tracked.
-            Phase A/B/C answers will seed each goal's measurement plan in VDD.
-          </>
-        ) : (
-          <>
-            <b>Each goal needs 3-phase alignment before acceptance.</b>{" "}
-            <span style={{ color: C.BLUE }}><b>Phase A · Intent</b></span> — clarify what the goal means concretely.{" "}
-            <span style={{ color: C.BLUE }}><b>Phase B · Groundwork</b></span> — check baseline data, access, cadence.{" "}
-            <span style={{ color: C.BLUE }}><b>Phase C · Agreement</b></span> — pin down the number, measurement method, timeline. Only then can the goal be Accepted.
-          </>
-        )}
-      </div>
-      <div>
-        {goals.map((g, i) => (
-          <GoalCard
-            key={g.id}
-            g={g}
-            index={i}
-            locked={locked}
-            onMutate={() =>
-              qc.invalidateQueries({ queryKey: ["cs-goals", accountId, false] })
-            }
-          />
-        ))}
+      <div className="text-[12px] text-text-secondary leading-relaxed">
+        Walk every goal through the three alignment checks (means · groundwork ·
+        agreed target) and freeze it for Value Tracking.{" "}
+        <b className="text-text-primary">
+          {goalsCount > 0
+            ? `${goalsCount} goal${goalsCount === 1 ? "" : "s"} captured.`
+            : "No goals captured yet."}
+        </b>
       </div>
     </Card>
-  );
-}
-
-function categoryPillFor(cat: CSGoalCategory) {
-  // 03-Jun bug — Each category maps to a visual flavor (cost → green,
-  // risk → amber, strategy → indigo, ESG/AI → fuscia, fallback grey).
-  // Label is sourced from CATEGORY_LABELS so the prototype's wording
-  // doesn't have to be duplicated here.
-  const COST_BUCKET = { bg: "#ede6ff", color: "#3800CC" };
-  const RISK_BUCKET = { bg: "#ffe0e5", color: "#c42040" };
-  const STRATEGY_BUCKET = { bg: "#fef0c0", color: "#8a4510" };
-  const ADOPTION_BUCKET = { bg: "#d4f5e5", color: "#146a45" };
-  const FALLBACK = { bg: "#f1f5f9", color: "#64748b" };
-  const map: Record<CSGoalCategory, { bg: string; color: string }> = {
-    // legacy
-    cost_savings: COST_BUCKET,
-    risk_mitigation: RISK_BUCKET,
-    base_rationalization: STRATEGY_BUCKET,
-    adoption: ADOPTION_BUCKET,
-    other: FALLBACK,
-    // 03-Jun
-    cost_reduction: COST_BUCKET,
-    negotiation_leverage: COST_BUCKET,
-    should_cost_modeling: COST_BUCKET,
-    tco_optimization: COST_BUCKET,
-    competitive_benchmarking: STRATEGY_BUCKET,
-    category_strategy_market_dynamics: STRATEGY_BUCKET,
-    supply_demand_outlook: STRATEGY_BUCKET,
-    enhanced_supplier_discovery: STRATEGY_BUCKET,
-    financial_risk_monitoring: RISK_BUCKET,
-    supply_assurance: RISK_BUCKET,
-    geopolitical_risk_management: RISK_BUCKET,
-    lcc_ncc_sourcing_strategy: STRATEGY_BUCKET,
-    ai_driven_sourcing_transformations: ADOPTION_BUCKET,
-    esg_responsible_sourcing: ADOPTION_BUCKET,
-  };
-  const v = map[cat] ?? FALLBACK;
-  return { ...v, label: CATEGORY_LABELS[cat] ?? "Other" };
-}
-
-function GoalCard({
-  g,
-  index,
-  locked,
-  onMutate,
-}: {
-  g: CSGoal;
-  index: number;
-  locked: boolean;
-  onMutate: () => void;
-}) {
-  const al = goalAlignment(g);
-  const confirmDlg = useConfirm();
-  const notify = useNotify();
-  const [openP, setOpenP] = useState<"A" | "B" | "C" | null>(null);
-  const [flagDraft, setFlagDraft] = useState<string>(g.flag_note ?? "");
-
-  const patch = useMutation({
-    mutationFn: (body: CSGoalUpdate) =>
-      api.patch<CSGoal>(`/api/v1/cs-goals/${g.id}`, body),
-    onSuccess: onMutate,
-    onError: (e: ApiError) =>
-      notify({ title: "Save failed", body: e.message, tone: "error" }),
-  });
-
-  const cardClass = (() => {
-    if (g.validation_status === "removed")
-      return { bg: "#f8f9fc", border: "var(--cb)", style: "opacity-55 border-dashed" };
-    if (g.validation_status === "flagged")
-      return { bg: "#fff8eb", border: C.AMBER, style: "" };
-    if (al.status === "aligned")
-      return { bg: "#f0fdf4", border: C.GREEN, style: "" };
-    if (al.status === "in_progress")
-      return { bg: "#fafbff", border: C.BLUE, style: "" };
-    return { bg: "#fff", border: C.CB, style: "" };
-  })();
-
-  async function acceptGoal() {
-    if (al.status !== "aligned") {
-      notify({ title: "Complete all 3 phases first", tone: "warning" });
-      return;
-    }
-    patch.mutate({
-      validation_status: g.validation_status === "accepted" ? "pending" : "accepted",
-      flag_note: null,
-    });
-  }
-  async function flagGoal() {
-    if (g.validation_status === "flagged") {
-      patch.mutate({ validation_status: "pending", flag_note: null });
-      return;
-    }
-    // Need a flag note. Prompt via DialogProvider; min 5 chars enforced server-side.
-    const note = window.prompt("Why is this flagged? (min 5 characters)");
-    if (note && note.trim().length >= 5) {
-      patch.mutate({ validation_status: "flagged", flag_note: note.trim() });
-    }
-  }
-  async function removeGoal() {
-    if (g.validation_status === "removed") {
-      patch.mutate({ validation_status: "pending" });
-      return;
-    }
-    const ok = await confirmDlg({
-      title: `Remove "${g.title}" from the tracked list?`,
-      body: "The goal stays in the system but won't be tracked in Success Management.",
-      confirmLabel: "Remove",
-      danger: true,
-    });
-    if (ok) patch.mutate({ validation_status: "removed" });
-  }
-
-  const togglePhase = (p: "A" | "B" | "C") => setOpenP((cur) => (cur === p ? null : p));
-
-  return (
-    <div
-      className={cn("rounded-[10px] border p-3.5 mb-2.5 transition", cardClass.style)}
-      style={{ background: cardClass.bg, borderColor: cardClass.border, borderWidth: "1.5px" }}
-    >
-      <div className="flex gap-3 items-start mb-2.5">
-        <div
-          className="w-7 h-7 rounded-full text-[12px] font-extrabold flex items-center justify-center flex-shrink-0"
-          style={{
-            background: g.validation_status === "accepted" ? C.GREEN :
-                        g.validation_status === "flagged"  ? C.AMBER :
-                        g.validation_status === "removed"  ? "#cbd5e1" :
-                        al.status === "aligned"            ? C.GREEN :
-                        al.status === "in_progress"        ? C.BLUE :
-                        `${C.BLUE}15`,
-            color: g.validation_status === "removed" ? "#64748b" :
-                   (g.validation_status === "accepted" || al.status === "aligned" || al.status === "in_progress" || g.validation_status === "flagged") ? "#fff" :
-                   C.BLUE,
-            border: `1.5px solid ${
-              g.validation_status === "accepted" ? C.GREEN :
-              g.validation_status === "flagged"  ? C.AMBER :
-              g.validation_status === "removed"  ? "#cbd5e1" :
-              al.status === "aligned"            ? C.GREEN :
-              al.status === "in_progress"        ? C.BLUE :
-              `${C.BLUE}40`
-            }`,
-          }}
-        >
-          {g.validation_status === "accepted" ? "✓" :
-           g.validation_status === "flagged"  ? "🚩" :
-           g.validation_status === "removed"  ? "✕" :
-           (index + 1)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex gap-2 items-center mb-1 flex-wrap">
-            <span
-              className={cn(
-                "text-[13px] font-bold",
-                g.validation_status === "removed" && "line-through",
-              )}
-              style={{ color: g.validation_status === "removed" ? C.T3 : C.NAVY }}
-            >
-              {g.title}
-            </span>
-            {(() => {
-              const cp = categoryPillFor(g.category);
-              return (
-                <span
-                  className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                  style={{ background: cp.bg, color: cp.color }}
-                >
-                  {cp.label}
-                </span>
-              );
-            })()}
-          </div>
-          {g.target_value && (
-            <div className="text-[11px] text-text-muted mb-0.5">
-              Initial target:{" "}
-              <b className="font-mono" style={{ color: C.BLUE }}>{g.target_value}</b>
-            </div>
-          )}
-          {g.owner && (
-            <div className="text-[11px] text-text-secondary leading-[1.5]">Owner: {g.owner}</div>
-          )}
-          {g.validation_status === "flagged" && g.flag_note && (
-            <div
-              className="px-2.5 py-1.5 rounded-r-[6px] text-[11px] mt-1.5"
-              style={{ background: "#fff8eb", borderLeft: `3px solid ${C.AMBER}`, color: "#854F0B" }}
-            >
-              🚩 <b>Flag note:</b> {g.flag_note}
-            </div>
-          )}
-          {g.validation_status === "flagged" && !g.flag_note && (
-            <textarea
-              className="mt-1.5 w-full text-[11px] px-2.5 py-1.5 border rounded-md min-h-[48px] resize-y"
-              placeholder="Why is this flagged? (required, min 5 chars)"
-              value={flagDraft}
-              onChange={(e) => setFlagDraft(e.target.value)}
-              onBlur={() => {
-                if (flagDraft.trim().length >= 5)
-                  patch.mutate({ flag_note: flagDraft.trim() });
-              }}
-            />
-          )}
-        </div>
-        {!locked && g.is_editable && (
-          <div className="flex flex-col gap-1 flex-shrink-0">
-            <ActionBtn
-              tone="accept"
-              active={g.validation_status === "accepted"}
-              disabled={al.status !== "aligned"}
-              title={al.status !== "aligned" ? "Complete all 3 alignment phases first" : ""}
-              onClick={acceptGoal}
-            >
-              ✓ Accept
-            </ActionBtn>
-            <ActionBtn
-              tone="flag"
-              active={g.validation_status === "flagged"}
-              onClick={flagGoal}
-            >
-              🚩 Flag
-            </ActionBtn>
-            <ActionBtn
-              tone="remove"
-              active={g.validation_status === "removed"}
-              onClick={removeGoal}
-            >
-              ✕ Remove
-            </ActionBtn>
-          </div>
-        )}
-      </div>
-
-      {g.validation_status !== "removed" && (
-        <div className="flex gap-1.5 mt-2 pt-2 border-t border-dashed border-beroe-card-border">
-          {(["A", "B", "C"] as const).map((p) => {
-            const done = al.phases[p];
-            const open = openP === p;
-            const prev = p === "A" ? true : p === "B" ? al.phases.A : al.phases.B;
-            const dis = !prev && !done;
-            const label = p === "A" ? "Intent" : p === "B" ? "Groundwork" : "Agreement";
-            return (
-              <button
-                key={p}
-                type="button"
-                disabled={dis || locked}
-                onClick={() => togglePhase(p)}
-                className={cn(
-                  "flex-1 px-2.5 py-1.5 rounded-[7px] border text-left text-[10.5px] font-semibold leading-[1.3] inline-flex items-center gap-1.5 transition",
-                  open && !done && "shadow-sm",
-                  dis && "opacity-55 cursor-not-allowed bg-beroe-bg",
-                )}
-                style={{
-                  background: done ? (open ? "#dcfce7" : "#f0fdf4") :
-                              open ? "#ede6ff" : "#fff",
-                  borderColor: done ? C.GREEN : open ? C.BLUE : C.CB,
-                  borderWidth: "1.5px",
-                  color: done ? C.GREEN : open ? C.BLUE : C.T2,
-                }}
-              >
-                <span
-                  className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[9px] font-extrabold flex-shrink-0"
-                  style={{
-                    background: done ? C.GREEN : open ? C.BLUE : "#e8eef8",
-                    color: done || open ? "#fff" : C.T3,
-                  }}
-                >
-                  {done ? "✓" : p}
-                </span>
-                <span><b>Phase {p}</b> · {label}{!done && dis && " (locked)"}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {openP && g.validation_status !== "removed" && (
-        <PhaseForm
-          g={g}
-          phase={openP}
-          locked={locked || !g.is_editable}
-          onClose={() => setOpenP(null)}
-          onSaved={(next: "A" | "B" | "C" | null) => {
-            setOpenP(next);
-            onMutate();
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function ActionBtn({
-  tone,
-  active,
-  disabled,
-  onClick,
-  title,
-  children,
-}: {
-  tone: "accept" | "flag" | "remove";
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  title?: string;
-  children: React.ReactNode;
-}) {
-  const toneStyles = {
-    accept: { hover: "hover:bg-[#f0fdf4] hover:border-[#6EC457] hover:text-beroe-green", active: { bg: C.GREEN, border: C.GREEN } },
-    flag: { hover: "hover:bg-[#fff8eb] hover:border-[#F0BC41] hover:text-beroe-amber", active: { bg: C.AMBER, border: C.AMBER } },
-    remove: { hover: "hover:bg-[#fff0f2] hover:border-[#CF4548] hover:text-beroe-red", active: { bg: C.RED, border: C.RED } },
-  }[tone];
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      title={title}
-      onClick={onClick}
-      className={cn(
-        "px-2.5 py-1 rounded-[6px] text-[10px] font-semibold border bg-white text-text-secondary transition disabled:opacity-35 disabled:cursor-not-allowed whitespace-nowrap text-center",
-        !disabled && !active && toneStyles.hover,
-      )}
-      style={active ? { background: toneStyles.active.bg, borderColor: toneStyles.active.border, color: "#fff" } : undefined}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Phase form (A · Intent / B · Groundwork / C · Agreement)
-// ─────────────────────────────────────────────────────────────
-function PhaseForm({
-  g,
-  phase,
-  locked,
-  onClose,
-  onSaved,
-}: {
-  g: CSGoal;
-  phase: "A" | "B" | "C";
-  locked: boolean;
-  onClose: () => void;
-  onSaved: (next: "A" | "B" | "C" | null) => void;
-}) {
-  const completedKey = (
-    phase === "A" ? "phase_a_completed_at" :
-    phase === "B" ? "phase_b_completed_at" :
-    "phase_c_completed_at"
-  ) as "phase_a_completed_at" | "phase_b_completed_at" | "phase_c_completed_at";
-  const phaseKey = (
-    phase === "A" ? "phase_a" :
-    phase === "B" ? "phase_b" :
-    "phase_c"
-  ) as "phase_a" | "phase_b" | "phase_c";
-  const completeFlagKey = (
-    phase === "A" ? "phase_a_complete" :
-    phase === "B" ? "phase_b_complete" :
-    "phase_c_complete"
-  ) as "phase_a_complete" | "phase_b_complete" | "phase_c_complete";
-  const ph = (g[phaseKey] ?? {}) as Record<string, unknown>;
-  const done = !!g[completedKey];
-
-  const [intent, setIntent] = useState<string>((ph.intent as string) ?? "");
-  const [note, setNote] = useState<string>((ph.note as string) ?? "");
-  const [bsl, setBsl] = useState<string>((ph.baseline_current as string) ?? "");
-  const [acc, setAcc] = useState<string>((ph.data_access as string) ?? "");
-  const [cadence, setCadence] = useState<string>((ph.cadence as string) ?? "");
-  const [catFocus, setCatFocus] = useState<string>((ph.category_focus as string) ?? "");
-  const [baseline, setBaseline] = useState<string>((ph.baseline as string) ?? "");
-  const [agreedTarget, setAgreedTarget] = useState<string>((ph.agreed_target as string) ?? "");
-  const [measureMethod, setMeasureMethod] = useState<string>((ph.measure_method as string) ?? "");
-  const [timeline, setTimeline] = useState<string>((ph.timeline as string) ?? "");
-
-  const patch = useMutation({
-    mutationFn: (body: CSGoalUpdate) =>
-      api.patch<CSGoal>(`/api/v1/cs-goals/${g.id}`, body),
-    onSuccess: () => {
-      const next = phase === "A" ? "B" : phase === "B" ? "C" : null;
-      onSaved(next);
-    },
-  });
-
-  const reopenPatch = useMutation({
-    mutationFn: () => {
-      const body: CSGoalUpdate = {};
-      (body as Record<string, unknown>)[completedKey] = null;
-      const phaseBody: Record<string, unknown> = { ...ph };
-      phaseBody[completeFlagKey] = false;
-      (body as Record<string, unknown>)[phaseKey] = phaseBody;
-      return api.patch<CSGoal>(`/api/v1/cs-goals/${g.id}`, body);
-    },
-    onSuccess: () => onSaved(phase),
-  });
-
-  const canComplete = (() => {
-    if (locked) return false;
-    if (phase === "A") return !!intent && note.trim().length > 10;
-    if (phase === "B") return !!bsl && !!acc && cadence.trim().length > 0;
-    return (
-      catFocus.trim().length > 0 &&
-      baseline.trim().length > 0 &&
-      agreedTarget.trim().length > 0 &&
-      measureMethod.trim().length > 0 &&
-      timeline.trim().length > 0
-    );
-  })();
-
-  function completePhase() {
-    const phaseBody: Record<string, unknown> = { ...ph };
-    if (phase === "A") {
-      phaseBody.intent = intent;
-      phaseBody.note = note.trim();
-      phaseBody.phase_a_complete = true;
-    } else if (phase === "B") {
-      phaseBody.baseline_current = bsl;
-      phaseBody.data_access = acc;
-      phaseBody.cadence = cadence.trim();
-      phaseBody.phase_b_complete = true;
-    } else {
-      phaseBody.category_focus = catFocus.trim();
-      phaseBody.baseline = baseline.trim();
-      phaseBody.agreed_target = agreedTarget.trim();
-      phaseBody.measure_method = measureMethod.trim();
-      phaseBody.timeline = timeline.trim();
-      phaseBody.phase_c_complete = true;
-    }
-    const body: CSGoalUpdate = {};
-    (body as Record<string, unknown>)[phaseKey] = phaseBody;
-    (body as Record<string, unknown>)[completedKey] = new Date().toISOString();
-    patch.mutate(body);
-  }
-
-  const headerColor = C.BLUE;
-  const phaseLabel = phase === "A" ? "Validation of Intent" : phase === "B" ? "Groundwork Check" : "Agreement — the number, not the aspiration";
-
-  return (
-    <div
-      className="mt-2.5 p-3.5 rounded-[9px] border"
-      style={{ background: "#fafbfd", borderColor: C.CB }}
-    >
-      <div className="text-[11px] font-bold mb-2.5 uppercase tracking-wider inline-flex items-center gap-1.5" style={{ color: headerColor }}>
-        <span
-          className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[9px] font-extrabold text-white"
-          style={{ background: headerColor }}
-        >
-          {phase}
-        </span>
-        Phase {phase} · {phaseLabel}
-        {done && (
-          <span
-            className="ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-bold text-white"
-            style={{ background: C.GREEN }}
-          >
-            ✓ Done
-          </span>
-        )}
-      </div>
-
-      {phase === "A" && (
-        <>
-          <Field label={phaseAQuestion(g.category)}>
-            <select
-              disabled={locked}
-              value={intent}
-              onChange={(e) => setIntent(e.target.value)}
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-              style={{ borderColor: C.CB }}
-            >
-              <option value="">--</option>
-              {phaseAOptions(g.category).map((o) => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="What did you confirm with the client?">
-            <textarea
-              disabled={locked}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Jordan confirmed baseline = FY24 actuals across cocoa/wheat/sugar. Ana to use Beroe forecasts in upcoming renegotiations."
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px] min-h-[60px] resize-y leading-[1.55]"
-              style={{ borderColor: C.CB }}
-            />
-          </Field>
-        </>
-      )}
-
-      {phase === "B" && (
-        <>
-          <Field label="Is the baseline / current-state data confirmed?">
-            <select
-              disabled={locked}
-              value={bsl}
-              onChange={(e) => setBsl(e.target.value)}
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-              style={{ borderColor: C.CB }}
-            >
-              <option value="">--</option>
-              {PHASE_B_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </Field>
-          <Field label="Do we have access to the source-of-truth data?">
-            <select
-              disabled={locked}
-              value={acc}
-              onChange={(e) => setAcc(e.target.value)}
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-              style={{ borderColor: C.CB }}
-            >
-              <option value="">--</option>
-              {PHASE_B_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </Field>
-          <Field label="Is the reporting cadence agreed?">
-            <input
-              disabled={locked}
-              value={cadence}
-              onChange={(e) => setCadence(e.target.value)}
-              placeholder="e.g. Monthly with Lisa, Quarterly with Procurement Council"
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-              style={{ borderColor: C.CB }}
-            />
-          </Field>
-        </>
-      )}
-
-      {phase === "C" && (
-        <>
-          <Field label="Which specific categories?">
-            <textarea
-              disabled={locked}
-              value={catFocus}
-              onChange={(e) => setCatFocus(e.target.value)}
-              placeholder="e.g. Flexible packaging — laminates, films, pouches across 8 plants"
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px] min-h-[60px] resize-y"
-              style={{ borderColor: C.CB }}
-            />
-          </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <Field label="Current state (baseline)">
-              <input
-                disabled={locked}
-                value={baseline}
-                onChange={(e) => setBaseline(e.target.value)}
-                placeholder="e.g. $13.3M annual spend, 32 suppliers"
-                className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-                style={{ borderColor: C.CB }}
-              />
-            </Field>
-            <Field label="Agreed target">
-              <input
-                disabled={locked}
-                value={agreedTarget}
-                onChange={(e) => setAgreedTarget(e.target.value)}
-                placeholder="e.g. $2.4M savings (18% on $13.3M)"
-                className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-                style={{ borderColor: C.CB }}
-              />
-            </Field>
-          </div>
-          <Field label="How will both parties confirm achievement?">
-            <input
-              disabled={locked}
-              value={measureMethod}
-              onChange={(e) => setMeasureMethod(e.target.value)}
-              placeholder="e.g. Quarterly PO actuals vs Beroe benchmark, validated by Ana"
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-              style={{ borderColor: C.CB }}
-            />
-          </Field>
-          <Field label="Timeline (target completion)">
-            <input
-              type="date"
-              disabled={locked}
-              value={timeline}
-              onChange={(e) => setTimeline(e.target.value)}
-              className="w-full px-2.5 py-1.5 border rounded-md text-[12px]"
-              style={{ borderColor: C.CB }}
-            />
-          </Field>
-        </>
-      )}
-
-      <div className="flex gap-1.5 mt-2">
-        <button
-          type="button"
-          disabled={!canComplete || patch.isPending}
-          onClick={completePhase}
-          className="px-3.5 py-1 rounded-[6px] text-[11px] font-semibold text-white disabled:opacity-45 disabled:cursor-not-allowed"
-          style={{ background: C.BLUE }}
-        >
-          {patch.isPending ? "Saving…" : done ? `Re-complete Phase ${phase}` : `Complete Phase ${phase} →`}
-        </button>
-        {done && (
-          <button
-            type="button"
-            onClick={() => reopenPatch.mutate()}
-            disabled={locked || reopenPatch.isPending}
-            className="px-2.5 py-1 rounded-[6px] text-[11px] font-semibold border bg-white text-text-secondary"
-            style={{ borderColor: C.CB }}
-          >
-            Re-open
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-2.5 py-1 rounded-[6px] text-[11px] font-semibold border bg-white text-text-secondary"
-          style={{ borderColor: C.CB }}
-        >
-          Close
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1870,24 +1180,6 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-function Pill({ bg, color, children }: { bg: string; color: string; children: React.ReactNode }) {
-  return (
-    <span
-      className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold"
-      style={{ background: bg, color }}
-    >
-      {children}
-    </span>
-  );
-}
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-2.5">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{label}</div>
-      {children}
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // Demo State Toggle (prototype line 132-141 ".mock-toggle")
@@ -2282,7 +1574,7 @@ export default function CSOnboardingTab() {
         accountId={account.id}
         goalsCount={goals.length}
       />
-      <BlockGoals accountId={account.id} locked={journeyStarted} />
+      <BlockGoalsShortcut accountId={account.id} goalsCount={goals.length} />
 
       {!journeyStarted && (
         <FinalActions

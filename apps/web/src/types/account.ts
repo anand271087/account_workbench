@@ -90,6 +90,11 @@ export interface AccountDetail {
   gate_platform_tier: string | null;
   gate_account_segment: string | null;
   gate_subscribers: string | null;
+  // 04-Jun bug 15 — Commercial extras (billing freq, payment terms,
+  // discount, geography, module_caveats, audit_notes, other_terms, TCV).
+  // Free-shape jsonb; CSOnboardingTab BlockCommercial reads it for the
+  // missing Geography + Other Terms tiles.
+  gate_contract_extras: Record<string, unknown>;
   can_view_sales_handoff: boolean;
   // CS Onboarding (M14)
   cs_entry_type: "A" | "B" | null;
