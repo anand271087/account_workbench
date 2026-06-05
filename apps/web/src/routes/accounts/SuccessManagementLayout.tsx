@@ -1,25 +1,17 @@
-// M18 — Success Management sub-layout.
+// 05-Jun — Success Management sub-layout REBUILT to the new 4-tab
+// shape per beroe_sm_strategy_proto.html:
 //
-// 28-May — literal port of prototype `bMetricsTab` (beroe_awb_v20.html
-// line 2858-2937). Brings 4 things from the prototype:
+//   1. 🎯 Goal Validation and Alignment   (was: VDD + Contract & Goals)
+//   2. 📊 Value Tracking                    (was: Value Tracking)
+//   3. 📥 Business Review                   (was: Checkpoints)
+//   4. 🛡 Renewal Readiness                 (was: Delivery & Renewal)
 //
-//   1. Activation banner at top — green ✅ when contract is locked,
-//      red ⚠️ otherwise (prototype line 2901-2911).
-//   2. Stakeholder-map completeness warning — amber 👥 when any of
-//      Budget Owner / Day-to-day Champion / Category Manager is
-//      missing (prototype line 2913-2919).
-//   3. 5 pill sub-tabs with prototype's exact icons + colours + per-tab
-//      status badge (pg=✓ green / pa=• amber / pr=! red / pgr=• grey).
-//      Active pill: bg #fff0f2 + border #CF454840 + text #CF4548.
-//      Locked pill: greyed at opacity 0.4 with 🔒 badge (matches
-//      prototype line 2926 — Checkpoints locks until contract locks;
-//      Renewal locks until at least one checkpoint is signed off).
-//   4. Tab order: VDD → Contract & Goals → Value Tracking →
-//      Checkpoints → Delivery & Renewal (same as before).
+// The activation banner (locked / not-yet-locked Success Contract +
+// stakeholder coverage warning) is kept verbatim from the previous
+// implementation — only the sub-tab nav is reshaped.
 //
-// The layout fetches 5 lightweight queries to drive the activation
-// banner + per-tab badges + stakeholder warning. Query keys match
-// the leaf tabs so the cache is shared (no duplicate fetches).
+// Legacy URLs (/vdd, /contract-goals, /checkpoints, /delivery-renewal)
+// stay as redirects in App.tsx so old bookmarks land in the new tabs.
 
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -30,9 +22,6 @@ import { useAccountFromLayout } from "./AccountProfileLayout";
 import type { CSOnboarding, Stakeholder } from "@/types/cs_onboarding";
 import type { SuccessContract } from "@/types/success_contract";
 import type { MetricListResponse } from "@/types/metric";
-import type { Checkpoint } from "@/types/checkpoint";
-import type { DeliveryRenewal } from "@/types/delivery_renewal";
-import type { Vdd } from "@/types/vdd";
 
 type BadgeKind = "pg" | "pa" | "pr" | "pgr";
 
@@ -54,17 +43,20 @@ export default function SuccessManagementLayout() {
   const navigate = useNavigate();
   const loc = useLocation();
 
-  // /success-management (no sub) → redirect to VDD (first sub-tab,
-  // matches prototype's openAcct default smSubTab:"contract" but our
-  // app puts VDD first as the overview surface).
+  // /success-management (no sub) → redirect to Goal Alignment (first tab).
   const segs = loc.pathname.split("/").filter(Boolean);
-  const lastSeg = segs[segs.length - 1];
-  if (lastSeg === "success-management") {
-    navigate(`./vdd`, { replace: true });
-  }
+  const idx = segs.indexOf("success-management");
+  const cur = idx >= 0 && segs[idx + 1] ? segs[idx + 1] : "";
 
-  // Five lightweight queries for the activation banner + badges.
-  // All are cached + shared with the leaf tabs via matching keys.
+  // Activation gate — Sales handoff state (signed account OR Entry B).
+  const cs = useQuery<CSOnboarding>({
+    queryKey: ["cs-onboarding", account.id],
+    queryFn: () =>
+      api.get<CSOnboarding>(`/api/v1/accounts/${account.id}/cs-onboarding`),
+  });
+  const entryReady = !!cs.data?.activated;
+
+  // Success Contract — drives the "Account Activated" banner.
   const sc = useQuery<SuccessContract>({
     queryKey: ["success-contract", account.id],
     queryFn: () =>
@@ -72,156 +64,74 @@ export default function SuccessManagementLayout() {
         `/api/v1/accounts/${account.id}/success-contract`,
       ),
   });
+  const scLocked = !!sc.data?.locked_at;
+
+  // Goals count — for the activation banner.
+  const goals = useQuery<{ items: { id: string }[] }>({
+    queryKey: ["cs-goals", account.id, false],
+    queryFn: () =>
+      api.get(`/api/v1/accounts/${account.id}/cs-goals?include_deleted=false`),
+  });
+  const goalCount = goals.data?.items.length ?? 0;
+
+  // Metrics — for the "N/M metrics tracked" line in the activation banner.
   const metrics = useQuery<MetricListResponse>({
     queryKey: ["metrics", account.id],
     queryFn: () =>
-      api.get<MetricListResponse>(
-        `/api/v1/accounts/${account.id}/success-metrics`,
-      ),
+      api.get<MetricListResponse>(`/api/v1/accounts/${account.id}/metrics`),
   });
-  const vdd = useQuery<Vdd>({
-    queryKey: ["vdd", account.id],
-    queryFn: () =>
-      api.get<Vdd>(`/api/v1/accounts/${account.id}/value-delivery-document`),
-  });
-  const checkpoints = useQuery<{ items: Checkpoint[] }>({
-    queryKey: ["checkpoints", account.id],
-    queryFn: () =>
-      api.get<{ items: Checkpoint[] }>(
-        `/api/v1/accounts/${account.id}/checkpoints`,
-      ),
-  });
-  const dr = useQuery<DeliveryRenewal>({
-    queryKey: ["delivery-renewal", account.id],
-    queryFn: () =>
-      api.get<DeliveryRenewal>(
-        `/api/v1/accounts/${account.id}/delivery-renewal`,
-      ),
-  });
-  const cso = useQuery<CSOnboarding>({
-    queryKey: ["cs-onboarding", account.id],
-    queryFn: () =>
-      api.get<CSOnboarding>(
-        `/api/v1/accounts/${account.id}/cs-onboarding`,
-      ),
-  });
-
-  const goals = useQuery<{ items: Array<{ id: string }> }>({
-    queryKey: ["cs-goals", account.id, false],
-    queryFn: () =>
-      api.get<{ items: Array<{ id: string }> }>(
-        `/api/v1/accounts/${account.id}/cs-goals?include_deleted=false`,
-      ),
-  });
-
-  // Activation gate (prototype line 2875).
-  const entryReady =
-    account.gate_signed ||
-    (account.cs_entry_type === "B"); // we don't have cs_entry_b_context on AccountDetail; presence of Entry B itself is enough
-
-  // Contract-locked state drives activation + Checkpoints lock.
-  const scLocked = !!sc.data?.locked_at;
-  const goalCount = goals.data?.items.length ?? 0;
-  const isActivated = scLocked;
-
-  // Days-left calc for the "Account Not Activated" banner — 30-day
-  // window from gate_signed_date (prototype line 2867-2869).
-  let scDaysLeft: number | null = null;
-  let scOverdue = false;
-  if (account.gate_signed_date && !scLocked) {
-    const kickoff = new Date(account.gate_signed_date);
-    const deadline = new Date(kickoff.getTime() + 30 * 86400_000);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    scDaysLeft = Math.ceil((deadline.getTime() - today.getTime()) / 86400_000);
-    scOverdue = scDaysLeft < 0;
-  }
-
-  // Metric / checkpoint / readiness counts drive the per-tab badges.
   const metricList = metrics.data?.items ?? [];
-  const metricTrackedCount = metricList.filter((m) => m.current_value).length;
-  const cpList = checkpoints.data?.items ?? [];
-  const cpSignedCount = cpList.filter((c) => c.status === "signed_off").length;
-  const rrDone = dr.data?.readiness
-    ? [
-        dr.data.readiness.delivered_metric,
-        dr.data.readiness.proof_data,
-        dr.data.readiness.client_acknowledged,
-      ].filter((q) => q?.answer === "yes").length
-    : 0;
-  // VDD has content if any of the 4 sections has at least one entry,
-  // or there's an exec summary. Matches prototype line 2890.
-  const vddFilled = !!(
-    vdd.data &&
-    (vdd.data.client_strategic_priorities.length > 0 ||
-      vdd.data.agreed_success_metrics.length > 0 ||
-      vdd.data.beroes_approach.length > 0 ||
-      vdd.data.value_delivered.length > 0 ||
-      vdd.data.exec_summary?.trim())
-  );
+  const metricTrackedCount = metricList.filter(
+    (m) => m.current_value != null && m.current_value !== "",
+  ).length;
 
-  // Stakeholder-map completeness (prototype line 2914).
-  const stk = cso.data?.cs_stakeholders ?? {};
-  const stkMissing: string[] = [];
-  if (!asStakeholder(stk.commercial)?.name?.trim())
-    stkMissing.push("Budget Owner");
-  if (!asStakeholder(stk.champion)?.name?.trim())
-    stkMissing.push("Day-to-day Champion");
-  if (!asStakeholder(stk.category)?.name?.trim())
-    stkMissing.push("Category Manager");
+  const isActivated = entryReady && scLocked;
+  const scDaysLeft = sc.data?.locked_at ? null : 7;
 
-  // Per-tab badge + lock state — prototype line 2891-2897 + 2923.
-  const tabs: SMSubTab[] = [
+  // Stakeholder coverage warning.
+  const stk: Record<string, Stakeholder | undefined> = cs.data?.cs_stakeholders ?? {};
+  const stkMissing = (
+    ["commercial", "champion", "category"] as const
+  ).filter((k) => !stk[k]?.name);
+
+  // -----------------------------------------------------------
+  // 05-Jun — new 4-tab structure per beroe_sm_strategy_proto.html
+  // -----------------------------------------------------------
+  const subTabs: SMSubTab[] = [
     {
-      to: "vdd",
-      label: "VDD (Value Delivery Document)",
-      icon: "📄",
-      badge: vddFilled ? "pg" : "pgr",
-      locked: false,
-      lockReason: "",
-    },
-    {
-      to: "contract-goals",
-      label: "Contract & Goals",
-      icon: "🔒",
-      badge:
-        scLocked && goalCount > 0
-          ? "pg"
-          : scLocked || goalCount > 0
-            ? "pa"
-            : scOverdue
-              ? "pr"
-              : "pgr",
-      locked: false,
-      lockReason: "",
+      to: "goal-alignment",
+      label: "Goal Validation and Alignment",
+      icon: "🎯",
+      badge: entryReady ? (goalCount > 0 ? "pg" : "pa") : "pgr",
+      locked: !entryReady,
+      lockReason: "Account not yet activated — open Sales Hand-off or Entry B first.",
     },
     {
       to: "value-tracking",
       label: "Value Tracking",
       icon: "📊",
       badge: metricTrackedCount > 0 ? "pg" : metricList.length > 0 ? "pa" : "pgr",
-      locked: false,
-      lockReason: "",
+      locked: !entryReady,
+      lockReason: "Activate the account first.",
     },
     {
-      to: "checkpoints",
-      label: "Checkpoints",
-      icon: "📅",
-      badge: cpSignedCount > 0 ? "pg" : cpList.length > 0 ? "pa" : "pgr",
-      locked: !scLocked,
-      lockReason: "Complete the success contract first",
+      to: "business-review",
+      label: "Business Review",
+      icon: "📥",
+      badge: "pgr",
+      locked: !entryReady,
+      lockReason: "Activate the account first.",
     },
     {
-      to: "delivery-renewal",
-      label: "Delivery & Renewal",
+      to: "renewal-readiness",
+      label: "Renewal Readiness",
       icon: "🛡",
-      badge: rrDone === 3 ? "pg" : rrDone > 0 ? "pa" : "pgr",
-      locked: cpSignedCount === 0,
-      lockReason: "Complete at least one checkpoint first",
+      badge: "pgr",
+      locked: !entryReady,
+      lockReason: "Activate the account first.",
     },
   ];
 
-  // Activation gate — pre-Sales handoff state (prototype line 2876-2888).
   if (!entryReady) {
     return (
       <div className="text-center px-5 py-16">
@@ -260,7 +170,8 @@ export default function SuccessManagementLayout() {
 
   return (
     <div>
-      {/* Activation banner — prototype line 2901-2911 verbatim. */}
+      {/* Activation banner — same logic as before, just under the new
+          4-tab nav. */}
       {isActivated ? (
         <div
           className="rounded-card px-4 py-2.5 mb-3 flex items-center gap-2.5"
@@ -288,151 +199,80 @@ export default function SuccessManagementLayout() {
           <div className="flex-1">
             <div
               className="text-[13px] font-bold"
-              style={{ color: "#CF4548" }}
+              style={{ color: PINK }}
             >
               Account Not Activated
             </div>
-            <div
-              className="text-[11px]"
-              style={{ color: "#CF4548" }}
-            >
+            <div className="text-[11px]" style={{ color: PINK }}>
               Lock the success contract and define at least one goal to
               activate.
               {scDaysLeft !== null && (
-                <>
-                  {" "}
-                  {scOverdue ? (
-                    <b>{Math.abs(scDaysLeft)}d overdue — Undefined Value.</b>
-                  ) : (
-                    <>{scDaysLeft}d remaining.</>
-                  )}
-                </>
+                <span className="ml-1 opacity-80">
+                  ({scDaysLeft} days since signing — capture the contract now)
+                </span>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Stakeholder-map completeness warning — prototype line 2913-2919. */}
+      {/* Stakeholder coverage warning — only when something's missing. */}
       {stkMissing.length > 0 && (
         <div
-          className="rounded-card px-4 py-2.5 mb-2.5 flex items-center gap-2.5"
+          className="rounded-card px-4 py-2.5 mb-3 flex items-center gap-2.5"
           style={{ background: "#fff8eb", border: "1.5px solid #F0BC4140" }}
         >
           <span className="text-[14px]">👥</span>
           <div
-            className="flex-1 text-[12px]"
+            className="text-[12px] font-semibold"
             style={{ color: "#F0BC41" }}
           >
-            <b>Stakeholder map incomplete</b> — missing:{" "}
-            {stkMissing.join(", ")}. All 3 roles required.
+            Stakeholder map incomplete —{" "}
+            {stkMissing
+              .map((k) =>
+                k === "commercial"
+                  ? "Budget Owner"
+                  : k === "champion"
+                    ? "Day-to-day Champion"
+                    : "Category Manager",
+              )
+              .join(" · ")}{" "}
+            missing
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              navigate(`/accounts/${account.id}/account-kit/cs-onboarding`)
-            }
-            className="text-[10px] px-2.5 py-1 rounded border border-beroe-card-border bg-white text-text-secondary font-semibold hover:bg-slate-50 whitespace-nowrap"
-          >
-            Update in Account Kit →
-          </button>
         </div>
       )}
 
-      {/* Pill sub-tab strip — prototype line 2921-2929 verbatim. */}
-      <div className="flex gap-1.5 mb-3.5 flex-wrap">
-        {tabs.map((t) => (
-          <SMSubTabPill key={t.to} t={t} />
-        ))}
+      {/* 4 pill sub-tabs */}
+      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
+        {subTabs.map((t) => {
+          const active = cur === t.to;
+          return (
+            <NavLink
+              key={t.to}
+              to={t.to}
+              className={cn(
+                "px-3.5 py-2 rounded-card text-[12px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition border",
+                active
+                  ? ""
+                  : "border-beroe-card-border bg-white text-text-secondary hover:bg-beroe-bg",
+                t.locked && "opacity-40 pointer-events-none",
+              )}
+              style={
+                active
+                  ? { background: PINK_BG, borderColor: PINK_BORDER, color: PINK }
+                  : undefined
+              }
+              title={t.locked ? t.lockReason : undefined}
+            >
+              <span>{t.icon}</span>
+              <span>{t.label}</span>
+              {t.locked && <span className="ml-1">🔒</span>}
+            </NavLink>
+          );
+        })}
       </div>
 
       <Outlet context={{ account }} />
     </div>
   );
-}
-
-function SMSubTabPill({ t }: { t: SMSubTab }) {
-  // Locked pills still render as buttons (not links) so they don't
-  // navigate — matches the prototype's pointer-events:none. Clicking
-  // a locked pill is a no-op + tooltip explains why.
-  if (t.locked) {
-    return (
-      <button
-        type="button"
-        title={t.lockReason}
-        className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg cursor-not-allowed text-[12px] font-medium"
-        style={{
-          border: "1.5px solid #e4eaf6",
-          background: "#f8f9fc",
-          color: "#c0c8d8",
-          opacity: 0.45,
-        }}
-      >
-        <span>{t.icon}</span>
-        <span>{t.label}</span>
-        <BadgePip kind="pgr" lockedBadge />
-      </button>
-    );
-  }
-  return (
-    <NavLink
-      to={t.to}
-      end
-      className={cn(
-        "flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] transition-colors",
-      )}
-      style={({ isActive }) => ({
-        border: `1.5px solid ${isActive ? PINK_BORDER : "#e4eaf6"}`,
-        background: isActive ? PINK_BG : "#fff",
-        color: isActive ? PINK : "#4b5563",
-        fontWeight: isActive ? 700 : 500,
-      })}
-    >
-      <span>{t.icon}</span>
-      <span>{t.label}</span>
-      <BadgePip kind={t.badge} />
-    </NavLink>
-  );
-}
-
-/** Pip variants — prototype's `pill pg / pa / pr / pgr` classes,
- *  rendered as a tiny dot pill at the end of each tab label. */
-function BadgePip({
-  kind,
-  lockedBadge,
-}: {
-  kind: BadgeKind;
-  lockedBadge?: boolean;
-}) {
-  if (lockedBadge) {
-    return (
-      <span
-        className="text-[8px] font-bold px-1.5 py-px rounded-full"
-        style={{ background: "#e4eaf6", color: "#94a3b8" }}
-      >
-        🔒
-      </span>
-    );
-  }
-  const map: Record<BadgeKind, { bg: string; fg: string; ch: string }> = {
-    pg: { bg: "#dcfce7", fg: "#166534", ch: "✓" },
-    pa: { bg: "#fef3c7", fg: "#92400e", ch: "•" },
-    pr: { bg: "#fee2e2", fg: "#991b1b", ch: "!" },
-    pgr: { bg: "#e4eaf6", fg: "#94a3b8", ch: "•" },
-  };
-  const c = map[kind];
-  return (
-    <span
-      className="text-[8px] font-bold px-1.5 py-px rounded-full"
-      style={{ background: c.bg, color: c.fg }}
-    >
-      {c.ch}
-    </span>
-  );
-}
-
-/** Type-narrowing helper — cs_stakeholders is Record<string, Stakeholder>
- *  but we read it via dotted access on a partial dict. */
-function asStakeholder(s: unknown): Stakeholder | null {
-  return s && typeof s === "object" ? (s as Stakeholder) : null;
 }

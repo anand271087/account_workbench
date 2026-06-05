@@ -16,15 +16,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-CSGoalCategory = ENUM(
-    "cost_savings",
-    "base_rationalization",
-    "risk_mitigation",
-    "adoption",
-    "other",
-    name="cs_goal_category",
-    create_type=False,
-)
+# 05-Jun — migration 0060 dropped the cs_goal_category ENUM and switched the
+# column to plain text so the 03-Jun category vocabulary (cost_reduction,
+# esg_responsible_sourcing, enhanced_supplier_discovery, negotiation_leverage,
+# etc.) flows through without DDL churn. The ORM was still bound to the old
+# 5-value ENUM, which made any new-vocab row throw `KeyError` on SELECT —
+# discovered when the [DEMO] seed landed on Mondelez. Mapping `category` as
+# plain String aligns the ORM with the live schema.
 
 CSGoalAlignment = ENUM(
     "not_started", "partial", "aligned",
@@ -45,7 +43,7 @@ class CSGoal(Base):
 
     title: Mapped[str] = mapped_column(String, nullable=False)
     category: Mapped[str] = mapped_column(
-        CSGoalCategory, nullable=False, server_default=text("'other'")
+        String, nullable=False, server_default=text("'other'")
     )
     target_value: Mapped[str | None] = mapped_column(String, nullable=True)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)

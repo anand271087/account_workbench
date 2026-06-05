@@ -7,11 +7,10 @@ import AccountListPage from "@/routes/accounts/AccountListPage";
 import AccountProfileLayout from "@/routes/accounts/AccountProfileLayout";
 import AccountKitLayout from "@/routes/accounts/AccountKitLayout";
 import SuccessManagementLayout from "@/routes/accounts/SuccessManagementLayout";
-import VDDTab from "@/routes/accounts/tabs/sm/VDDTab";
-import ContractGoalsTab from "@/routes/accounts/tabs/sm/ContractGoalsTab";
-import ValueTrackingTab from "@/routes/accounts/tabs/sm/ValueTrackingTab";
-import CheckpointsTab from "@/routes/accounts/tabs/sm/CheckpointsTab";
-import DeliveryRenewalTab from "@/routes/accounts/tabs/sm/DeliveryRenewalTab";
+import GoalAlignmentTab from "@/routes/accounts/tabs/sm/GoalAlignmentTab";
+import ValueTrackingTabV2 from "@/routes/accounts/tabs/sm/ValueTrackingTabV2";
+import BusinessReviewTab from "@/routes/accounts/tabs/sm/BusinessReviewTab";
+import RenewalReadinessTab from "@/routes/accounts/tabs/sm/RenewalReadinessTab";
 import GrowthPipelineLayout from "@/routes/accounts/GrowthPipelineLayout";
 import AccountPlanTab from "@/routes/accounts/tabs/gp/AccountPlanTab";
 import SignalsActivityTab from "@/routes/accounts/tabs/gp/SignalsActivityTab";
@@ -174,14 +173,25 @@ export default function App() {
         <Route path="cs-onboarding" element={<Navigate to="../account-kit/cs-onboarding" replace />} />
         <Route path="documents"     element={<Navigate to="../account-kit/pre-sales-solutioning" replace />} />
 
-        {/* M18 — Success Management group: VDD / Contract+Goals / Value Tracking / Checkpoints / Delivery+Renewal */}
+        {/* 05-Jun — Success Management group rebuilt to the 4-tab shape of
+            beroe_sm_strategy_proto.html:
+              🎯 Goal Validation and Alignment   (new — Q1/Q2/Q3 progressive lock)
+              📊 Value Tracking                  (Pass-2 port; routed to existing tab for now)
+              📥 Business Review                 (Pass-2 port; routed to Checkpoints for now)
+              🛡 Renewal Readiness               (Pass-2 port; routed to Delivery+Renewal for now)
+            Old paths (vdd, contract-goals, checkpoints, delivery-renewal) kept
+            as redirects so existing bookmarks land in the new tabs. */}
         <Route path="success-management" element={<SuccessManagementLayout />}>
-          <Route index element={<Navigate to="vdd" replace />} />
-          <Route path="vdd"               element={<VDDTab />} />
-          <Route path="contract-goals"    element={<ContractGoalsTab />} />
-          <Route path="value-tracking"    element={<ValueTrackingTab />} />
-          <Route path="checkpoints"       element={<CheckpointsTab />} />
-          <Route path="delivery-renewal"  element={<DeliveryRenewalTab />} />
+          <Route index element={<Navigate to="goal-alignment" replace />} />
+          <Route path="goal-alignment"    element={<GoalAlignmentTab />} />
+          <Route path="value-tracking"    element={<ValueTrackingTabV2 />} />
+          <Route path="business-review"   element={<BusinessReviewTab />} />
+          <Route path="renewal-readiness" element={<RenewalReadinessTab />} />
+          {/* Back-compat: old sub-paths → new ones */}
+          <Route path="vdd"              element={<Navigate to="../success-management/goal-alignment"  replace />} />
+          <Route path="contract-goals"   element={<Navigate to="../success-management/goal-alignment"  replace />} />
+          <Route path="checkpoints"      element={<Navigate to="../success-management/business-review" replace />} />
+          <Route path="delivery-renewal" element={<Navigate to="../success-management/renewal-readiness" replace />} />
         </Route>
 
         {/* M26 — Growth & Pipeline group: Account Plan / Signals / External Intel */}
@@ -209,9 +219,8 @@ export default function App() {
           path="value-def"
           element={<Navigate to="../account-kit/solutioning" replace />}
         />
-        {/* M19 — /goals folded into Success Management → Contract & Goals.
-             Back-compat redirect so existing bookmarks land in the new home. */}
-        <Route path="goals" element={<Navigate to="../success-management/contract-goals" replace />} />
+        {/* M19/05-Jun — /goals folded into Success Management → Goal Validation and Alignment. */}
+        <Route path="goals" element={<Navigate to="../success-management/goal-alignment" replace />} />
       </Route>
       <Route path="/" element={<Navigate to="/accounts" replace />} />
       <Route path="*" element={<Navigate to="/accounts" replace />} />
