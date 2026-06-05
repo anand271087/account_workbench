@@ -25,7 +25,11 @@ class SolutioningOut(BaseModel):
     trial_type: str | None = None
     trial_payment_type: str | None = None
     trial_date: date | None = None
-    trial_modules_tested: dict = Field(default_factory=dict)
+    # 05-Jun — was `dict = Field(default_factory=dict)` but `from_attributes=True`
+    # short-circuits the default when the ORM column is NULL — Pydantic gets
+    # `None` and rejects, blanking the entire response with a 500 (infinite
+    # loading on the Solutioning tab). Allow None and coerce to {} downstream.
+    trial_modules_tested: dict | None = Field(default_factory=dict)
     trial_outcome: str | None = None
     trial_feedback: str | None = None
     value_themes: list[str]
