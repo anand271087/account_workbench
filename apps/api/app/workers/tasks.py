@@ -178,15 +178,48 @@ async def _process(job_id: UUID) -> dict:
                     "Handoff field extraction failed (non-fatal)"
                 )
 
-        # aggregate regen for the account
-        await _regenerate_aggregate(db, doc.account_id, job.id)
-
+        # 04-Jun bug 6 — MoM upload was taking ~120s end-to-end because
+        # the aggregate Sales Discovery rebuild fires a 3rd Claude call
+        # (~15-30s) on the critical path of EVERY doc upload. Dispatch
+        # it as a separate fire-and-forget Celery task so the user-
+        # visible parts (mom_extracted_fields landing, ai_status=complete)
+        # are persisted as soon as the per-doc work finishes.
         job.status = "complete"
         job.progress = 100
         job.finished_at = datetime.now(timezone.utc)
         job.result = {"document_id": str(doc.id), "is_stub": doc.extracted_entities.get("is_stub", True)}
         await db.commit()
+
+        try:
+            celery_app.send_task(
+                "regenerate_account_summary",
+                args=[str(doc.account_id), str(job.id)],
+            )
+        except Exception:
+            logger.exception("could not enqueue aggregate-summary task")
+
         return {"ok": True, "document_id": str(doc.id)}
+
+
+@celery_app.task(name="regenerate_account_summary", bind=True, max_retries=1)
+def regenerate_account_summary(self, account_id: str, job_id: str) -> dict:  # noqa: ANN001
+    """Out-of-band rebuild of the account-level Sales Discovery summary.
+    Fired by process_document after the per-doc work commits, so the
+    user sees their MoM/VPD fields land without waiting another 20-30s
+    on the aggregate Claude call."""
+    try:
+        return asyncio.run(_regenerate_aggregate_oob(UUID(account_id), UUID(job_id)))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("regenerate_account_summary failed for %s", account_id)
+        return {"ok": False, "error": str(exc)}
+
+
+async def _regenerate_aggregate_oob(account_id: UUID, job_id: UUID) -> dict:
+    eng = new_worker_engine()
+    Session = new_worker_session(eng)
+    async with Session() as db:
+        await _regenerate_aggregate(db, account_id, job_id)
+    return {"ok": True, "account_id": str(account_id)}
 
 
 async def _regenerate_aggregate(db, account_id: UUID, job_id: UUID) -> None:

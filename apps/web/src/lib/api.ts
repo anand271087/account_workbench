@@ -86,16 +86,34 @@ async function request<T>(
     }
     const rawDetail = (body as { detail?: unknown } | null)?.detail;
     const detail = formatDetail(rawDetail) || `HTTP ${r.status}`;
-    // BRD §3.2 — RBAC denials must land on the access-denied page.
-    // We don't redirect on every 403 (modals etc. handle their own state),
-    // only when the path looks like a top-level navigation away from the
-    // current view. The hash on `?` lets pages opt out by suppressing.
+    // BRD §3.2 — RBAC denials should land on /access-denied — but ONLY
+    // when the user explicitly tried to view a page they can't see (a GET
+    // on the visible route). Background writes (PATCH/POST/DELETE) that
+    // 403 should surface a toast on the originating component, not boot
+    // the user off the page entirely. 04-Jun bug — CSM was being kicked
+    // to Access Denied whenever an auto-PATCH (e.g. extraction auto-
+    // apply, brief auto-populate) fired against a write-locked field.
     if (r.status === 403 && typeof window !== "undefined") {
+      const method = (init?.method || "GET").toUpperCase();
       const here = window.location.pathname;
-      if (!here.startsWith("/access-denied") && !here.startsWith("/login")) {
+      const isReadGet = method === "GET";
+      // Heuristic: only redirect when the failed GET path matches the
+      // currently-rendered tab. A GET to /users that 403s while the user
+      // is browsing /accounts shouldn't yank them off Accounts.
+      const isCurrentView =
+        isReadGet &&
+        // Either the path itself starts with the current URL (e.g.
+        // /accounts/123/foo → 403 while on /accounts/123) …
+        (path.startsWith("/api/v1" + here) ||
+          // … or it's a /me / /users top-level call from a guarded route.
+          path === "/api/v1/me");
+      if (
+        isCurrentView &&
+        !here.startsWith("/access-denied") &&
+        !here.startsWith("/login")
+      ) {
         const params = new URLSearchParams({ from: here, detail: detail.slice(0, 200) });
         window.dispatchEvent(new CustomEvent("awb:forbidden", { detail: { path: here, message: detail } }));
-        // Soft-redirect via history; AppShell listens and React Router picks it up.
         window.history.pushState({}, "", `/access-denied?${params.toString()}`);
         window.dispatchEvent(new PopStateEvent("popstate"));
       }
