@@ -871,13 +871,25 @@ function hasAnyVpd(v: ExtractedVpd | undefined): boolean {
 function hasAnyHandoff(h: HandoffExtractionResult | undefined): boolean {
   if (!h) return false;
   return Boolean(
+    // Direct gate columns
     h.gate_signed_date ||
+      h.gate_renewal_date ||
       h.gate_contract_acv_usd ||
       h.gate_contract_term ||
       h.gate_platform_tier ||
       h.gate_account_segment ||
       h.gate_subscribers ||
-      (h.gate_contract_modules?.length ?? 0) > 0,
+      (h.gate_contract_modules?.length ?? 0) > 0 ||
+      // 05-Jun — Contract Audit "extras"
+      h.tcv ||
+      h.billing_freq ||
+      h.payment_terms ||
+      h.discount ||
+      h.discount_reason ||
+      h.geography ||
+      h.module_caveats ||
+      h.audit_notes ||
+      h.other_terms,
   );
 }
 

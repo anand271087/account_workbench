@@ -22,6 +22,11 @@ import { authProvider } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { useConfirm, useNotify, usePrompt } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../AccountProfileLayout";
+import {
+  EXTRACTION_APPLIED_EVENT,
+  consumeHandoffSlice,
+} from "@/lib/extractionDraft";
+import type { HandoffExtractionResult } from "@/types/handoff_extraction";
 import type {
   SigningGate,
   SignAccountBody,
@@ -792,6 +797,52 @@ function ContractAuditSection({
     onError: (e: ApiError) =>
       notify({ title: "Save failed", body: e.message, tone: "error" }),
   });
+
+  // 05-Jun — Auto-apply contract-extraction draft. When a contract doc is
+  // uploaded, the worker writes the extracted fields to documents.handoff_
+  // extracted_fields. KindUploadCard polls the table, sees the column land,
+  // and stashes the slice in localStorage. This effect picks the slice up
+  // on mount (or via EXTRACTION_APPLIED_EVENT if the tab is already open)
+  // and PATCHes ONLY the fields the account doesn't already have set —
+  // so manual edits aren't overwritten.
+  useEffect(() => {
+    if (locked) return;
+    let cancelled = false;
+
+    const drain = () => {
+      const slice = consumeHandoffSlice(account.id);
+      if (!slice || cancelled) return;
+      applyHandoffSlice({
+        slice,
+        gate,
+        extras: (gate.gate_contract_extras ?? {}) as Record<string, unknown>,
+        patchGate: (body) => patchSignMeta.mutate(body),
+        patchExtras: (body) => patchExtras.mutate(body),
+        onApplied: (count) =>
+          count > 0 &&
+          notify({
+            title: "Contract Audit fields auto-populated",
+            body: `${count} field${count === 1 ? "" : "s"} filled from the contract upload. Review and adjust as needed.`,
+            tone: "success",
+          }),
+      });
+    };
+
+    drain();
+    const onEvt = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { accountId?: string } | undefined;
+      if (detail?.accountId === account.id) drain();
+    };
+    window.addEventListener(EXTRACTION_APPLIED_EVENT, onEvt);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(EXTRACTION_APPLIED_EVENT, onEvt);
+    };
+    // We intentionally read gate at effect-fire time — re-running on every
+    // gate change would re-replay the slice. Effect re-fires only when the
+    // account or lock state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account.id, locked]);
   const patchModuleConfigs = useMutation({
     mutationFn: (configs: Record<string, Record<string, unknown>>) =>
       api.patch<SigningGate>(`/api/v1/accounts/${account.id}/module-configs`, { configs }),
@@ -1536,7 +1587,7 @@ function DemoStateToggle({
   notify: (o: { title: string; body?: string; tone?: "info" | "success" | "warning" | "error" }) => void;
 }) {
   const stage: 1 | 2 | 3 = gate.gate_signed && !gate.gate_unlocked
-    ? 3 : !!gate.sh_locked_at ? 2 : 1;
+    ? 3 : gate.sh_locked_at ? 2 : 1;
   const [pending, setPending] = useState<1 | 2 | 3 | null>(null);
 
   // Treat 409 from /sign as already-signed success.
@@ -1917,4 +1968,84 @@ export default function SalesHandoffTab() {
       />
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 05-Jun — Auto-apply the handoff extraction draft.
+//
+// Splits the extracted fields into:
+//   • gate columns (PATCH /accounts/:id with patchSignMeta)
+//   • extras (PATCH /contract-extras with patchExtras)
+// Skips any field the account already has set ("fill-blank-only") so
+// CSM edits aren't trampled. Returns the total count of fields applied
+// so the caller can surface a toast.
+// ─────────────────────────────────────────────────────────────
+function applyHandoffSlice(args: {
+  slice: HandoffExtractionResult;
+  gate: SigningGate;
+  extras: Record<string, unknown>;
+  patchGate: (body: Record<string, unknown>) => void;
+  patchExtras: (body: Record<string, unknown>) => void;
+  onApplied: (count: number) => void;
+}): void {
+  const { slice, gate, extras, patchGate, patchExtras, onApplied } = args;
+
+  // ---------- gate columns ----------
+  const gateBody: Record<string, unknown> = {};
+  if (slice.gate_signed_date && !gate.gate_signed_date)
+    gateBody.gate_signed_date = slice.gate_signed_date;
+  if (slice.gate_renewal_date && !gate.gate_renewal_date)
+    gateBody.gate_renewal_date = slice.gate_renewal_date;
+  if (
+    slice.gate_contract_acv_usd != null &&
+    (gate.gate_contract_acv == null || gate.gate_contract_acv === "")
+  ) {
+    const n =
+      typeof slice.gate_contract_acv_usd === "string"
+        ? parseFloat(slice.gate_contract_acv_usd)
+        : slice.gate_contract_acv_usd;
+    if (Number.isFinite(n)) gateBody.gate_contract_acv = n;
+  }
+  if (slice.gate_contract_term && !gate.gate_contract_term)
+    gateBody.gate_contract_term = slice.gate_contract_term;
+  if (
+    (slice.gate_contract_modules?.length ?? 0) > 0 &&
+    (gate.gate_contract_modules ?? []).length === 0
+  )
+    gateBody.gate_contract_modules = slice.gate_contract_modules;
+  if (slice.gate_platform_tier && !gate.gate_platform_tier)
+    gateBody.gate_platform_tier = slice.gate_platform_tier;
+  if (slice.gate_account_segment && !gate.gate_account_segment)
+    gateBody.gate_account_segment = slice.gate_account_segment;
+  if (slice.gate_subscribers && !gate.gate_subscribers)
+    gateBody.gate_subscribers = slice.gate_subscribers;
+
+  // ---------- extras (gate_contract_extras jsonb) ----------
+  const extrasBody: Record<string, unknown> = {};
+  const E = extras;
+  const setIfBlank = (key: string, value: unknown) => {
+    if (value == null || value === "") return;
+    const existing = E[key];
+    if (existing == null || existing === "") extrasBody[key] = value;
+  };
+  setIfBlank("tcv", slice.tcv);
+  setIfBlank("billing_freq", slice.billing_freq);
+  setIfBlank("payment_terms", slice.payment_terms);
+  setIfBlank("discount", slice.discount);
+  setIfBlank("discount_reason", slice.discount_reason);
+  setIfBlank("geography", slice.geography);
+  setIfBlank("module_caveats", slice.module_caveats);
+  setIfBlank("audit_notes", slice.audit_notes);
+  setIfBlank("other_terms", slice.other_terms);
+
+  const applied = Object.keys(gateBody).length + Object.keys(extrasBody).length;
+  if (applied === 0) {
+    onApplied(0);
+    return;
+  }
+
+  if (Object.keys(gateBody).length > 0) patchGate(gateBody);
+  if (Object.keys(extrasBody).length > 0) patchExtras(extrasBody);
+
+  onApplied(applied);
 }

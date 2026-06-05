@@ -102,14 +102,19 @@ def _parse_date_near(text: str, anchor_words: list[str]) -> date | None:
     return None
 
 
-def _parse_acv(text: str) -> Decimal | None:
-    """Find the largest USD figure near 'ACV' or 'contract value' or 'total'."""
-    candidates: list[Decimal] = []
-    # Look for $X (US format), $X.YM, $XK, etc.
+# ACV-specific anchors (annual). TCV / multi-year are covered by _parse_tcv.
+_ACV_ANCHOR_RE = (
+    r"(?:ACV|annual\s+contract\s+value|annual\s+fee|annual\s+subscription|"
+    r"annual\s+value|annual\s+spend)"
+)
+# Looser anchors used only when the strict ones don't match.
+_ACV_FALLBACK_ANCHOR_RE = r"(?:contract\s+value|subscription\s+fee)"
+
+
+def _scan_acv(text: str, anchor_re: str) -> list[Decimal]:
+    out: list[Decimal] = []
     for m in re.finditer(
-        r"(?:ACV|annual\s+contract\s+value|contract\s+value|total\s+contract|annual\s+fee|annual\s+subscription|annual\s+value)"
-        r"[\s:$=]*"
-        r"\$?\s*(?P<n>[\d,]+(?:\.\d+)?)\s*(?P<u>[KkMm])?",
+        anchor_re + r"[^\d$\n]{0,24}\$?\s*(?P<n>[\d,]+(?:\.\d+)?)\s*(?P<u>[KkMm])?",
         text,
         re.IGNORECASE,
     ):
@@ -124,8 +129,22 @@ def _parse_acv(text: str) -> Decimal | None:
         elif unit == "m":
             v = v * Decimal("1000000")
         if Decimal("100") <= v <= Decimal("100000000"):
-            candidates.append(v)
-    return max(candidates) if candidates else None
+            out.append(v)
+    return out
+
+
+def _parse_acv(text: str) -> Decimal | None:
+    """Find the ACV figure. Prefers ACV-specific anchors so a TCV figure
+    next to "Total Contract Value" doesn't shadow the real ACV."""
+    primary = _scan_acv(text, _ACV_ANCHOR_RE)
+    if primary:
+        # Multiple ACV mentions in one doc are rare; take the max but they're
+        # usually identical.
+        return max(primary)
+    fallback = _scan_acv(text, _ACV_FALLBACK_ANCHOR_RE)
+    if fallback:
+        return max(fallback)
+    return None
 
 
 def _parse_term(text: str) -> str | None:
@@ -195,28 +214,236 @@ def _parse_segment(text: str) -> str | None:
 
 
 def _parse_subscribers(text: str) -> str | None:
-    """Match strings like '25 users', 'Unlimited (Enterprise)', etc."""
+    """Match strings like '25 users', 'Unlimited (Enterprise)', or the
+    inverse form 'subscribers is 25' / 'number of seats: 50'."""
+    # 1. Unlimited / explicit noun-first form ("25 users")
     m = re.search(
-        r"(unlimited(?:\s*\(.*?\))?|(?:\d+)\s*(?:users|seats|subscribers))",
+        r"(unlimited(?:\s*\(.*?\))?|(?:\d+)\s*(?:users|seats|subscribers|licenses?))",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1).strip()
+    # 2. Inverse form: "number of subscribers is 25" / "seats: 50"
+    m = re.search(
+        r"\b(?:users|seats|subscribers|licenses?)\b[^\d\n]{0,20}(\d+)",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        return f"{m.group(1)} users"
+    return None
+
+
+# ============================================================
+# 05-Jun — Contract Audit "extras" stub helpers
+# ============================================================
+
+
+# Vocab aligned to the frontend options in apps/web/src/types/signing.ts —
+# BILLING_FREQ_OPTIONS / PAYMENT_TERM_OPTIONS / GEO_OPTIONS — so the picker
+# pre-fills with a recognised value instead of a free-text custom entry.
+_BILLING_FREQ_VOCAB = {
+    "annual": "Annual", "yearly": "Annual",
+    "bi-annual": "Bi-annual", "semi-annual": "Bi-annual",
+    "semiannual": "Bi-annual", "biannual": "Bi-annual", "twice a year": "Bi-annual",
+    "quarterly": "Quarterly",
+    "monthly": "Monthly",
+}
+# Regional tokens checked FIRST so a doc that mentions both "EMEA" and
+# "global access on read-only modules" picks EMEA as the primary region.
+# "primary" / "primary region" / "main region" near a regional token also
+# upweights it.
+_GEOGRAPHY_VOCAB = (
+    ("emea", "EMEA"), ("europe", "EMEA"), (" eu ", "EMEA"), (" uk ", "EMEA"),
+    ("north america", "North America"), ("us only", "North America"),
+    ("north-america", "North America"),
+    ("apac", "APAC"), ("asia pacific", "APAC"), ("asia-pacific", "APAC"),
+    ("latam", "LATAM"), ("latin america", "LATAM"),
+    ("multi-region", "Multi-region (custom)"),
+    # Global is the catch-all — only wins if NO regional token landed.
+    ("worldwide", "Global"), ("global", "Global"),
+)
+
+
+_RENEWAL_FORWARD_ANCHORS = (
+    "renewal date", "renewal:", "expires on", "expires ",
+    "term ends", "end date", "expiration date", "contract end",
+)
+
+
+def _parse_renewal_date(text: str) -> date | None:
+    """Renewal date often appears as 'renewal date is 14 May 2028' /
+    'expires on 31 Dec 2026'. The date almost always follows the
+    anchor, not precedes it — so we search a forward-only window."""
+    lower = text.lower()
+    for anchor in _RENEWAL_FORWARD_ANCHORS:
+        i = 0
+        while True:
+            j = lower.find(anchor, i)
+            if j < 0:
+                break
+            snippet = text[j : min(len(text), j + 200)]
+            for pat in _DATE_PATTERNS:
+                m = re.search(pat, snippet)
+                if not m:
+                    continue
+                try:
+                    if "mn" in m.groupdict() and m.group("mn"):
+                        return date(
+                            int(m.group("y")),
+                            int(m.group("mn")),
+                            int(m.group("dn")),
+                        )
+                    month_short = m.group("m").lower()[:3]
+                    mm = _MONTHS.get(month_short)
+                    if not mm:
+                        continue
+                    return date(int(m.group("y")), mm, int(m.group("d")))
+                except (ValueError, IndexError):
+                    continue
+            i = j + 1
+    return None
+
+
+def _parse_tcv(text: str) -> str | None:
+    """TCV = total contract value, captured verbatim with the unit."""
+    m = re.search(
+        r"(?:TCV|total\s+contract\s+value|multi-?year\s+total|tot\.\s+contract)"
+        r"[\s:$=]*\$?\s*([\d,]+(?:\.\d+)?\s*[KkMmBb]?)",
         text,
         re.IGNORECASE,
     )
     return m.group(1).strip() if m else None
 
 
+def _parse_billing_freq(text: str) -> str | None:
+    head = text[:8000].lower()
+    if not any(w in head for w in ("billing", "invoice", "billed", "payment")):
+        return None
+    for token, canonical in _BILLING_FREQ_VOCAB.items():
+        if token in head:
+            return canonical
+    return None
+
+
+def _parse_payment_terms(text: str) -> str | None:
+    # Frontend options: Net 15 / 30 / 45 / 60 / 90 / Upon receipt / Custom.
+    head = text[:8000].lower()
+    if "upon receipt" in head or "payable on receipt" in head:
+        return "Upon receipt"
+    m = re.search(r"\bNet[\s-]*(\d{2,3})\b", text, re.IGNORECASE)
+    if m:
+        n = int(m.group(1))
+        if n in (15, 30, 45, 60, 90):
+            return f"Net {n}"
+        # Out-of-range (Net 120 / Net 7) — the frontend Select supports "Custom".
+        return "Custom"
+    return None
+
+
+def _parse_discount(text: str) -> tuple[str | None, str | None]:
+    """Returns (discount_percent_as_string, reason). Reason is bounded by
+    sentence terminators OR a newline OR the next "Field:"-style header
+    so multi-section docs don't bleed into the reason."""
+    m = re.search(
+        r"(?P<n>\d{1,2}(?:\.\d{1,2})?)\s*%\s*(?:discount|rebate|off)\b",
+        text, re.IGNORECASE,
+    )
+    if not m:
+        m = re.search(
+            r"\b(?:discount|rebate)\s*(?:of|:|-)?\s*(?P<n>\d{1,2}(?:\.\d{1,2})?)\s*%",
+            text, re.IGNORECASE,
+        )
+    if not m:
+        return (None, None)
+    pct = m.group("n")
+    start = max(0, m.start() - 80)
+    end = min(len(text), m.end() + 160)
+    # Preserve newlines so the reason search stops at section boundaries.
+    sentence = text[start:end]
+    # Match "for X" / "reflecting X" / etc. up to a sentence terminator,
+    # newline, or "Field:"-style header marker.
+    reason_m = re.search(
+        r"(?:for|due to|because of|reflecting|as a)\s+([^.;\n]{4,80})",
+        sentence, re.IGNORECASE,
+    )
+    if not reason_m:
+        return (pct, None)
+    reason = reason_m.group(1).strip().rstrip(",.")
+    # If a "<Word>:" header crept in, cut at it.
+    reason = re.split(r"\s+[A-Z][A-Za-z]{2,}\s*:\s*", reason, maxsplit=1)[0].strip()
+    return (pct, reason or None)
+
+
+def _parse_geography(text: str) -> str | None:
+    """Pick the most specific region that appears. Regional tokens
+    iterate first; "Global" is only picked when no regional hit lands."""
+    head = text[:8000].lower()
+    # First pass: regional tokens (Global stripped).
+    for token, canonical in _GEOGRAPHY_VOCAB:
+        if canonical == "Global":
+            continue
+        if token in head:
+            return canonical
+    # No regional hit → fall back to Global / worldwide.
+    if "worldwide" in head or "global" in head:
+        return "Global"
+    return None
+
+
+_CLAUSE_HEADER_RE = re.compile(
+    r"\b(Termination|Renewal\s+Option|Auto-?renewal|Audit\s+Rights?|"
+    r"QBR(?:\s+cadence)?|Pricing\s+Protection|Exit\s+Clause|Side[- ]Letter|"
+    r"Indemnification|Service\s+Levels?|SLA|Cap\s+on\s+Liability|"
+    r"Confidentiality)\b",
+    re.IGNORECASE,
+)
+
+
+def _parse_other_terms(text: str) -> str | None:
+    matches = _CLAUSE_HEADER_RE.findall(text)
+    if not matches:
+        return None
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in matches:
+        key = raw.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(raw.strip())
+        if len(out) >= 5:
+            break
+    return " · ".join(out)
+
+
 def _stub_extract(document_id: str, text: str) -> HandoffExtractionResult:
     """Deterministic regex-based extractor — runs when no Anthropic key
     is configured or when the real call fails."""
+    discount, discount_reason = _parse_discount(text)
     return HandoffExtractionResult(
         document_id=document_id,
         is_stub=True,
-        gate_signed_date=_parse_date_near(text, ["signed", "signing", "effective date", "execution date"]),
+        gate_signed_date=_parse_date_near(
+            text, ["signed", "signing", "effective date", "execution date"],
+        ),
+        gate_renewal_date=_parse_renewal_date(text),
         gate_contract_acv_usd=_parse_acv(text),
         gate_contract_term=_parse_term(text),
         gate_contract_modules=_parse_modules(text),
         gate_platform_tier=_parse_platform_tier(text),
         gate_account_segment=_parse_segment(text),
         gate_subscribers=_parse_subscribers(text),
+        tcv=_parse_tcv(text),
+        billing_freq=_parse_billing_freq(text),
+        payment_terms=_parse_payment_terms(text),
+        discount=discount,
+        discount_reason=discount_reason,
+        geography=_parse_geography(text),
+        module_caveats=None,
+        audit_notes=None,
+        other_terms=_parse_other_terms(text),
         confidence="low",
         notes="Stub extractor — best-effort regex match, please review every field.",
     )
@@ -226,18 +453,30 @@ def _stub_extract(document_id: str, text: str) -> HandoffExtractionResult:
 # Real Claude call
 # ============================================================
 
-_SYSTEM_PROMPT = """You extract structured Client Signed fields from a Beroe Sales Hand-off contract document.
+_SYSTEM_PROMPT = """You extract structured Client Signed + Contract Audit fields from a Beroe contract document.
 
 Output a SINGLE JSON object with this exact shape — omit any field you cannot infer from the text (do not invent values):
 
 {
   "gate_signed_date":      "YYYY-MM-DD" or null,
+  "gate_renewal_date":     "YYYY-MM-DD" or null,
   "gate_contract_acv_usd": number (USD) or null,
   "gate_contract_term":    one of ["1 year","2 years","3 years","5 years","Custom"] or null,
   "gate_contract_modules": [ "Category Watch", "Abi Intelligence", "Benchmarks", "Custom Credits", "Supplier Discovery", "Supplier Risk", "Live.ai", "MMD", "Sourcing Optimizer", "Copilot", "DataHub", "Diverse Supplier Directory", "Supply Chain Risk" ]   (subset that actually appears),
   "gate_platform_tier":    one of ["EL Base","EL Plus","EL Premium","Enterprise","Pro","Custom"] or null,
   "gate_account_segment":  "A" or "B" or "C" or null,
   "gate_subscribers":      free text like "Unlimited (Enterprise)" or "25 users" or null,
+
+  "tcv":                   string verbatim ("$930K" / "1,200,000") or null,
+  "billing_freq":          one of ["Annual","Bi-annual","Quarterly","Monthly"] or null,
+  "payment_terms":         one of ["Net 15","Net 30","Net 45","Net 60","Net 90","Upon receipt","Custom"] or null,
+  "discount":              percent as a string ("12" / "12.5", no %) or null,
+  "discount_reason":       short reason ("Multi-year prepay") or null,
+  "geography":             one of ["Global","North America","EMEA","APAC","LATAM","Multi-region (custom)"] or null,
+  "module_caveats":        free text — module-specific carve-outs / caps / side commitments, or null,
+  "audit_notes":           free text — pricing protection, rate-card, MFN clauses, or null,
+  "other_terms":           free text — termination, renewal option, audit rights, QBR cadence, indemnification, SLAs etc., or null,
+
   "confidence":            "high" | "medium" | "low",
   "notes":                 short one-line clarification or null
 }
@@ -246,6 +485,13 @@ Rules:
 - gate_contract_acv_usd is the ANNUAL contract value in USD as a plain number (no $ or commas). If the doc only states a multi-year total, divide by the year count.
 - gate_contract_term must be one of the enumerated values; map "annual" → "1 year", "biennial" → "2 years", anything bespoke → "Custom".
 - gate_contract_modules: include only modules whose names appear literally in the text.
+- gate_renewal_date: parse from "expires on", "renewal date", "term ends", or compute from signed_date + term if the doc states the term unambiguously.
+- tcv: keep the doc's verbatim formatting ("$2.4M" / "USD 930,000") — the UI displays it as-is.
+- billing_freq / payment_terms / geography: pick the closest enumerated value; if the doc says "billed annually in arrears, Net 60", emit billing_freq="Annual" + payment_terms="Net 60".
+- discount: numeric percent only. "12% multi-year prepay discount" → discount="12", discount_reason="Multi-year prepay".
+- module_caveats: 1-3 short clauses about module-level caps / carve-outs ("Custom Credits capped at 400 hrs/year; PowerBI connector deferred to Q3").
+- audit_notes: pricing protection, MFN, rate-card terms — anything financially material that isn't TCV/ACV/discount.
+- other_terms: list the named non-commercial clauses present (Termination · Audit Rights · QBR cadence · Indemnification · SLA) as a short " · "-separated summary.
 - Output JSON only. No prose."""
 
 
@@ -282,12 +528,23 @@ async def _real_extract(document_id: str, text: str) -> HandoffExtractionResult 
             confidence=data.get("confidence", "medium"),
             notes=data.get("notes"),
             gate_signed_date=date.fromisoformat(data["gate_signed_date"]) if data.get("gate_signed_date") else None,
+            gate_renewal_date=date.fromisoformat(data["gate_renewal_date"]) if data.get("gate_renewal_date") else None,
             gate_contract_acv_usd=Decimal(str(data["gate_contract_acv_usd"])) if data.get("gate_contract_acv_usd") is not None else None,
             gate_contract_term=data.get("gate_contract_term"),
             gate_contract_modules=data.get("gate_contract_modules") or [],
             gate_platform_tier=data.get("gate_platform_tier"),
             gate_account_segment=data.get("gate_account_segment"),
             gate_subscribers=data.get("gate_subscribers"),
+            # 05-Jun — Contract Audit "extras" fields.
+            tcv=data.get("tcv"),
+            billing_freq=data.get("billing_freq"),
+            payment_terms=data.get("payment_terms"),
+            discount=str(data["discount"]) if data.get("discount") is not None else None,
+            discount_reason=data.get("discount_reason"),
+            geography=data.get("geography"),
+            module_caveats=data.get("module_caveats"),
+            audit_notes=data.get("audit_notes"),
+            other_terms=data.get("other_terms"),
         )
     except Exception as exc:
         logger.warning("Handoff Claude extract failed (falling back to stub): %s", exc)
