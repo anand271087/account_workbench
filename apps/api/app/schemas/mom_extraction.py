@@ -56,6 +56,16 @@ class ExtractedEngagement(BaseModel):
     spoc_text: str | None = None
     sponsor_text: str | None = None
     procurement_maturity: MaturityLevel | None = None
+    # 05-Jun — engagement timeline + Beroe-side ownership. These map directly
+    # to the four "Engagement Info" fields stakeholders flagged as not
+    # populating (Discovery Date · Discovery lead · Sales lead · SDR).
+    # Backend stores these as plain strings (or date for pre_discovery_date);
+    # the frontend BeroeUserPicker resolves names to canonical emails when
+    # the picker is opened.
+    pre_discovery_date: date | None = None
+    discovery_lead: str | None = Field(None, max_length=200)
+    sales_lead: str | None = Field(None, max_length=200)
+    sdr_lead: str | None = Field(None, max_length=200)
 
 
 class ExtractedContact(BaseModel):

@@ -127,7 +127,11 @@ You output a SINGLE JSON object with this exact shape (omit fields you can't inf
     "geographies": [<countries / regions, e.g. ["Netherlands", "APAC"]>],
     "spoc_text": <string|null — the named meeting attendee with title>,
     "sponsor_text": <string|null — most senior procurement contact named>,
-    "procurement_maturity": <"low"|"medium"|"high"|null — infer from Legacy LiVE Stats: high if CEB+many users, medium if some registered, low if "Not a CEB" + nobody registered>
+    "procurement_maturity": <"low"|"medium"|"high"|null — infer from Legacy LiVE Stats: high if CEB+many users, medium if some registered, low if "Not a CEB" + nobody registered>,
+    "pre_discovery_date": <"YYYY-MM-DD"|null — date of the discovery / kick-off meeting itself. Parse from "Date: October 15, 2024" / "Meeting Date: 01/05/2026" / "(15-Oct-2024)" headers. Must be today or earlier (a past event).>,
+    "discovery_lead": <string|null — the Beroe teammate who RAN discovery. Usually labelled "SDR", "Discovery Lead", "Recorded by", or the Beroe attendee most senior on the call. Just the name verbatim ("Nivedha", "Aditya Pherwani"). Strip titles.>,
+    "sales_lead": <string|null — the Beroe Sales owner. Usually labelled "Sales", "Account Executive", "AE", "Sales Lead". Just the name verbatim. Strip titles.>,
+    "sdr_lead": <string|null — the SDR / lead source. Usually labelled "SDR", "BDR", "Lead Source", "Recorded by". When the SDR also ran the discovery, the same name lands in both discovery_lead and sdr_lead. Just the name verbatim.>
   },
   "contacts": [
     {
@@ -190,6 +194,22 @@ GUIDANCE:
   function exists; low if procurement is ad-hoc or no internal team.
   When in doubt: high if the meeting included a CPO and a category
   manager, medium for one-or-the-other, low for neither.
+- engagement.pre_discovery_date: parse from any meeting metadata line —
+  "Date: October 15, 2024", "Meeting Date: 01/05/2026", "(15 Oct 2024)",
+  "Date held: 2026-05-01". Output as YYYY-MM-DD. Date formats: DD/MM/YYYY
+  is the default for European-style ("01/05/2026" → 2026-05-01), US-style
+  ("May 1, 2026") parses directly. NEVER set a future date — if the doc
+  somehow names a future date, leave null.
+- engagement.discovery_lead / sales_lead / sdr_lead: scan the ATTENDEES /
+  PARTICIPANTS / "Recorded by" / Distribution lists. Lines like:
+    "Nivedha, SDR, Beroe"          → sdr_lead="Nivedha", discovery_lead="Nivedha"
+    "Alekh Chatterji, Sales, Beroe"→ sales_lead="Alekh Chatterji"
+    "Aditya Pherwani — Sales Lead" → sales_lead="Aditya Pherwani"
+    "Recorded by: Nivedha, SDR"    → sdr_lead="Nivedha"
+  When the same person filled multiple Beroe roles, set them in each field.
+  Strip honorifics and trailing role markers — only the name (e.g. "Aditya
+  Pherwani"), no titles, no commas, no parenthetical notes. NEVER guess
+  Beroe-side names that aren't named in the doc — leave null instead.
 - brief.call_type: first_discovery for any discovery / intro / initial
   meeting; qbr for "QBR" or "quarterly business review"; renewal for
   "renewal" discussions; expansion for "expand" / "add-on"; other for
@@ -314,6 +334,7 @@ def _stub_extract(text: str) -> MomExtractionResult:
     spoc_text = _strip_url_markup(_first_line(contact_attendee_line)) or None
     top_contacts_text = s.get("top procurement contacts") or ""
     sponsor_line = _find_most_senior(top_contacts_text)
+    leads = _extract_engagement_leads(text)
     engagement = ExtractedEngagement(
         meeting_type=_first_nonempty(s.get("meeting type")),
         engagement_objective=_compose_objective(s),
@@ -322,6 +343,10 @@ def _stub_extract(text: str) -> MomExtractionResult:
         spoc_text=spoc_text,
         sponsor_text=_strip_url_markup(sponsor_line) if sponsor_line else None,
         procurement_maturity=_infer_maturity(s.get("legacy beroe live stats")),
+        pre_discovery_date=leads.get("pre_discovery_date"),
+        discovery_lead=leads.get("discovery_lead"),
+        sales_lead=leads.get("sales_lead"),
+        sdr_lead=leads.get("sdr_lead"),
     )
 
     # --- contacts ---
@@ -675,6 +700,119 @@ def _compose_objective(s: dict[str, str]) -> str | None:
         parts.append(f"Identified intent signals: {intent}.")
     objective = " ".join(parts)
     return objective[:1200]
+
+
+_DATE_PATTERNS = (
+    # ISO YYYY-MM-DD or YYYY/MM/DD
+    re.compile(r"\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b"),
+    # DD/MM/YYYY or DD-MM-YYYY (European default — what stakeholders are using)
+    re.compile(r"\b(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b"),
+    # "Date: October 15, 2024" / "15 Oct 2024" / "Oct 15 2024"
+    re.compile(
+        r"\b(\d{1,2})\s+"
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
+        r"\s+(20\d{2})\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
+        r"\s+(\d{1,2}),?\s+(20\d{2})\b",
+        re.IGNORECASE,
+    ),
+)
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _parse_discovery_date(text: str) -> "date | None":
+    """Find the first parseable meeting date in the MoM. Skips future dates
+    (discovery is always a past event) — same guard as the engagement schema."""
+    from datetime import date as _date
+
+    today = _date.today()
+    # Hunt only the first ~3000 chars — meeting metadata is always at the top.
+    head = text[:3000]
+    for pat in _DATE_PATTERNS:
+        for m in pat.finditer(head):
+            try:
+                groups = [g for g in m.groups()]
+                if len(groups[0]) == 4:  # ISO
+                    y, mo, d = int(groups[0]), int(groups[1]), int(groups[2])
+                elif groups[0].isdigit() and groups[1].isdigit() and len(groups[2]) == 4:
+                    # DD/MM/YYYY — default to European parse (stakeholders use this)
+                    d, mo, y = int(groups[0]), int(groups[1]), int(groups[2])
+                elif groups[0].isdigit():  # "15 Oct 2024"
+                    d, mo, y = int(groups[0]), _MONTHS[groups[1].lower()[:3]], int(groups[2])
+                else:  # "Oct 15, 2024"
+                    mo, d, y = _MONTHS[groups[0].lower()[:3]], int(groups[1]), int(groups[2])
+                parsed = _date(y, mo, d)
+            except (ValueError, KeyError):
+                continue
+            if parsed > today:
+                continue
+            return parsed
+    return None
+
+
+_BEROE_ROLE_LINE_RE = re.compile(
+    r"^\s*[-•*]?\s*"
+    r"([A-Z][\w.''-]+(?:\s+[A-Z][\w.''-]+){0,3})"  # 1-4 capitalised words
+    r"\s*[,:\-—–]\s*"
+    r"(?P<role>[\w/ ]+?)"
+    r"\s*[,:\-—–]\s*"
+    r"(?:Beroe|@beroe|beroe\.com)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_RECORDED_BY_RE = re.compile(
+    r"\bRecorded\s+by\s*[:\-]\s*([A-Z][\w.''-]+(?:\s+[A-Z][\w.''-]+){0,3})",
+    re.IGNORECASE,
+)
+
+
+def _extract_engagement_leads(text: str) -> dict:
+    """Find Beroe-side leads + the discovery date from any MoM format.
+
+    Pattern matches lines like:
+        - Nivedha, SDR, Beroe
+        - Alekh Chatterji, Sales, Beroe
+        - Aditya Pherwani · Account Executive · Beroe
+    plus "Recorded by: <name>" lines. Returns a dict keyed by the four
+    engagement fields — missing entries simply absent."""
+    out: dict = {}
+    out["pre_discovery_date"] = _parse_discovery_date(text)
+
+    seen_by_role: dict[str, str] = {}
+    for m in _BEROE_ROLE_LINE_RE.finditer(text):
+        name = m.group(1).strip()
+        role = m.group("role").strip().lower()
+        if "sdr" in role or "bdr" in role:
+            seen_by_role.setdefault("sdr", name)
+        elif "sales" in role or "account exec" in role or role in {"ae", "ce"}:
+            seen_by_role.setdefault("sales", name)
+        elif "discovery" in role or "presales" in role or "solutions" in role:
+            seen_by_role.setdefault("discovery", name)
+
+    recorded = _RECORDED_BY_RE.search(text)
+    if recorded:
+        seen_by_role.setdefault("sdr", recorded.group(1).strip())
+        # Recorded-by is usually also the discovery lead
+        seen_by_role.setdefault("discovery", recorded.group(1).strip())
+
+    # Mirror SDR ↔ discovery when only one is present (SDR usually runs discovery)
+    if "sdr" in seen_by_role and "discovery" not in seen_by_role:
+        seen_by_role["discovery"] = seen_by_role["sdr"]
+    if "discovery" in seen_by_role and "sdr" not in seen_by_role:
+        seen_by_role["sdr"] = seen_by_role["discovery"]
+
+    if "sdr" in seen_by_role:
+        out["sdr_lead"] = seen_by_role["sdr"]
+    if "discovery" in seen_by_role:
+        out["discovery_lead"] = seen_by_role["discovery"]
+    if "sales" in seen_by_role:
+        out["sales_lead"] = seen_by_role["sales"]
+    return out
 
 
 def _compose_win_condition(s: dict[str, str]) -> str | None:

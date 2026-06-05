@@ -224,23 +224,25 @@ export default function PreSalesTab() {
         </div>
       )}
 
-      {/* MoM uploads — first thing on Pre-Sales so the discovery story
-          lives next to the engagement objective + categories.
-          03-Jun bug 8 — Pre-Meeting Brief is now a button in the
-          top-right of this card; opens a presentation-mode overlay. */}
+      {/* 05-Jun — Pre-Meeting Brief inline ABOVE the MoM upload. The brief
+          auto-populates from the most recent MoM upload (same wiring as
+          the previous overlay). User explicitly asked for the entire
+          presentation + edit experience to live above the MoM, not as a
+          separate popup. */}
+      <PreMeetingBriefInline accountId={account.id} />
+
+      {/* MoM uploads — sits BELOW the brief now. The brief reads from the
+          most recent MoM extraction draft and merges it section by section. */}
       <KindUploadCard
         accountId={account.id}
         kind="mom"
         title="Meeting Minutes (MoM)"
         description="Upload discovery / kick-off / cadence MoMs. Claude will summarise each and auto-extract structured fields into Engagement, Brief, and Contacts."
         emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt, .vtt or .eml onto the card above."
-        headerAction={<BriefOverlayButton accountId={account.id} />}
       />
 
-      {/* 03-Jun bug 8 — the standalone "Open Pre-Meeting Brief" expander
-          that used to live at the END of Pre-Sales is gone; the brief
-          is now reachable via the BriefOverlayButton on the MoM card
-          above. The auto-populate from MoM still runs the same way. */}
+      {/* 05-Jun — Pre-Meeting Brief no longer lives as a separate overlay.
+          Component sits above the MoM upload card (PreMeetingBriefInline). */}
 
       {/* 28-May — Wrap all Pre-Sales fields inside the prototype's outer
           A) Pre-Sales & Discovery card (line 5848-5912). Single white
@@ -1452,6 +1454,13 @@ function mergeEngagementDraft(base: Engagement, draft: ExtractedEngagement): Eng
     spoc_text: draft.spoc_text || base.spoc_text,
     sponsor_text: draft.sponsor_text || base.sponsor_text,
     procurement_maturity: (draft.procurement_maturity as MaturityLevel | null) || base.procurement_maturity,
+    // 05-Jun — engagement timeline + Beroe-side leads. AI returns names
+    // verbatim ("Nivedha", "Aditya Pherwani"); the BeroeUserPicker shows
+    // the name as-is and lets the CSM upgrade it to a canonical email.
+    pre_discovery_date: draft.pre_discovery_date || base.pre_discovery_date,
+    discovery_lead: draft.discovery_lead || base.discovery_lead,
+    sales_lead: draft.sales_lead || base.sales_lead,
+    sdr_lead: draft.sdr_lead || base.sdr_lead,
     ai_quality_dismissed: false,  // a freshly populated objective should re-trigger AI scoring
   };
 }
@@ -1555,91 +1564,76 @@ function BeroeUserPicker({
 // a thin wrapper (rather than calling MeetingBriefEditor directly in
 // the <details>) so future styling tweaks specific to the inline
 // presentation have a clean attach point.
-// 03-Jun bug 8 — PreMeetingBriefInline wrapper removed; the brief is
-// now reachable only via the BriefOverlayButton modal below.
-
 // ─────────────────────────────────────────────────────────────
-// 03-Jun bug 8 — Pre-Meeting Brief button (top-right of MoM card).
-// Opens a fullscreen overlay rendering the existing brief editor in
-// presentation mode (read-only). Brief auto-populates from any
-// uploaded MoM via the existing extraction pipeline.
+// 05-Jun — Pre-Meeting Brief INLINE above the MoM upload card.
+// Replaces the old BriefOverlayButton popup. Stakeholders explicitly
+// asked for the entire brief experience (presentation + edit) to live
+// in-page above the MoM uploader instead of behind a button. Same
+// MeetingBriefEditor underneath — just sits in a collapsible card.
+// The brief auto-populates from any uploaded MoM via the existing
+// extraction draft pipeline (consumeBriefSlice).
 // ─────────────────────────────────────────────────────────────
-function BriefOverlayButton({ accountId }: { accountId: string }) {
-  const [open, setOpen] = useState(false);
-  // Lock body scroll while the overlay is open.
+function PreMeetingBriefInline({ accountId }: { accountId: string }) {
+  // Default to expanded so the user lands on the populated brief without
+  // an extra click. localStorage keeps the per-account preference.
+  const storageKey = `awb:pre-brief-expanded:${accountId}`;
+  const [expanded, setExpanded] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      return raw === null ? true : raw === "1";
+    } catch {
+      return true;
+    }
+  });
   useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+    try {
+      localStorage.setItem(storageKey, expanded ? "1" : "0");
+    } catch {
+      /* swallow */
+    }
+  }, [storageKey, expanded]);
+
   return (
-    <>
+    <div className="rounded-card border border-beroe-card-border bg-white overflow-hidden">
+      {/* Indigo header strip with the brand pill + chevron */}
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        className="text-[11.5px] font-semibold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-white hover:opacity-90 transition-opacity"
-        style={{ background: "#4A00F8" }}
-        title="Open the auto-populated Pre-Meeting Brief in presentation mode"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left"
+        style={{ background: "#001137" }}
+        aria-expanded={expanded}
       >
-        📝 Pre-Meeting Brief
-      </button>
-      {open && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/50 flex items-stretch justify-center p-3 sm:p-6"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
-        >
-          <div
-            className="bg-beroe-bg rounded-2xl shadow-2xl w-full max-w-[1100px] flex flex-col overflow-hidden"
-            style={{ maxHeight: "92vh" }}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className="px-2.5 py-0.5 rounded-md text-[11px] font-bold text-white"
+            style={{ background: "#4A00F8" }}
           >
-            <div
-              className="flex items-center justify-between px-5 py-3 border-b"
-              style={{ background: "#001137", borderColor: "#0d1b2e" }}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="px-2.5 py-0.5 rounded-md text-[11px] font-bold text-white"
-                  style={{ background: "#4A00F8" }}
-                >
-                  Brief
-                </span>
-                <span className="text-[12px] text-white/85 font-semibold">
-                  Pre-Meeting Brief · Presentation Mode
-                </span>
-                <span className="ml-2 text-[10px] text-white/55">
-                  Auto-populated from the most recent MoM upload
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close brief"
-                className="text-white/70 hover:text-white text-[20px] leading-none px-2"
-              >
-                ×
-              </button>
-            </div>
-            {/* The existing MeetingBriefEditor renders sectioned content
-                (call info, attendees, minefields, value anchors, …) —
-                each section is already a collapsible <details> so this
-                doubles as the "collapse/expand" requirement of the bug. */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 bg-white">
-              <MeetingBriefEditor accountId={accountId} />
-            </div>
-          </div>
+            Brief
+          </span>
+          <span className="text-[13px] text-white font-semibold">
+            📝 Pre-Meeting Brief
+          </span>
+          <span className="text-[10.5px] text-white/55">
+            Auto-populated from the most recent MoM upload · edit any section inline
+          </span>
+        </div>
+        <span
+          className="text-white/80 text-[14px] transition-transform"
+          style={{ transform: expanded ? "rotate(180deg)" : undefined }}
+          aria-hidden
+        >
+          ▼
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-4 py-3 bg-white border-t border-beroe-card-border">
+          {/* MeetingBriefEditor renders each brief section as a collapsible
+              <details>, so within this inline panel sections can still be
+              collapsed/expanded independently. */}
+          <MeetingBriefEditor accountId={accountId} />
         </div>
       )}
-    </>
+    </div>
   );
 }
 

@@ -22,6 +22,12 @@ export interface ExtractedEngagement {
   spoc_text: string | null;
   sponsor_text: string | null;
   procurement_maturity: MaturityLevel | null;
+  // 05-Jun — engagement timeline + Beroe-side ownership. Mirrors
+  // ExtractedEngagement in apps/api/app/schemas/mom_extraction.py.
+  pre_discovery_date: string | null;
+  discovery_lead: string | null;
+  sales_lead: string | null;
+  sdr_lead: string | null;
 }
 
 export interface ExtractedContact {
