@@ -151,15 +151,11 @@ async def _process(job_id: UUID) -> dict:
         if doc.kind == "mom":
             try:
                 extracted = extract_from_mom(doc.id, text)
-                payload = extracted.model_dump(mode="json")
-                # 05-Jun — engagement.{sdr_lead,discovery_lead,sales_lead}
-                # is typed as a Beroe email on the wire (the BeroeUserPicker
-                # joins to users.email). The extractor pulls a NAME from
-                # the doc — we resolve it to a canonical email here. No
-                # match → set the field to None instead of writing a name
-                # that would fail the schema validator on save.
-                await _resolve_engagement_leads(db, payload)
-                doc.mom_extracted_fields = payload
+                # 05-Jun — extracted lead names (sdr_lead / discovery_lead /
+                # sales_lead) flow through verbatim. Schema validator on
+                # the engagement PATCH no longer enforces @beroe-inc.com,
+                # so the raw name from the doc is what lands on the form.
+                doc.mom_extracted_fields = extracted.model_dump(mode="json")
                 doc.mom_extracted_at = datetime.now(timezone.utc)
                 await db.commit()
             except Exception:
@@ -240,60 +236,3 @@ async def _mark_failed_db(db, job: Job, message: str) -> None:
     await db.commit()
 
 
-# ============================================================
-# 05-Jun — Engagement lead name → Beroe email resolution
-# ============================================================
-#
-# The MoM extractor pulls names verbatim from the doc ("Anurag Bhagat",
-# "Dinesh Gokhale"). The engagement schema treats sdr_lead / discovery_
-# lead / sales_lead as Beroe-email columns (the BeroeUserPicker joins to
-# users.email so name collisions over years don't break references).
-#
-# This step takes each extracted name, looks it up in `users.full_name`
-# (case-insensitive partial match), and replaces the field with the
-# canonical email when a unique match exists. If no user matches OR more
-# than one matches → set the field to None. Better to leave blank than
-# to write a value that the schema validator rejects on the PATCH.
-
-_LEAD_FIELDS = ("sdr_lead", "discovery_lead", "sales_lead")
-
-
-async def _resolve_engagement_leads(db, payload: dict) -> None:
-    eng = payload.get("engagement") if isinstance(payload, dict) else None
-    if not isinstance(eng, dict):
-        return
-    cache: dict[str, str | None] = {}
-    for field in _LEAD_FIELDS:
-        raw = eng.get(field)
-        if not isinstance(raw, str):
-            continue
-        name = raw.strip()
-        # Already an email — leave it; the validator will reject if it's
-        # not @beroe-inc.com.
-        if "@" in name:
-            continue
-        if not name:
-            eng[field] = None
-            continue
-        if name.lower() not in cache:
-            cache[name.lower()] = await _lookup_beroe_email_by_name(db, name)
-        eng[field] = cache[name.lower()]
-
-
-async def _lookup_beroe_email_by_name(db, name: str) -> str | None:
-    """Find the canonical @beroe-inc.com email for a person referenced
-    by name. Returns None when there's zero matches OR more than one
-    (ambiguous — caller can manually pick from the dropdown)."""
-    from sqlalchemy import text as sa_text
-
-    pattern = f"%{name.lower()}%"
-    res = await db.execute(
-        sa_text(
-            "SELECT email FROM users "
-            "WHERE lower(full_name) LIKE :p "
-            "  AND email LIKE '%@beroe-inc.com' "
-            "LIMIT 2"
-        ).bindparams(p=pattern),
-    )
-    rows = res.scalars().all()
-    return rows[0] if len(rows) == 1 else None

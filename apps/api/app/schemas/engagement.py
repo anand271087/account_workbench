@@ -17,26 +17,22 @@ SpendCurrency = Literal[
     "DKK", "NZD", "KRW", "THB", "MYR", "IDR", "PHP", "TRY", "RUB",
 ]
 
-_BEROE_DOMAIN = "@beroe-inc.com"
+# 05-Jun — internal lead fields (SDR / Discovery / Sales) are now free text.
+# Earlier we enforced `@beroe-inc.com` on PATCH because the picker stored
+# canonical emails to avoid name-collision joins. Stakeholder feedback was
+# to drop the validation — extracted names from the MoM (e.g. "Anurag
+# Bhagat", "Dinesh Gokhale") land as-is. The picker still renders the
+# value verbatim; if a Beroe row matches it auto-suggests an email, but
+# the stored value can be any string.
 
 
-def _validate_beroe_email(value: str | None) -> str | None:
-    """Internal lead fields (SDR / Discovery / Sales) must be Beroe email IDs.
-
-    Names alone aren't unique ("Gaurav" matches dozens of staff over years);
-    requiring an `@beroe-inc.com` address forces the picker to identify the
-    exact teammate. Empty string and None are passed through.
-    """
+def _validate_lead_text(value: str | None) -> str | None:
+    """Pass-through normaliser for SDR / Discovery / Sales lead fields.
+    Trims whitespace; empty → None. No domain enforcement."""
     if value is None:
         return None
     v = value.strip()
-    if not v:
-        return None
-    if "@" not in v or not v.lower().endswith(_BEROE_DOMAIN):
-        raise ValueError(
-            f"Must be a Beroe email address ({_BEROE_DOMAIN}); got '{value}'"
-        )
-    return v.lower()
+    return v or None
 
 
 def _validate_pre_discovery_date(d: date | None) -> date | None:
@@ -120,8 +116,8 @@ class EngagementUpdate(BaseModel):
 
     @field_validator("sdr_lead", "discovery_lead", "sales_lead", mode="before")
     @classmethod
-    def _v_beroe_email(cls, v):  # noqa: N805
-        return _validate_beroe_email(v)
+    def _v_lead_text(cls, v):  # noqa: N805
+        return _validate_lead_text(v)
 
     @field_validator("pre_discovery_date")
     @classmethod
