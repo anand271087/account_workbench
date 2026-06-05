@@ -214,15 +214,31 @@ GUIDANCE:
   ("May 1, 2026") parses directly. NEVER set a future date — if the doc
   somehow names a future date, leave null.
 - engagement.discovery_lead / sales_lead / sdr_lead: scan the ATTENDEES /
-  PARTICIPANTS / "Recorded by" / Distribution lists. Lines like:
-    "Nivedha, SDR, Beroe"          → sdr_lead="Nivedha", discovery_lead="Nivedha"
-    "Alekh Chatterji, Sales, Beroe"→ sales_lead="Alekh Chatterji"
-    "Aditya Pherwani — Sales Lead" → sales_lead="Aditya Pherwani"
-    "Recorded by: Nivedha, SDR"    → sdr_lead="Nivedha"
-  When the same person filled multiple Beroe roles, set them in each field.
-  Strip honorifics and trailing role markers — only the name (e.g. "Aditya
-  Pherwani"), no titles, no commas, no parenthetical notes. NEVER guess
-  Beroe-side names that aren't named in the doc — leave null instead.
+  PARTICIPANTS / "Recorded by" / "MEETING NOTES BY" / Distribution lists
+  for Beroe-side names. Role mapping (Beroe role on the doc → field):
+
+    SDR / BDR / Lead-source / Lead-gen        → sdr_lead
+    CSM / Customer Success / Discovery /
+      Presales / Solutioning / Solutions      → discovery_lead
+    Sales / Account Exec / AE /
+      Commercial Owner / CO /
+      Commercial Lead / Account Manager       → sales_lead
+
+  Examples:
+    "Nivedha, SDR, Beroe"                  → sdr_lead="Nivedha", discovery_lead="Nivedha"
+    "Anurag Bhagat, CSM, Beroe"            → discovery_lead="Anurag Bhagat", sdr_lead="Anurag Bhagat"
+    "Dinesh Gokhale, Commercial Owner, Beroe" → sales_lead="Dinesh Gokhale"
+    "Alekh Chatterji, Sales, Beroe"        → sales_lead="Alekh Chatterji"
+    "Aditya Pherwani — Sales Lead"         → sales_lead="Aditya Pherwani"
+    "Recorded by: Nivedha, SDR"            → sdr_lead="Nivedha"
+    "MEETING NOTES BY: Anurag Bhagat, CSM, Beroe" → discovery_lead + sdr_lead = "Anurag Bhagat"
+
+  When the SDR isn't named but a CSM is, mirror the CSM into sdr_lead
+  (and vice versa) — the discovery facilitator is the SDR-equivalent.
+  When the same person filled multiple Beroe roles, set them in each
+  field. Strip honorifics and trailing role markers — only the name
+  ("Aditya Pherwani"), no titles, no commas, no parenthetical notes.
+  NEVER guess Beroe-side names that aren't named in the doc — leave null.
 - brief.call_type: first_discovery for any discovery / intro / initial
   meeting; qbr for "QBR" or "quarterly business review"; renewal for
   "renewal" discussions; expansion for "expand" / "add-on"; other for
@@ -820,41 +836,78 @@ _BEROE_ROLE_LINE_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _RECORDED_BY_RE = re.compile(
-    r"\bRecorded\s+by\s*[:\-]\s*([A-Z][\w.''-]+(?:\s+[A-Z][\w.''-]+){0,3})",
+    r"\b(?:Recorded\s+by|Meeting\s+notes\s+by|Notes\s+by|Minuted\s+by|"
+    r"Author(?:ed)?\s+by|Compiled\s+by|Submitted\s+by)"
+    r"\s*[:\-]\s*"
+    r"([A-Z][\w.''-]+(?:\s+[A-Z][\w.''-]+){0,3})",
     re.IGNORECASE,
 )
+
+
+def _classify_beroe_role(role: str) -> str | None:
+    """Map a role label found next to a Beroe attendee line to one of
+    {sdr, discovery, sales} so it lands on the right engagement field.
+
+    The role landscape at Beroe is broader than just SDR/Sales — CSMs run
+    discovery, Commercial Owners run the deal, Solutioning leads scope it,
+    etc. We collapse them into the three engagement slots the UI surfaces."""
+    r = role.lower().strip()
+    if not r:
+        return None
+    # SDR-ish — they sourced the lead.
+    if any(t in r for t in ("sdr", "bdr", "lead gen", "lead source")):
+        return "sdr"
+    # CSMs and presales discovery leads — they typically also chair the
+    # discovery call, so they map to BOTH discovery_lead and sdr_lead.
+    if any(t in r for t in (
+        "csm", "customer success", "discovery", "presales",
+        "pre-sales", "solutioning", "solutions",
+    )):
+        return "discovery"
+    # Sales-side — Commercial Owner / Account Exec / AE / CE / Sales.
+    if any(t in r for t in (
+        "sales", "account exec", "commercial owner",
+        "commercial lead", "account manager",
+    )) or r in {"ae", "ce", "co"}:
+        return "sales"
+    return None
 
 
 def _extract_engagement_leads(text: str) -> dict:
     """Find Beroe-side leads + the discovery date from any MoM format.
 
-    Pattern matches lines like:
-        - Nivedha, SDR, Beroe
-        - Alekh Chatterji, Sales, Beroe
-        - Aditya Pherwani · Account Executive · Beroe
-    plus "Recorded by: <name>" lines. Returns a dict keyed by the four
-    engagement fields — missing entries simply absent."""
+    Matches every flavour of attendee/contributor line we've seen — both
+    inline ("- Anurag Bhagat, CSM, Beroe") and recorded-by lines
+    ("MEETING NOTES BY: Anurag Bhagat, CSM, Beroe"). Role classification
+    is in _classify_beroe_role above so the keyword list is one place."""
     out: dict = {}
     out["pre_discovery_date"] = _parse_discovery_date(text)
 
     seen_by_role: dict[str, str] = {}
     for m in _BEROE_ROLE_LINE_RE.finditer(text):
         name = m.group(1).strip()
-        role = m.group("role").strip().lower()
-        if "sdr" in role or "bdr" in role:
-            seen_by_role.setdefault("sdr", name)
-        elif "sales" in role or "account exec" in role or role in {"ae", "ce"}:
-            seen_by_role.setdefault("sales", name)
-        elif "discovery" in role or "presales" in role or "solutions" in role:
-            seen_by_role.setdefault("discovery", name)
+        slot = _classify_beroe_role(m.group("role"))
+        if slot:
+            seen_by_role.setdefault(slot, name)
 
-    recorded = _RECORDED_BY_RE.search(text)
-    if recorded:
-        seen_by_role.setdefault("sdr", recorded.group(1).strip())
-        # Recorded-by is usually also the discovery lead
-        seen_by_role.setdefault("discovery", recorded.group(1).strip())
+    rec = _RECORDED_BY_RE.search(text)
+    if rec:
+        rec_name = rec.group(1).strip()
+        # The "Recorded by:" line often carries a role suffix — pull that
+        # too if present so "Recorded by: Anurag, CSM, Beroe" classifies
+        # correctly instead of defaulting to SDR.
+        tail = text[rec.end() : rec.end() + 80]
+        tail_role_m = re.match(r"\s*,\s*([\w/ ]+?)\s*(?:,|\n|$)", tail)
+        slot = (
+            _classify_beroe_role(tail_role_m.group(1))
+            if tail_role_m else None
+        ) or "discovery"
+        seen_by_role.setdefault(slot, rec_name)
+        # The recorded-by person almost always also sourced the call.
+        seen_by_role.setdefault("sdr", rec_name)
 
-    # Mirror SDR ↔ discovery when only one is present (SDR usually runs discovery)
+    # Mirror SDR ↔ discovery when only one is present (the SDR usually
+    # runs discovery, and a CSM-led discovery doc usually has no SDR row).
     if "sdr" in seen_by_role and "discovery" not in seen_by_role:
         seen_by_role["discovery"] = seen_by_role["sdr"]
     if "discovery" in seen_by_role and "sdr" not in seen_by_role:
