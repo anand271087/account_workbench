@@ -285,42 +285,58 @@ export function SplitBar({
   if (total === 0) {
     return <div className="text-[11px] text-text-muted py-3 text-center">No data</div>;
   }
+  // Sort large-first so labels-on-segment fit visually
+  const ordered = [...slices]
+    .map((s, i) => ({ ...s, _i: i }))
+    .sort((a, b) => b.value - a.value);
   return (
     <div>
-      <div className="flex h-3 w-full rounded-full overflow-hidden bg-beroe-bg">
-        {slices.map((sl, i) => {
+      {/* Tall enough (24px) to host an inline label on wide segments */}
+      <div className="flex h-7 w-full rounded-md overflow-hidden bg-beroe-bg">
+        {ordered.map((sl) => {
           if (sl.value === 0) return null;
           const pct = (sl.value / total) * 100;
-          const color = sl.color ?? SERIES_COLORS[i % SERIES_COLORS.length];
+          const color = sl.color ?? SERIES_COLORS[sl._i % SERIES_COLORS.length];
+          // Only show inline label if segment ≥ 12% — anything less is unreadable
+          const inline = pct >= 12;
           return (
             <div
               key={sl.label}
-              title={`${sl.label}: ${sl.value} (${pct.toFixed(1)}%)`}
-              className="h-full transition-all"
+              title={`${sl.label}: ${fmtNumCompact(sl.value)} (${pct.toFixed(1)}%)`}
+              className="h-full flex items-center justify-center text-white text-[11px] font-semibold tracking-tight transition-all"
               style={{ width: `${pct}%`, background: color }}
-            />
+            >
+              {inline && (
+                <span className="px-1 truncate" style={{ maxWidth: "100%" }}>
+                  {sl.label} {pct.toFixed(0)}%
+                </span>
+              )}
+            </div>
           );
         })}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
-        {slices.map((sl, i) => {
-          const pct = (sl.value / total) * 100;
-          const color = sl.color ?? SERIES_COLORS[i % SERIES_COLORS.length];
-          return (
-            <span key={sl.label} className="flex items-center gap-1.5">
-              <span
-                className="w-2 h-2 rounded-sm flex-shrink-0"
-                style={{ background: color }}
-              />
-              <span className="font-medium" title={sl.label}>
-                {sl.label}
+      {/* Compact legend ONLY for tiny segments that couldn't host an inline label */}
+      {ordered.some((sl) => (sl.value / total) * 100 < 12 && sl.value > 0) && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
+          {ordered.map((sl) => {
+            const pct = (sl.value / total) * 100;
+            if (pct >= 12 || sl.value === 0) return null;
+            const color = sl.color ?? SERIES_COLORS[sl._i % SERIES_COLORS.length];
+            return (
+              <span key={sl.label} className="inline-flex items-center gap-1.5">
+                <span
+                  className="w-2 h-2 rounded-sm flex-shrink-0"
+                  style={{ background: color }}
+                />
+                <span className="text-text-secondary truncate max-w-[120px]" title={sl.label}>
+                  {sl.label}
+                </span>
+                <span className="font-semibold tabular-nums">{pct.toFixed(0)}%</span>
               </span>
-              <span className="font-semibold tabular-nums">{fmtNumCompact(sl.value)}</span>
-              <span className="text-text-muted tabular-nums">({pct.toFixed(0)}%)</span>
-            </span>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -343,8 +359,8 @@ export function DonutChart({
   centerLabel?: string;
 }) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
-  const size = 160;
-  const r = 60;
+  const size = 140;
+  const r = 56;
   const cx = size / 2;
   const cy = size / 2;
   let acc = 0;
@@ -354,7 +370,7 @@ export function DonutChart({
     );
   }
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-col items-center">
       <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
         {slices.map((sl, i) => {
           if (sl.value === 0) return null;
@@ -375,36 +391,37 @@ export function DonutChart({
             />
           );
         })}
-        <circle cx={cx} cy={cy} r={36} fill="#fff" />
+        <circle cx={cx} cy={cy} r={34} fill="#fff" />
         <text
           x={cx}
           y={cy + 4}
-          fontSize={14}
+          fontSize={13}
           textAnchor="middle"
           fontWeight="bold"
           fill={PALETTE.midnight}
         >
-          {centerLabel ?? total}
+          {centerLabel ?? fmtNumCompact(total)}
         </text>
       </svg>
-      <div className="space-y-1 text-[11px] flex-1">
+      {/* Compact pill legend below the donut, wraps naturally. Drops the
+          raw count (kept implicit via the centre total) — keeps just
+          `■ Label  pct%` per slice for a much cleaner read. */}
+      <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-1 mt-2 text-[11px] w-full">
         {slices.map((sl, i) => {
           if (sl.value === 0) return null;
           const color = sl.color ?? SERIES_COLORS[i % SERIES_COLORS.length];
+          const pct = Math.round((sl.value / total) * 100);
           return (
-            <div key={sl.label} className="flex items-center gap-1.5">
+            <span key={sl.label} className="inline-flex items-center gap-1">
               <span
-                className="w-2 h-2 rounded-sm flex-none"
+                className="w-2 h-2 rounded-sm flex-shrink-0"
                 style={{ background: color }}
               />
-              <span className="truncate" title={sl.label}>
+              <span className="text-text-secondary truncate max-w-[140px]" title={sl.label}>
                 {sl.label}
               </span>
-              <span className="font-semibold ml-1 tabular-nums">{sl.value}</span>
-              <span className="text-text-muted tabular-nums">
-                ({Math.round((sl.value / total) * 100)}%)
-              </span>
-            </div>
+              <span className="font-semibold tabular-nums">{pct}%</span>
+            </span>
           );
         })}
       </div>
