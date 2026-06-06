@@ -367,6 +367,38 @@ export function MultiLineChart({
 }
 
 // ============================================================
+// ParamRow — one spec parameter (label + value/NA pill + optional def)
+// ============================================================
+
+export function ParamRow({
+  label,
+  definition,
+  value,
+}: {
+  label: string;
+  definition?: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3 py-1.5 border-b border-beroe-card-border/40 last:border-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-[11px] font-semibold text-text-secondary truncate">
+          {label}
+        </div>
+        {definition && (
+          <div className="text-[10px] text-text-muted truncate" title={definition}>
+            {definition}
+          </div>
+        )}
+      </div>
+      <div className="flex-shrink-0 text-[11px] font-semibold tabular-nums">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // SimpleTable — header row + data rows
 // ============================================================
 

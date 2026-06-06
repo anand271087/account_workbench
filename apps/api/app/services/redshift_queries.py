@@ -451,6 +451,9 @@ def abi_bundle(acct: str, window: str = "90d") -> dict:
 
     return _cache_put_and_return(key, {
         "window": window,
+        # Spec: AI-generated narrative — not a Redshift KPI. Wired via
+        # /ai/* endpoints when the Anthropic-powered insight ships.
+        "engagement_insight": _na("AI-generated narrative; future Anthropic endpoint"),
         "total_queries": int(total_q or 0),
         "unique_users": int(unique_users or 0),
         "by_complexity": by_complexity,
@@ -996,6 +999,11 @@ def super_users_bundle(acct: str, top_n: int = 20) -> dict:
     )}
     for u in users:
         u["last_login"] = _date_iso(last_logins.get(u["email"]))
+
+    # Total time per user (spec param 12) — sum of MMD + SM minutes from
+    # the same activity_per_user row.
+    for u in users:
+        u["total_platform_mins"] = round(u["mmd_time_mins"] + u["sm_time_mins"], 1)
 
     return _cache_put_and_return(key, {
         "users": users,

@@ -12,6 +12,8 @@ import { periodToWindow } from "@/types/intel";
 import { type AccountPeriod } from "@/routes/accounts/AccountProfileLayout";
 
 // Section keys = endpoint paths on /api/v1/accounts/:id/intel/:key
+// Aligned 1:1 with the 16 spec sheets (Auto-computed Scores lives on
+// /appetite-score, not here).
 export type IntelSection =
   | "account-subscribers"
   | "category-watch"
@@ -20,8 +22,14 @@ export type IntelSection =
   | "supplier-monitoring"
   | "custom-usage"
   | "thought-leadership"
+  | "datahub"
   | "inflation-watch"
+  | "cirtuo"
+  | "nnamu"
+  | "upply"
   | "alerts"
+  | "training"
+  | "nps"
   | "super-users";
 
 export function useIntelBundle<T = unknown>(

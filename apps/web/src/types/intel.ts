@@ -60,6 +60,7 @@ export interface CategoryWatch {
 
 export interface Abi {
   window: string;
+  engagement_insight: Maybe<string>;
   total_queries: number;
   unique_users: number;
   by_complexity: LabelCount[];
@@ -186,6 +187,7 @@ export interface SuperUser {
   abi_queries: number;
   mmd_time_mins: number;
   sm_time_mins: number;
+  total_platform_mins: number;
   activity_score: number;
   last_login: string | null;
 }
