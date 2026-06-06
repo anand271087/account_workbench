@@ -14,15 +14,18 @@
 
 services:
   # -------------------- FastAPI web service --------------------
+  # 05-Jun · Switched to docker runtime so the Dockerfile picks up the
+  # AWS CLI v2 + session-manager-plugin layers needed by the Redshift
+  # SSM tunnel. Render's native python runtime ignored the Dockerfile,
+  # producing 'aws CLI not found in PATH' at startup.
   - type: web
     name: beroe-awb-api
-    runtime: python
+    runtime: docker
     plan: free
     branch: main
     rootDir: apps/api
+    dockerfilePath: ./Dockerfile
     autoDeploy: true
-    buildCommand: pip install uv && uv sync --frozen
-    startCommand: .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION

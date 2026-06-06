@@ -45,9 +45,10 @@ RUN ARCH="$(uname -m)" \
 # Install uv (fast, reproducible Python pkg manager)
 COPY --from=ghcr.io/astral-sh/uv:0.5.0 /uv /usr/local/bin/uv
 
-# Dependency layer (cached unless pyproject changes)
-COPY pyproject.toml ./
-RUN uv pip install --system -e .
+# Dependency layer (cached unless pyproject/lock changes).
+# Use uv sync --frozen for a reproducible env matching local dev.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # Application code
 COPY app ./app
@@ -58,5 +59,7 @@ USER awb
 
 EXPOSE 8000
 
-# Default: run the API. docker-compose overrides for the worker.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default: run the API. ${PORT} is injected by Render; falls back to 8000
+# for docker-compose / local docker. docker-compose overrides CMD for the
+# worker container.
+CMD ["sh", "-c", ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
