@@ -39,6 +39,11 @@ import {
   SimpleTable,
 } from "./charts";
 
+// AnalyticsTab passes mode="numbers" to render a compact parameter
+// list only (no KPI tiles, no charts). IntelligenceTab leaves it
+// undefined → full rich dashboard.
+export type SheetMode = "numbers" | "charts";
+
 // ---------------- helpers ----------------
 
 function fmtNum(n: number): string {
@@ -86,10 +91,25 @@ function barRows(items: LabelCount[]): Array<{ label: string; value: number; col
 // 1 — Account & Subscribers (9 spec params)
 // ============================================================
 
-export function SubscribersSheet({ data: a }: { data: AccountSubscribers }) {
+export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; mode?: SheetMode }) {
   const active_pct = a.total_subscribers
     ? Math.round((a.active_subscribers / a.total_subscribers) * 100)
     : 0;
+  const paramList = (
+    <Card>
+      <CardTitle>All 9 parameters from spec sheet</CardTitle>
+      <ParamRow label="Total subscribers" definition="Licensed subscribers on the account" value={val(a.total_subscribers)} />
+      <ParamRow label="Active subscribers" definition="Users with at least 1 login in the period" value={val(a.active_subscribers)} />
+      <ParamRow label="Subscription start date" value={val(fmtDate(a.subscription_start))} />
+      <ParamRow label="Subscription end date" value={val(fmtDate(a.subscription_end))} />
+      <ParamRow label="Company's last login" value={val(fmtDate(a.company_last_login))} />
+      <ParamRow label="Total logins" definition="Logins within current term" value={val(a.total_logins)} />
+      <ParamRow label="Total time spent (mins)" value={val(Math.round(a.total_time_spent_mins))} />
+      <ParamRow label="# categories unlocked (account)" value={val(a.categories_unlocked)} />
+      <ParamRow label="# suppliers added (account)" value={maybeVal(a.suppliers_added as Maybe<number>)} />
+    </Card>
+  );
+  if (mode === "numbers") return paramList;
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -107,18 +127,7 @@ export function SubscribersSheet({ data: a }: { data: AccountSubscribers }) {
           accent={PALETTE.bumblebee}
         />
       </div>
-      <Card>
-        <CardTitle>All 9 parameters from spec sheet</CardTitle>
-        <ParamRow label="Total subscribers" definition="Licensed subscribers on the account" value={val(a.total_subscribers)} />
-        <ParamRow label="Active subscribers" definition="Users with at least 1 login in the period" value={val(a.active_subscribers)} />
-        <ParamRow label="Subscription start date" value={val(fmtDate(a.subscription_start))} />
-        <ParamRow label="Subscription end date" value={val(fmtDate(a.subscription_end))} />
-        <ParamRow label="Company's last login" value={val(fmtDate(a.company_last_login))} />
-        <ParamRow label="Total logins" definition="Logins within current term" value={val(a.total_logins)} />
-        <ParamRow label="Total time spent (mins)" value={val(Math.round(a.total_time_spent_mins))} />
-        <ParamRow label="# categories unlocked (account)" value={val(a.categories_unlocked)} />
-        <ParamRow label="# suppliers added (account)" value={maybeVal(a.suppliers_added as Maybe<number>)} />
-      </Card>
+      {paramList}
     </div>
   );
 }
@@ -127,35 +136,14 @@ export function SubscribersSheet({ data: a }: { data: AccountSubscribers }) {
 // 2 — Category Watch (29 spec params: 16 CI + 8 MMD + 5 BM)
 // ============================================================
 
-export function CategoryWatchSheet({ data: cw }: { data: CategoryWatch }) {
+export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mode?: SheetMode }) {
   const ci = cw.category_intelligence;
   const mmd = cw.mmd;
   const bm = cw.benchmarks;
 
-  // MMD is the only fully-live subsection — KPIs + charts first.
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-        <KpiTile label="MMD Subscribers" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
-        <KpiTile
-          label="Total Time (m)"
-          value={fmtNum(Math.round(mmd.total_time_mins))}
-          accent={PALETTE.aqua}
-        />
-        <KpiTile
-          label="Avg Time / User"
-          value={mmd.avg_time_per_user_mins.toFixed(1)}
-          accent={PALETTE.fuscia}
-        />
-        <KpiTile
-          label="Unique Categories"
-          value={fmtNum(mmd.unique_categories_viewed)}
-          accent={PALETTE.bumblebee}
-        />
-        <KpiTile label="Avg Cats / User" value={mmd.avg_categories_per_user.toFixed(1)} />
-      </div>
-
-      <Card>
+  // Three Cards summarising all 29 parameters — these are shown in both modes.
+  const ciCard = (
+    <Card>
         <CardTitle>Category Intelligence (16 params)</CardTitle>
         <div className="text-[10px] text-text-muted mb-2">
           Most pending DBA grants on stg_user_cat_sup_report +
@@ -178,7 +166,9 @@ export function CategoryWatchSheet({ data: cw }: { data: CategoryWatch }) {
         <ParamRow label="Reports downloaded monthly trend" value={maybeVal(ci.reports_downloaded_monthly_trend as Maybe<number>)} />
         <ParamRow label="Added categories detail" value={maybeVal(ci.added_categories_detail as Maybe<number>)} />
       </Card>
+  );
 
+  const mmdCard = (
       <Card>
         <CardTitle>Market Movement Dashboard (8 params) — LIVE</CardTitle>
         <ParamRow label="Subscribers (MMD)" value={val(mmd.subscribers)} />
@@ -190,7 +180,46 @@ export function CategoryWatchSheet({ data: cw }: { data: CategoryWatch }) {
         <ParamRow label="Regions viewed in MMD" value={val(mmd.regions_viewed.length || 0)} />
         <ParamRow label="MMD module visits (monthly)" value={val(mmd.monthly_trend.length || 0)} />
       </Card>
+  );
 
+  const bmCard = (
+      <Card>
+        <CardTitle>Category Benchmarks (5 params)</CardTitle>
+        <ParamRow label="Total benchmark responses" value={maybeVal(bm.total_benchmark_responses as Maybe<number>)} />
+        <ParamRow label="Total subscribers responded" value={maybeVal(bm.total_subscribers_responded as Maybe<number>)} />
+        <ParamRow label="Benchmark question categories" value={maybeVal(bm.benchmark_question_categories as Maybe<number>)} />
+        <ParamRow label="Total time spent in benchmark (mins)" value={val(bm.benchmark_time_mins as number)} />
+        <ParamRow label="RFx template downloads" value={maybeVal(bm.rfx_template_downloads as Maybe<number>)} />
+      </Card>
+  );
+
+  if (mode === "numbers") {
+    return <div className="space-y-3">{ciCard}{mmdCard}{bmCard}</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <KpiTile label="MMD Subscribers" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
+        <KpiTile
+          label="Total Time (m)"
+          value={fmtNum(Math.round(mmd.total_time_mins))}
+          accent={PALETTE.aqua}
+        />
+        <KpiTile
+          label="Avg Time / User"
+          value={mmd.avg_time_per_user_mins.toFixed(1)}
+          accent={PALETTE.fuscia}
+        />
+        <KpiTile
+          label="Unique Categories"
+          value={fmtNum(mmd.unique_categories_viewed)}
+          accent={PALETTE.bumblebee}
+        />
+        <KpiTile label="Avg Cats / User" value={mmd.avg_categories_per_user.toFixed(1)} />
+      </div>
+      {ciCard}
+      {mmdCard}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
           <CardTitle>Grades viewed (top 10)</CardTitle>
@@ -201,7 +230,6 @@ export function CategoryWatchSheet({ data: cw }: { data: CategoryWatch }) {
           <BarChart rows={barRows(mmd.regions_viewed)} />
         </Card>
       </div>
-
       <Card>
         <CardTitle>MMD activity — monthly</CardTitle>
         {mmd.monthly_trend.length === 0 ? (
@@ -214,15 +242,7 @@ export function CategoryWatchSheet({ data: cw }: { data: CategoryWatch }) {
           />
         )}
       </Card>
-
-      <Card>
-        <CardTitle>Category Benchmarks (5 params)</CardTitle>
-        <ParamRow label="Total benchmark responses" value={maybeVal(bm.total_benchmark_responses as Maybe<number>)} />
-        <ParamRow label="Total subscribers responded" value={maybeVal(bm.total_subscribers_responded as Maybe<number>)} />
-        <ParamRow label="Benchmark question categories" value={maybeVal(bm.benchmark_question_categories as Maybe<number>)} />
-        <ParamRow label="Total time spent in benchmark (mins)" value={val(bm.benchmark_time_mins as number)} />
-        <ParamRow label="RFx template downloads" value={maybeVal(bm.rfx_template_downloads as Maybe<number>)} />
-      </Card>
+      {bmCard}
     </div>
   );
 }
@@ -231,15 +251,8 @@ export function CategoryWatchSheet({ data: cw }: { data: CategoryWatch }) {
 // 3 — Abi (16 spec params)
 // ============================================================
 
-export function AbiSheet({ data: a }: { data: Abi }) {
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Total Queries" value={fmtNum(a.total_queries)} accent={PALETTE.indigo} />
-        <KpiTile label="Unique Users" value={fmtNum(a.unique_users)} accent={PALETTE.aqua} />
-        <KpiTile label="Bot Resolution" value={`${a.bot_resolution_pct}%`} accent={PALETTE.fuscia} />
-        <KpiTile label="Repeat Users" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
-      </div>
+export function AbiSheet({ data: a, mode }: { data: Abi; mode?: SheetMode }) {
+  const paramList = (
       <Card>
         <CardTitle>All 16 parameters from spec sheet</CardTitle>
         <ParamRow label="Abi engagement insight (narrative)" value={maybeVal(a.engagement_insight as Maybe<string>)} />
@@ -266,6 +279,19 @@ export function AbiSheet({ data: a }: { data: Abi }) {
         <ParamRow label="Query channel" value={val(a.by_source.length)} />
         <ParamRow label="Top geographies queried" value={val(a.top_geographies.length)} />
       </Card>
+  );
+
+  if (mode === "numbers") return paramList;
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total Queries" value={fmtNum(a.total_queries)} accent={PALETTE.indigo} />
+        <KpiTile label="Unique Users" value={fmtNum(a.unique_users)} accent={PALETTE.aqua} />
+        <KpiTile label="Bot Resolution" value={`${a.bot_resolution_pct}%`} accent={PALETTE.fuscia} />
+        <KpiTile label="Repeat Users" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
+      </div>
+      {paramList}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
           <CardTitle>Queries by complexity</CardTitle>
@@ -320,19 +346,8 @@ export function AbiSheet({ data: a }: { data: Abi }) {
 // 4 — Supplier Discovery (11 spec params)
 // ============================================================
 
-export function SDSheet({ data: s }: { data: SupplierDiscovery }) {
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
-        <KpiTile label="Total Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
-        <KpiTile label="Total Visits" value={fmtNum(s.total_visits)} accent={PALETTE.fuscia} />
-        <KpiTile
-          label="Total Time (m)"
-          value={fmtNum(Math.round(s.total_time_mins))}
-          accent={PALETTE.bumblebee}
-        />
-      </div>
+export function SDSheet({ data: s, mode }: { data: SupplierDiscovery; mode?: SheetMode }) {
+  const paramList = (
       <Card>
         <CardTitle>All 11 parameters from spec sheet</CardTitle>
         <ParamRow label="# Users (subscribers who navigated to SD)" value={val(s.users)} />
@@ -347,6 +362,21 @@ export function SDSheet({ data: s }: { data: SupplierDiscovery }) {
         <ParamRow label="SD total time spent (mins)" value={val(Math.round(s.total_time_mins))} />
         <ParamRow label="SD downloads" value={maybeVal(s.sd_downloads as Maybe<number>)} />
       </Card>
+  );
+  if (mode === "numbers") return paramList;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
+        <KpiTile label="Total Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
+        <KpiTile label="Total Visits" value={fmtNum(s.total_visits)} accent={PALETTE.fuscia} />
+        <KpiTile
+          label="Total Time (m)"
+          value={fmtNum(Math.round(s.total_time_mins))}
+          accent={PALETTE.bumblebee}
+        />
+      </div>
+      {paramList}
       <Card>
         <CardTitle>Top categories searched</CardTitle>
         <BarChart rows={barRows(s.top_categories_searched)} />
@@ -359,7 +389,8 @@ export function SDSheet({ data: s }: { data: SupplierDiscovery }) {
 // 5 — Supplier Monitoring Risk (10 spec params)
 // ============================================================
 
-export function SMSheet({ data: s }: { data: SupplierMonitoring }) {
+export function SMSheet({ data: s, mode }: { data: SupplierMonitoring; mode?: SheetMode }) {
+  void mode; // identical numbers/charts (entire sheet is a param list today)
   return (
     <div className="space-y-3">
       <Card>
@@ -387,21 +418,14 @@ export function SMSheet({ data: s }: { data: SupplierMonitoring }) {
 // 6 — Custom Usage (14 spec params)
 // ============================================================
 
-export function CustomUsageSheet({ data: c }: { data: CustomUsage }) {
+export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: SheetMode }) {
   const cbc = c.credits_by_complexity;
-  return (
-    <div className="space-y-3">
-      {c.credits_by_complexity_note && (
-        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-          ⚠ {c.credits_by_complexity_note}
-        </div>
-      )}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Total (proxy)" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
-        <KpiTile label="L1" value={fmtNum(cbc.L1)} accent={PALETTE.aqua} />
-        <KpiTile label="L2" value={fmtNum(cbc.L2)} accent={PALETTE.fuscia} />
-        <KpiTile label="L3+L4" value={fmtNum(cbc.L3 + cbc.L4)} accent={PALETTE.bumblebee} />
-      </div>
+  const note = c.credits_by_complexity_note ? (
+    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+      ⚠ {c.credits_by_complexity_note}
+    </div>
+  ) : null;
+  const paramList = (
       <Card>
         <CardTitle>All 14 parameters from spec sheet</CardTitle>
         <ParamRow label="Credits used — L1" value={val(cbc.L1)} />
@@ -423,6 +447,20 @@ export function CustomUsageSheet({ data: c }: { data: CustomUsage }) {
         <ParamRow label="Top spendpools" value={val(c.top_spendpools.length)} />
         <ParamRow label="Top deliverables" value={val(c.top_deliverables.length)} />
       </Card>
+  );
+  if (mode === "numbers") {
+    return <div className="space-y-3">{note}{paramList}</div>;
+  }
+  return (
+    <div className="space-y-3">
+      {note}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total (proxy)" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
+        <KpiTile label="L1" value={fmtNum(cbc.L1)} accent={PALETTE.aqua} />
+        <KpiTile label="L2" value={fmtNum(cbc.L2)} accent={PALETTE.fuscia} />
+        <KpiTile label="L3+L4" value={fmtNum(cbc.L3 + cbc.L4)} accent={PALETTE.bumblebee} />
+      </div>
+      {paramList}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
           <CardTitle>AI SWAT vs Basics</CardTitle>
@@ -441,7 +479,17 @@ export function CustomUsageSheet({ data: c }: { data: CustomUsage }) {
 // 7 — Thought Leadership (4 spec params)
 // ============================================================
 
-export function TLSheet({ data: t }: { data: ThoughtLeadership }) {
+export function TLSheet({ data: t, mode }: { data: ThoughtLeadership; mode?: SheetMode }) {
+  const paramList = (
+    <Card>
+      <CardTitle>All 4 parameters from spec sheet</CardTitle>
+      <ParamRow label="# Webinar views in TL page" value={val(t.webinar_views)} />
+      <ParamRow label="# TL articles opened" value={val(t.articles_opened)} />
+      <ParamRow label="# Beigebook views" value={val(t.beigebook_views)} />
+      <ParamRow label="# Beigebook downloads" value={val(t.beigebook_downloads)} />
+    </Card>
+  );
+  if (mode === "numbers") return paramList;
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -450,13 +498,7 @@ export function TLSheet({ data: t }: { data: ThoughtLeadership }) {
         <KpiTile label="Beigebook Views" value={fmtNum(t.beigebook_views)} accent={PALETTE.fuscia} />
         <KpiTile label="Beigebook Downloads" value={fmtNum(t.beigebook_downloads)} accent={PALETTE.bumblebee} />
       </div>
-      <Card>
-        <CardTitle>All 4 parameters from spec sheet</CardTitle>
-        <ParamRow label="# Webinar views in TL page" value={val(t.webinar_views)} />
-        <ParamRow label="# TL articles opened" value={val(t.articles_opened)} />
-        <ParamRow label="# Beigebook views" value={val(t.beigebook_views)} />
-        <ParamRow label="# Beigebook downloads" value={val(t.beigebook_downloads)} />
-      </Card>
+      {paramList}
       <Card>
         <CardTitle>By type</CardTitle>
         <BarChart rows={barRows(t.by_type)} />
@@ -469,7 +511,8 @@ export function TLSheet({ data: t }: { data: ThoughtLeadership }) {
 // 8 — DataHub (1 spec param)
 // ============================================================
 
-export function DataHubSheet({ data: d }: { data: DataHubBundle }) {
+export function DataHubSheet({ data: d, mode }: { data: DataHubBundle; mode?: SheetMode }) {
+  void mode; // single-param sheet — same layout either way
   return (
     <Card>
       <CardTitle>1 parameter from spec sheet</CardTitle>
@@ -482,7 +525,25 @@ export function DataHubSheet({ data: d }: { data: DataHubBundle }) {
 // 9 — Inflation Watch GIT (8 spec params + scenario modelling)
 // ============================================================
 
-export function IWSheet({ data: iw }: { data: InflationWatch }) {
+export function IWSheet({ data: iw, mode }: { data: InflationWatch; mode?: SheetMode }) {
+  const paramList = (
+      <Card>
+        <CardTitle>All 8 parameters from spec sheet</CardTitle>
+        <ParamRow label="IW unique visitors" value={val(iw.unique_visitors)} />
+        <ParamRow label="IW total visits (sessions)" value={val(iw.total_sessions)} />
+        <ParamRow label="IW total time spent (mins)" value={val(Math.round(iw.total_time_mins))} />
+        <ParamRow label="Avg sessions / visitor" value={val(iw.avg_sessions_per_visitor)} />
+        <ParamRow label="Avg session time (mins)" value={val(iw.avg_session_time_mins)} />
+        <ParamRow label="Avg time spent / visitor (mins)" value={val(iw.avg_time_per_visitor_mins)} />
+        <ParamRow label="Top pages (visitors & views)" value={maybeVal(iw.top_pages as Maybe<number>)} />
+        <ParamRow label="Top features (visitors & views)" value={val(iw.top_features.length)} />
+        <ParamRow
+          label="Scenario modelling completion"
+          value={val(`${iw.scenario_modelling.ran} ran · ${iw.scenario_modelling.saved} saved`)}
+        />
+      </Card>
+  );
+  if (mode === "numbers") return paramList;
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -499,21 +560,7 @@ export function IWSheet({ data: iw }: { data: InflationWatch }) {
           accent={PALETTE.bumblebee}
         />
       </div>
-      <Card>
-        <CardTitle>All 8 parameters from spec sheet</CardTitle>
-        <ParamRow label="IW unique visitors" value={val(iw.unique_visitors)} />
-        <ParamRow label="IW total visits (sessions)" value={val(iw.total_sessions)} />
-        <ParamRow label="IW total time spent (mins)" value={val(Math.round(iw.total_time_mins))} />
-        <ParamRow label="Avg sessions / visitor" value={val(iw.avg_sessions_per_visitor)} />
-        <ParamRow label="Avg session time (mins)" value={val(iw.avg_session_time_mins)} />
-        <ParamRow label="Avg time spent / visitor (mins)" value={val(iw.avg_time_per_visitor_mins)} />
-        <ParamRow label="Top pages (visitors & views)" value={maybeVal(iw.top_pages as Maybe<number>)} />
-        <ParamRow label="Top features (visitors & views)" value={val(iw.top_features.length)} />
-        <ParamRow
-          label="Scenario modelling completion"
-          value={val(`${iw.scenario_modelling.ran} ran · ${iw.scenario_modelling.saved} saved`)}
-        />
-      </Card>
+      {paramList}
       <Card>
         <CardTitle>Top features (visitors / views)</CardTitle>
         <SimpleTable
@@ -560,7 +607,8 @@ function OfflineParamList({
   );
 }
 
-export function CirtuoSheet({ data: d }: { data: OfflineBundle }) {
+export function CirtuoSheet({ data: d, mode }: { data: OfflineBundle; mode?: SheetMode }) {
+  void mode;
   return (
     <OfflineParamList
       title="Cirtuo — 3 parameters from spec sheet"
@@ -574,7 +622,8 @@ export function CirtuoSheet({ data: d }: { data: OfflineBundle }) {
   );
 }
 
-export function NnamuSheet({ data: d }: { data: OfflineBundle }) {
+export function NnamuSheet({ data: d, mode }: { data: OfflineBundle; mode?: SheetMode }) {
+  void mode;
   return (
     <OfflineParamList
       title="nnamu — 6 parameters from spec sheet"
@@ -591,7 +640,8 @@ export function NnamuSheet({ data: d }: { data: OfflineBundle }) {
   );
 }
 
-export function UpplySheet({ data: d }: { data: OfflineBundle }) {
+export function UpplySheet({ data: d, mode }: { data: OfflineBundle; mode?: SheetMode }) {
+  void mode;
   return (
     <OfflineParamList
       title="Upply — 6 parameters from spec sheet"
@@ -612,16 +662,13 @@ export function UpplySheet({ data: d }: { data: OfflineBundle }) {
 // 13 — Alerts (4 spec params)
 // ============================================================
 
-export function AlertsSheet({ data: al }: { data: AlertsBundle }) {
-  return (
-    <div className="space-y-3">
-      <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
-        ⚠ {al._scope_note}
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
-        <KpiTile label="Open Rate" value={`${al.open_rate_pct}%`} accent={PALETTE.indigo} />
-        <KpiTile label="# Alert Types" value={fmtNum(al.types_sent.length)} accent={PALETTE.aqua} />
-      </div>
+export function AlertsSheet({ data: al, mode }: { data: AlertsBundle; mode?: SheetMode }) {
+  const scopeNote = (
+    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+      ⚠ {al._scope_note}
+    </div>
+  );
+  const paramList = (
       <Card>
         <CardTitle>All 4 parameters from spec sheet</CardTitle>
         <ParamRow label="Type of alert sent (distinct categories)" value={val(al.types_sent.length)} />
@@ -629,6 +676,18 @@ export function AlertsSheet({ data: al }: { data: AlertsBundle }) {
         <ParamRow label="Open rate by categories (rows)" value={val(al.open_rate_by_category.length)} />
         <ParamRow label="Open rate by type of reachout (rows)" value={val(al.open_rate_by_reachout.length)} />
       </Card>
+  );
+  if (mode === "numbers") {
+    return <div className="space-y-3">{scopeNote}{paramList}</div>;
+  }
+  return (
+    <div className="space-y-3">
+      {scopeNote}
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
+        <KpiTile label="Open Rate" value={`${al.open_rate_pct}%`} accent={PALETTE.indigo} />
+        <KpiTile label="# Alert Types" value={fmtNum(al.types_sent.length)} accent={PALETTE.aqua} />
+      </div>
+      {paramList}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
           <CardTitle>Type of alert sent</CardTitle>
@@ -653,7 +712,8 @@ export function AlertsSheet({ data: al }: { data: AlertsBundle }) {
 // 14-15 — Platform Training (2) · NPS (1)
 // ============================================================
 
-export function TrainingSheet({ data: d }: { data: OfflineBundle }) {
+export function TrainingSheet({ data: d, mode }: { data: OfflineBundle; mode?: SheetMode }) {
+  void mode;
   return (
     <OfflineParamList
       title="Platform Training — 2 parameters from spec sheet"
@@ -666,7 +726,8 @@ export function TrainingSheet({ data: d }: { data: OfflineBundle }) {
   );
 }
 
-export function NpsSheet({ data: d }: { data: OfflineBundle }) {
+export function NpsSheet({ data: d, mode }: { data: OfflineBundle; mode?: SheetMode }) {
+  void mode;
   return (
     <OfflineParamList
       title="NPS — 1 parameter from spec sheet"
@@ -680,9 +741,8 @@ export function NpsSheet({ data: d }: { data: OfflineBundle }) {
 // 16 — Super Users (12 spec params)
 // ============================================================
 
-export function SuperUsersSheet({ data: su }: { data: SuperUsersBundle }) {
-  return (
-    <div className="space-y-3">
+export function SuperUsersSheet({ data: su, mode }: { data: SuperUsersBundle; mode?: SheetMode }) {
+  const paramList = (
       <Card>
         <CardTitle>All 12 parameters from spec sheet</CardTitle>
         <ParamRow label="Super users (count + identity) — top N" value={val(su.users.length)} />
@@ -698,6 +758,11 @@ export function SuperUsersSheet({ data: su }: { data: SuperUsersBundle }) {
         <ParamRow label="MMD per user" value={val(su.users.length)} />
         <ParamRow label="Total time on platform per user" value={val(su.users.length)} />
       </Card>
+  );
+  if (mode === "numbers") return paramList;
+  return (
+    <div className="space-y-3">
+      {paramList}
       <Card>
         <CardTitle>Top {su.top_n} super-users — activity score</CardTitle>
         <SimpleTable
