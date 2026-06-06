@@ -16,7 +16,6 @@ import AccountPlanTab from "@/routes/accounts/tabs/gp/AccountPlanTab";
 import SignalsActivityTab from "@/routes/accounts/tabs/gp/SignalsActivityTab";
 import ExternalIntelTab from "@/routes/accounts/tabs/gp/ExternalIntelTab";
 import IntelReportsLayout from "@/routes/accounts/IntelReportsLayout";
-import IntelligenceTab from "@/routes/accounts/tabs/ir/IntelligenceTab";
 import AnalyticsTab from "@/routes/accounts/tabs/ir/AnalyticsTab";
 import DocumentsReportsTab from "@/routes/accounts/tabs/ir/DocumentsReportsTab";
 import CSOnboardingTab from "@/routes/accounts/tabs/CSOnboardingTab";
@@ -204,10 +203,13 @@ export default function App() {
           <Route path="ext-intel" element={<ExternalIntelTab />} />
         </Route>
 
-        {/* M29 — Intelligence & Reports group: Intelligence (live) + Analytics + Documents */}
+        {/* M29 — Intelligence & Reports group.
+            05-Jun · Intelligence sub-tab removed per stakeholder; Analytics
+            owns all 16-sheet coverage. /intelligence back-compat redirects
+            to /analytics (handled in IntelReportsLayout). */}
         <Route path="intel-reports" element={<IntelReportsLayout />}>
-          <Route index element={<Navigate to="intelligence" replace />} />
-          <Route path="intelligence" element={<IntelligenceTab />} />
+          <Route index element={<Navigate to="analytics" replace />} />
+          <Route path="intelligence" element={<Navigate to="../analytics" replace />} />
           <Route path="analytics" element={<AnalyticsTab />} />
           <Route path="documents" element={<DocumentsReportsTab />} />
         </Route>

@@ -1,9 +1,7 @@
-// M29 — Intelligence & Reports sub-layout.
+// M29/M30 — Intelligence & Reports sub-layout.
 //
-// Three top-section pill tabs in flow order:
-//   * Intelligence            (M29 — live, 6 sub-tabs)
-//   * Analytics               (M30 — stub)
-//   * Documents & Reports     (M31 — stub)
+// 05-Jun · Per stakeholder: Intelligence sub-tab removed. Only Analytics
+// + Documents & Reports remain. Analytics owns all 16-sheet coverage.
 //
 // Cyan theme matches the prototype (#35E1D4).
 
@@ -17,7 +15,6 @@ interface IRSub {
 }
 
 const IR_SUB_NAV: IRSub[] = [
-  { to: "intelligence", label: "Intelligence" },
   { to: "analytics", label: "Analytics" },
   { to: "documents", label: "Documents & Reports" },
 ];
@@ -34,8 +31,12 @@ export default function IntelReportsLayout() {
 
   const segs = loc.pathname.split("/").filter(Boolean);
   const last = segs[segs.length - 1];
+  // Default landing → Analytics. Also redirect the legacy /intelligence
+  // path so any existing bookmarks land somewhere sensible instead of 404.
   if (last === "intel-reports") {
-    nav("./intelligence", { replace: true });
+    nav("./analytics", { replace: true });
+  } else if (last === "intelligence") {
+    nav("../analytics", { replace: true });
   }
 
   return (
