@@ -43,7 +43,7 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from app.core.redshift import get_connection
+from app.core.redshift import ensure_tunnel, get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -140,43 +140,102 @@ def _pg_scalar(sql: str, params: tuple = (), default: Any = None) -> Any:
 # Query primitives — every query opens its own connection so a
 # permission-denied error on one query doesn't poison the next.
 # (Redshift 25P02 cascade if you reuse a poisoned txn.)
+#
+# Self-heal: if Connection refused (tunnel died), call ensure_tunnel()
+# and retry ONCE. Track recent failure timestamps so the route layer
+# can surface a "Redshift recovering" banner instead of silently 0-ing.
 # ============================================================
 
 
+# Module-level flag — set on retry-failed queries, read by the route
+# layer to embed a `_infra` block in the response. We use the wall
+# clock so the banner auto-clears after 30s of healthy queries.
+_LAST_TUNNEL_ERROR_AT: float | None = None
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    """Loose detection of tunnel-down errors across drivers."""
+    s = str(exc).lower()
+    return (
+        "connection refused" in s
+        or "communication error" in s
+        or "broken pipe" in s
+        or "connection reset" in s
+        or "connection lost" in s
+    )
+
+
+def _mark_unhealthy() -> None:
+    global _LAST_TUNNEL_ERROR_AT
+    _LAST_TUNNEL_ERROR_AT = time.time()
+
+
+def infra_status() -> dict | None:
+    """Return a {_infra: ...} block if the tunnel had a recent failure.
+
+    Cleared after 30s of healthy queries — bundle responses then
+    revert to no `_infra` field.
+    """
+    if _LAST_TUNNEL_ERROR_AT is None:
+        return None
+    age = time.time() - _LAST_TUNNEL_ERROR_AT
+    if age > 30:
+        return None
+    return {
+        "tunnel_recovering": True,
+        "seconds_since_error": round(age, 1),
+        "message": "Redshift tunnel was dropped; auto-recovering — refresh in a few seconds.",
+    }
+
+
 def _scalar(sql: str, params: tuple = (), default: Any = None) -> Any:
-    conn = None
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        row = cur.fetchone()
-        cur.close()
-        return row[0] if row and row[0] is not None else default
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("redshift scalar failed: %s — %s", sql[:120].replace("\n", " "), exc)
-        return default
-    finally:
-        if conn:
-            try: conn.close()
-            except Exception: pass  # noqa: BLE001
+    for attempt in (1, 2):
+        conn = None
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            cur.close()
+            return row[0] if row and row[0] is not None else default
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 1 and _is_connection_error(exc):
+                logger.warning("Redshift connection refused; healing tunnel and retrying once…")
+                ensure_tunnel()
+                continue
+            logger.warning("redshift scalar failed: %s — %s", sql[:120].replace("\n", " "), exc)
+            _mark_unhealthy()
+            return default
+        finally:
+            if conn:
+                try: conn.close()
+                except Exception: pass  # noqa: BLE001
+    return default
 
 
 def _rows(sql: str, params: tuple = ()) -> list[tuple]:
-    conn = None
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        rs = cur.fetchall()
-        cur.close()
-        return rs or []
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("redshift rows failed: %s — %s", sql[:120].replace("\n", " "), exc)
-        return []
-    finally:
-        if conn:
-            try: conn.close()
-            except Exception: pass  # noqa: BLE001
+    for attempt in (1, 2):
+        conn = None
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            rs = cur.fetchall()
+            cur.close()
+            return rs or []
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 1 and _is_connection_error(exc):
+                logger.warning("Redshift connection refused; healing tunnel and retrying once…")
+                ensure_tunnel()
+                continue
+            logger.warning("redshift rows failed: %s — %s", sql[:120].replace("\n", " "), exc)
+            _mark_unhealthy()
+            return []
+        finally:
+            if conn:
+                try: conn.close()
+                except Exception: pass  # noqa: BLE001
+    return []
 
 
 def _date_iso(v: Any) -> str | None:

@@ -4,7 +4,8 @@ One endpoint per Analytics_DataPoints_v10.xlsx sheet. Every endpoint:
   1. Verifies caller can view the account (RBAC).
   2. Resolves account → `redshift_company_name` (returns 409 if unset).
   3. Calls the matching `services.redshift_queries` bundle.
-  4. Returns the bundle dict (cached 5 min in-process per worker).
+  4. Wraps the response with any `_infra` health flag (tunnel recovery).
+  5. Returns the bundle dict (cached 5 min in-process per worker).
 
 `/intel/all` returns every section in one call — used by the
 IntelligenceTab on first open.
@@ -26,6 +27,19 @@ from app.routes.accounts import _team_member_ids
 from app.services import redshift_queries as rq
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["intel"])
+
+
+def _wrap(bundle: dict) -> dict:
+    """Merge any infra-health flag into the bundle response.
+
+    `infra_status()` returns a dict when the Redshift tunnel recently
+    failed; the frontend reads this to show an amber 'auto-recovering'
+    banner instead of misleading-zero KPIs.
+    """
+    infra = rq.infra_status()
+    if infra:
+        return {**bundle, "_infra": infra}
+    return bundle
 
 
 WindowQ = Annotated[
@@ -66,9 +80,8 @@ async def get_account_subscribers(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.account_subscribers_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.account_subscribers_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/category-watch")
@@ -78,9 +91,8 @@ async def get_category_watch(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.category_watch_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.category_watch_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/mmd")
@@ -90,7 +102,8 @@ async def get_mmd(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.mmd_bundle(await _scope_and_resolve(db, user, account_id), window)
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.mmd_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/abi")
@@ -100,7 +113,8 @@ async def get_abi(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.abi_bundle(await _scope_and_resolve(db, user, account_id), window)
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.abi_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/supplier-discovery")
@@ -110,9 +124,8 @@ async def get_supplier_discovery(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.supplier_discovery_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.supplier_discovery_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/supplier-monitoring")
@@ -122,9 +135,8 @@ async def get_supplier_monitoring(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.supplier_monitoring_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.supplier_monitoring_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/custom-usage")
@@ -134,9 +146,8 @@ async def get_custom_usage(
     window: WindowQ = "fy",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.custom_usage_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.custom_usage_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/thought-leadership")
@@ -146,9 +157,8 @@ async def get_thought_leadership(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.thought_leadership_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.thought_leadership_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/datahub")
@@ -158,9 +168,8 @@ async def get_datahub(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.datahub_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.datahub_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/inflation-watch")
@@ -170,9 +179,8 @@ async def get_inflation_watch(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.inflation_watch_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.inflation_watch_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/cirtuo")
@@ -182,9 +190,8 @@ async def get_cirtuo(
     window: WindowQ = "fy",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.cirtuo_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.cirtuo_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/nnamu")
@@ -194,9 +201,8 @@ async def get_nnamu(
     window: WindowQ = "fy",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.nnamu_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.nnamu_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/upply")
@@ -206,9 +212,8 @@ async def get_upply(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.upply_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.upply_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/alerts")
@@ -218,9 +223,8 @@ async def get_alerts(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.alerts_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.alerts_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/training")
@@ -230,9 +234,8 @@ async def get_training(
     window: WindowQ = "fy",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.training_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.training_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/nps")
@@ -242,9 +245,8 @@ async def get_nps(
     window: WindowQ = "fy",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.nps_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.nps_bundle(name, window))
 
 
 @router.get("/{account_id}/intel/super-users")
@@ -254,9 +256,8 @@ async def get_super_users(
     top_n: Annotated[int, Query(ge=1, le=100)] = 20,
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.super_users_bundle(
-        await _scope_and_resolve(db, user, account_id), top_n=top_n,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.super_users_bundle(name, top_n=top_n))
 
 
 # Back-compat alias (existing route name from Phase 1 scaffold)
@@ -267,9 +268,8 @@ async def get_benchmarks(
     window: WindowQ = "90d",
     db: AsyncSession = Depends(get_db),
 ):
-    return rq.benchmarks_bundle(
-        await _scope_and_resolve(db, user, account_id), window,
-    )
+    name = await _scope_and_resolve(db, user, account_id)
+    return _wrap(rq.benchmarks_bundle(name, window))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -285,7 +285,7 @@ async def get_intel_all(
     db: AsyncSession = Depends(get_db),
 ):
     name = await _scope_and_resolve(db, user, account_id)
-    return {
+    return _wrap({
         "redshift_company_name": name,
         "window": window,
         "account_subscribers": rq.account_subscribers_bundle(name, window),
@@ -304,4 +304,4 @@ async def get_intel_all(
         "training": rq.training_bundle(name, window),
         "nps": rq.nps_bundle(name, window),
         "super_users": rq.super_users_bundle(name, top_n=20),
-    }
+    })

@@ -168,6 +168,32 @@ def start_tunnel() -> None:
     )
 
 
+def ensure_tunnel() -> bool:
+    """Self-heal: if port 5439 isn't listening, restart the SSM tunnel.
+
+    Idempotent. Cheap when the tunnel is already up (single TCP probe).
+    Returns True if the tunnel is up after this call, False otherwise.
+
+    Called by `_scalar` / `_rows` in services.redshift_queries on
+    Connection-refused errors so the user sees a 1s blip instead of
+    all-zeros until the next API restart.
+    """
+    s = get_settings()
+    if _port_is_open("127.0.0.1", s.redshift_ssm_local_port, timeout=0.5):
+        return True
+    logger.warning(
+        "Redshift tunnel dropped — port %d not listening. Re-spawning…",
+        s.redshift_ssm_local_port,
+    )
+    # If we had a process handle but the tunnel died, clear it so
+    # start_tunnel() spawns a fresh one.
+    global _tunnel_proc
+    if _tunnel_proc is not None and _tunnel_proc.poll() is not None:
+        _tunnel_proc = None
+    start_tunnel()
+    return _port_is_open("127.0.0.1", s.redshift_ssm_local_port, timeout=0.5)
+
+
 def stop_tunnel() -> None:
     """Terminate the SSM tunnel subprocess at FastAPI shutdown."""
     global _tunnel_proc

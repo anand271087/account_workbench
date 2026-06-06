@@ -101,6 +101,36 @@ export function KpiTile({
 }
 
 // ============================================================
+// InfraBanner — shown when a bundle response carries `_infra`
+// (Redshift tunnel recovering). Better UX than a row of zero tiles.
+// ============================================================
+
+export function InfraBanner({
+  message,
+  secondsAgo,
+}: {
+  message: string;
+  secondsAgo?: number;
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-3 px-3 py-2 rounded-md bg-amber-50 border border-amber-300">
+      <span className="relative flex h-2 w-2 flex-shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+      </span>
+      <div className="text-[11px] text-amber-900 flex-1">
+        <span className="font-semibold">Redshift tunnel recovering</span>
+        {" — "}
+        {message}
+        {typeof secondsAgo === "number" && (
+          <span className="text-amber-700"> ({secondsAgo}s ago)</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // NaPill — surfaces "source_unavailable: true" markers from /intel/all
 // ============================================================
 

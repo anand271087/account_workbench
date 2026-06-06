@@ -39,12 +39,14 @@ import {
   KpiTile,
   BarChart,
   DonutChart,
+  InfraBanner,
   LineChart,
   NaPill,
   PALETTE,
   SERIES_COLORS,
   SimpleTable,
 } from "./charts";
+import type { InfraHealth } from "@/types/intel";
 
 type Sub = "usage" | "modules" | "cw" | "abi" | "sd" | "srm" | "cc" | "su";
 type Mode = "numbers" | "charts";
@@ -258,7 +260,15 @@ function FetchAndRender<T>({
     );
   }
   if (!data) return null;
-  return <>{render(data)}</>;
+  const infra = (data as { _infra?: InfraHealth })._infra;
+  return (
+    <>
+      {infra?.tunnel_recovering && (
+        <InfraBanner message={infra.message} secondsAgo={Math.round(infra.seconds_since_error)} />
+      )}
+      {render(data)}
+    </>
+  );
 }
 
 // ============================================================

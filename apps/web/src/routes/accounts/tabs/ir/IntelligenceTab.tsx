@@ -26,7 +26,8 @@ import type {
   SupplierMonitoring,
   ThoughtLeadership,
 } from "@/types/intel";
-import { Card } from "./charts";
+import { Card, InfraBanner } from "./charts";
+import type { InfraHealth } from "@/types/intel";
 import {
   AbiSheet,
   AlertsSheet,
@@ -243,5 +244,13 @@ function FetchAndRender<T>({
     );
   }
   if (!data) return null;
-  return <>{render(data)}</>;
+  const infra = (data as { _infra?: InfraHealth })._infra;
+  return (
+    <>
+      {infra?.tunnel_recovering && (
+        <InfraBanner message={infra.message} secondsAgo={Math.round(infra.seconds_since_error)} />
+      )}
+      {render(data)}
+    </>
+  );
 }

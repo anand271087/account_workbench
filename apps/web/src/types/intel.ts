@@ -12,6 +12,15 @@ export interface Unavailable {
   reason: string;
 }
 
+// 05-Jun · Infra-health flag attached to bundle responses when the
+// Redshift SSM tunnel had a recent failure. Frontend shows an amber
+// banner instead of misleading-zero KPI tiles.
+export interface InfraHealth {
+  tunnel_recovering: true;
+  seconds_since_error: number;
+  message: string;
+}
+
 export type Maybe<T> = T | Unavailable;
 
 export function isUnavailable<T>(v: Maybe<T> | undefined | null): v is Unavailable {
