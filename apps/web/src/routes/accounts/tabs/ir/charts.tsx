@@ -150,20 +150,32 @@ export function NaPill({ reason }: { reason: string }) {
 // LineChart — single series
 // ============================================================
 
+// MMD/IW monthly trends arrive as 'YYYY-MM' strings. Shorten to 'MMM yy'
+// for the x-axis so 12 buckets fit without overlap.
+function shortMonth(label: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(label);
+  if (!m) return label;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[+m[2] - 1]} ${m[1].slice(2)}`;
+}
+
 export function LineChart({
   labels,
   values,
   color = PALETTE.indigo,
-  height = 160,
+  height = 180,
+  maxWidth = 560,
 }: {
   labels: string[];
   values: number[];
   color?: string;
   height?: number;
+  /** Cap the rendered width so the chart doesn't sprawl into a full-row banner. */
+  maxWidth?: number;
 }) {
-  const W = 280;
+  const W = 480;
   const H = height;
-  const padding = { top: 10, right: 6, bottom: 22, left: 28 };
+  const padding = { top: 12, right: 12, bottom: 32, left: 36 };
   const innerW = W - padding.left - padding.right;
   const innerH = H - padding.top - padding.bottom;
   const max = Math.max(...values, 1);
@@ -176,32 +188,44 @@ export function LineChart({
   const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const area = `${path} L ${pts[pts.length - 1]?.x ?? 0} ${padding.top + innerH} L ${pts[0]?.x ?? 0} ${padding.top + innerH} Z`;
 
+  // Auto-skip x-axis labels to prevent overlap. Aim for ≤8 visible labels.
+  const stride = Math.max(1, Math.ceil(labels.length / 8));
+  const shortLabels = labels.map(shortMonth);
+  const lastIdx = labels.length - 1;
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      <path d={area} fill={color} opacity={0.12} />
-      <path d={path} fill="none" stroke={color} strokeWidth={2} />
-      {pts.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={color} />
-      ))}
-      {labels.map((l, i) => (
-        <text
-          key={i}
-          x={padding.left + i * stepX}
-          y={H - 6}
-          fontSize={8}
-          textAnchor="middle"
-          fill={PALETTE.slate}
-        >
-          {l}
+    <div style={{ maxWidth }} className="mx-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full">
+        <path d={area} fill={color} opacity={0.12} />
+        <path d={path} fill="none" stroke={color} strokeWidth={2} />
+        {pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={color} />
+        ))}
+        {shortLabels.map((l, i) => {
+          // Always show first + last; show every stride-th in between.
+          const show = i === 0 || i === lastIdx || i % stride === 0;
+          if (!show) return null;
+          return (
+            <text
+              key={i}
+              x={padding.left + i * stepX}
+              y={H - 10}
+              fontSize={9}
+              textAnchor="middle"
+              fill={PALETTE.slate}
+            >
+              {l}
+            </text>
+          );
+        })}
+        <text x={4} y={padding.top + 8} fontSize={9} fill={PALETTE.slate}>
+          {max}
         </text>
-      ))}
-      <text x={4} y={padding.top + 8} fontSize={8} fill={PALETTE.slate}>
-        {max}
-      </text>
-      <text x={4} y={padding.top + innerH} fontSize={8} fill={PALETTE.slate}>
-        0
-      </text>
-    </svg>
+        <text x={4} y={padding.top + innerH} fontSize={9} fill={PALETTE.slate}>
+          0
+        </text>
+      </svg>
+    </div>
   );
 }
 
@@ -334,65 +358,77 @@ export function DonutChart({
 export function MultiLineChart({
   labels,
   series,
+  maxWidth = 640,
 }: {
   labels: string[];
   series: Array<{ label: string; color: string; values: number[] }>;
+  /** Cap rendered width to prevent full-row sprawl. */
+  maxWidth?: number;
 }) {
-  const W = 320;
-  const H = 200;
-  const padding = { top: 12, right: 6, bottom: 36, left: 28 };
+  const W = 520;
+  const H = 220;
+  const padding = { top: 14, right: 12, bottom: 44, left: 36 };
   const innerW = W - padding.left - padding.right;
   const innerH = H - padding.top - padding.bottom;
   const allVals = series.flatMap((s) => s.values);
   const max = Math.max(...allVals, 1);
   const len = Math.max(...series.map((s) => s.values.length), 1);
   const stepX = len > 1 ? innerW / (len - 1) : 0;
+  const stride = Math.max(1, Math.ceil(labels.length / 8));
+  const shortLabels = labels.map(shortMonth);
+  const lastIdx = labels.length - 1;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      {series.map((s, si) => {
-        const pts = s.values.map((v, i) => {
-          const x = padding.left + i * stepX;
-          const y = padding.top + innerH - (v / max) * innerH;
-          return { x, y };
-        });
-        const path = pts
-          .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-          .join(" ");
-        return (
-          <path
-            key={si}
-            d={path}
-            fill="none"
-            stroke={s.color}
-            strokeWidth={1.5}
-          />
-        );
-      })}
-      {labels.map((l, i) => (
-        <text
-          key={i}
-          x={padding.left + i * stepX}
-          y={H - 22}
-          fontSize={7}
-          textAnchor="middle"
-          fill={PALETTE.slate}
-        >
-          {l}
+    <div style={{ maxWidth }} className="mx-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full">
+        {series.map((s, si) => {
+          const pts = s.values.map((v, i) => {
+            const x = padding.left + i * stepX;
+            const y = padding.top + innerH - (v / max) * innerH;
+            return { x, y };
+          });
+          const path = pts
+            .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+            .join(" ");
+          return (
+            <path
+              key={si}
+              d={path}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={1.5}
+            />
+          );
+        })}
+        {shortLabels.map((l, i) => {
+          const show = i === 0 || i === lastIdx || i % stride === 0;
+          if (!show) return null;
+          return (
+            <text
+              key={i}
+              x={padding.left + i * stepX}
+              y={H - 28}
+              fontSize={9}
+              textAnchor="middle"
+              fill={PALETTE.slate}
+            >
+              {l}
+            </text>
+          );
+        })}
+        <text x={4} y={padding.top + 8} fontSize={9} fill={PALETTE.slate}>
+          {max}
         </text>
-      ))}
-      <text x={4} y={padding.top + 8} fontSize={8} fill={PALETTE.slate}>
-        {max}
-      </text>
-      {series.map((s, i) => (
-        <g key={i} transform={`translate(${padding.left + i * 60}, ${H - 8})`}>
-          <rect width={8} height={8} fill={s.color} />
-          <text x={12} y={7} fontSize={8} fill={PALETTE.slate}>
-            {s.label.slice(0, 10)}
-          </text>
-        </g>
-      ))}
-    </svg>
+        {series.map((s, i) => (
+          <g key={i} transform={`translate(${padding.left + i * 72}, ${H - 10})`}>
+            <rect width={8} height={8} fill={s.color} />
+            <text x={12} y={7} fontSize={9} fill={PALETTE.slate}>
+              {s.label.slice(0, 12)}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 }
 
