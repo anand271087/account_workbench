@@ -69,6 +69,36 @@ class Settings(BaseSettings):
         ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml,.csv,.md,.markdown"
     )
 
+    # ---- Redshift (Intelligence & Reports) ----
+    # Same SSM-tunnel pattern as Bifrost. Tunnel auto-spawns on FastAPI
+    # startup; redshift-connector pool talks to localhost over it.
+    aws_access_key_id: SecretStr | None = None
+    aws_secret_access_key: SecretStr | None = None
+    aws_default_region: str = "us-east-1"
+    aws_profile: str | None = None
+
+    redshift_autostart_tunnel: bool = True
+    redshift_ssm_target: str | None = None
+    redshift_ssm_document: str = "AWS-StartPortForwardingSessionToRemoteHost"
+    redshift_ssm_remote_host: str | None = None
+    redshift_ssm_remote_port: int = 5439
+    redshift_ssm_local_port: int = 5439
+
+    redshift_host: str = "localhost"
+    redshift_port: int = 5439
+    redshift_db: str | None = None
+    redshift_user: str | None = None
+    redshift_password: SecretStr | None = None
+    redshift_sslmode: str = "require"
+
+    @property
+    def redshift_configured(self) -> bool:
+        return all([
+            self.redshift_db,
+            self.redshift_user,
+            self.redshift_password,
+        ])
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

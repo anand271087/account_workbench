@@ -37,6 +37,8 @@ _FIELDS = (
     "id", "name", "slug", "industry", "region", "country",
     # M16.1 — header chips applied from MoM extraction.
     "headquarters", "annual_revenue_text", "sf_link",
+    # 05-Jun · Intelligence — canonical Redshift companyname.
+    "redshift_company_name",
     "csm_user_id", "co_user_id", "category", "tier",
     # 03-Jun bug — display-only owner names from the Add Account modal.
     "commercial_owner_name", "csm_owner_name",

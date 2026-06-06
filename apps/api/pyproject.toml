@@ -25,6 +25,8 @@ dependencies = [
     "markitdown[pptx,docx,xlsx,xls,pdf]>=0.1.5",
     "structlog>=24.4.0",
     "sentry-sdk[fastapi]>=2.18.0",
+    # Intelligence & Reports — Redshift via SSM tunnel.
+    "redshift-connector>=2.1.4",
 ]
 
 [project.optional-dependencies]

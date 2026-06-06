@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core import redshift as redshift_core
 from app.routes import accounts as account_routes
 from app.routes import auth as auth_routes
 from app.routes import contacts as contact_routes
@@ -30,6 +31,7 @@ from app.routes import ai_brief as ai_brief_routes
 from app.routes import brief_ai as brief_ai_routes
 from app.routes import leadership as leadership_routes
 from app.routes import platform_intel as platform_intel_routes
+from app.routes import intel as intel_routes
 from app.routes import plays as play_routes
 from app.routes import reports as report_routes
 from app.routes import signals as signal_routes
@@ -45,8 +47,23 @@ from app.services import audit_writer  # noqa: F401
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """App lifespan — startup and shutdown hooks."""
+    # 05-Jun — open the Redshift SSM port-forward tunnel on boot so the
+    # Intelligence & Reports queries can talk to the cluster. No-ops if
+    # Redshift isn't configured / autostart disabled.
+    import asyncio
+    import logging
+    log = logging.getLogger("app.main")
+    try:
+        await asyncio.to_thread(redshift_core.start_tunnel)
+        ok, msg = await asyncio.to_thread(redshift_core.smoke_test)
+        log.info("Redshift smoke test: ok=%s · %s", ok, msg)
+    except Exception:  # noqa: BLE001
+        log.exception("Redshift bootstrap failed (non-fatal)")
     yield
-    # Future: graceful shutdown of pools.
+    try:
+        await asyncio.to_thread(redshift_core.stop_tunnel)
+    except Exception:  # noqa: BLE001
+        log.exception("Redshift tunnel shutdown failed")
 
 
 def create_app() -> FastAPI:
@@ -108,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_brief_routes.router)
     app.include_router(brief_ai_routes.router)
     app.include_router(platform_intel_routes.router)
+    app.include_router(intel_routes.router)
     app.include_router(report_routes.router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)

@@ -29,6 +29,12 @@ class Account(Base):
     headquarters: Mapped[str | None] = mapped_column(String, nullable=True)
     annual_revenue_text: Mapped[str | None] = mapped_column(String, nullable=True)
     sf_link: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 05-Jun · Intelligence & Reports — canonical companyname value used
+    # in Redshift tableau_schema / live_ai_incremental. The Intel endpoints
+    # use this verbatim instead of account.name so we can survive
+    # diacritic / suffix differences (Mondelēz International ≠ Mondelez
+    # International; Siemens Energy ≠ Siemens Energy AG).
+    redshift_company_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     csm_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     co_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
