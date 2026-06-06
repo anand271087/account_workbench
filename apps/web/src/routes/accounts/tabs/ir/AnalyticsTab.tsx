@@ -1,82 +1,138 @@
-// M30 — Intelligence & Reports · Analytics section.
+// 05-Jun · Phase 2b — Analytics tab on live Redshift data.
 //
-// 8 sub-tabs (faithful port of prototype bAnalytics):
-//   Usage & Logins · Module Activity · Category Watch · Abi Intelligence
-//   · Supplier Discovery · Supplier Risk · Custom Credits · Super Users
+// Replaces the platform_intel-jsonb-driven version. Each sub-tab
+// fetches only its bundle via useIntelBundle (5-25s cold, instant
+// from TanStack cache on revisit). Numbers / Charts mode toggle
+// retained. Period scaling removed — backend honors the window
+// parameter directly.
 //
-// Numbers / Charts mode toggle. Charts rendered inline as SVG (no
-// Chart.js dependency) — kept lightweight for sprint-1.
+// 8 sub-tabs map to the matching Redshift bundle:
+//   usage   → account-subscribers
+//   modules → category-watch (MMD subsection focus)
+//   cw      → category-watch (Category Intelligence — mostly NA today)
+//   abi     → abi
+//   sd      → supplier-discovery
+//   srm     → supplier-monitoring
+//   cc      → custom-usage
+//   su      → super-users
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 
-import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAccountFromLayout, useAccountPeriod } from "../../AccountProfileLayout";
+import { useIntelBundle, type IntelSection } from "@/hooks/useIntelAll";
+import type {
+  Abi,
+  AccountSubscribers,
+  CategoryWatch,
+  CustomUsage,
+  LabelCount,
+  Maybe,
+  SuperUsersBundle,
+  SupplierDiscovery,
+  SupplierMonitoring,
+} from "@/types/intel";
+import { isUnavailable } from "@/types/intel";
 import {
-  useAccountFromLayout,
-  useAccountPeriod,
-  type AccountPeriod,
-} from "../../AccountProfileLayout";
-import {
-  RISK_COLOR,
-  RISK_LABEL,
-  type PlatformIntel,
-} from "@/types/platform_intel";
+  Card,
+  CardTitle,
+  KpiTile,
+  BarChart,
+  DonutChart,
+  LineChart,
+  NaPill,
+  PALETTE,
+  SERIES_COLORS,
+  SimpleTable,
+} from "./charts";
 
-// M33 — period scaling. Matches the prototype's periodScale() exactly:
-// 30d = 0.33 (one-third of a quarter), 90d = 1 (baseline), FY = 4 (the
-// 12-month annualised view). Stored numbers in platform_intel are the
-// 90d baseline; this multiplier shifts the surfaced view client-side.
-function periodScale(p: AccountPeriod): number {
-  // "All" treated like FY for the client-side scale until AnalyticsTab
-  // is wired to live Redshift (Phase 2b) — backend will then honor the
-  // window param directly.
-  if (p === "30d") return 1 / 3;
-  if (p === "FY" || p === "All") return 4;
-  return 1;
-}
-function scaleInt(v: number, s: number): number {
-  return Math.round(v * s);
-}
-
-type Sub =
-  | "usage"
-  | "modules"
-  | "cw"
-  | "abi"
-  | "sd"
-  | "srm"
-  | "cc"
-  | "su";
+type Sub = "usage" | "modules" | "cw" | "abi" | "sd" | "srm" | "cc" | "su";
 type Mode = "numbers" | "charts";
 
-const SUB_TABS: Array<{ id: Sub; label: string }> = [
-  { id: "usage", label: "Usage & Logins" },
-  { id: "modules", label: "Module Activity" },
-  { id: "cw", label: "Category Watch" },
-  { id: "abi", label: "Abi Intelligence" },
-  { id: "sd", label: "Supplier Discovery" },
-  { id: "srm", label: "Supplier Risk" },
-  { id: "cc", label: "Custom Credits" },
-  { id: "su", label: "Super Users" },
+interface SubMeta {
+  id: Sub;
+  label: string;
+  section: IntelSection;
+}
+
+const SUB_TABS: SubMeta[] = [
+  { id: "usage",   label: "Usage & Logins",     section: "account-subscribers" },
+  { id: "modules", label: "Module Activity",    section: "category-watch" },
+  { id: "cw",      label: "Category Watch",     section: "category-watch" },
+  { id: "abi",     label: "Abi Intelligence",   section: "abi" },
+  { id: "sd",      label: "Supplier Discovery", section: "supplier-discovery" },
+  { id: "srm",     label: "Supplier Risk",      section: "supplier-monitoring" },
+  { id: "cc",      label: "Custom Credits",     section: "custom-usage" },
+  { id: "su",      label: "Super Users",        section: "super-users" },
 ];
+
+// ---------------- helpers ----------------
+
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(1)}k`;
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function maybeKpi(label: string, v: Maybe<number>, accent?: string) {
+  if (isUnavailable(v)) {
+    return <KpiTile label={label} value="" na={{ reason: v.reason }} accent={accent} />;
+  }
+  return <KpiTile label={label} value={fmtNum(v as number)} accent={accent} />;
+}
+
+function barRows(items: LabelCount[]): Array<{ label: string; value: number; color: string }> {
+  return items.slice(0, 10).map((r, i) => ({
+    label: r.label || "(blank)",
+    value: r.count,
+    color: SERIES_COLORS[i % SERIES_COLORS.length],
+  }));
+}
+
+// ---------------- top-level ----------------
 
 export default function AnalyticsTab() {
   const account = useAccountFromLayout();
   const { period } = useAccountPeriod();
-  const scale = periodScale(period);
   const [sub, setSub] = useState<Sub>("usage");
   const [mode, setMode] = useState<Mode>("charts");
 
-  const { data, isLoading } = useQuery<PlatformIntel>({
-    queryKey: ["platform-intel", account.id],
-    queryFn: () =>
-      api.get<PlatformIntel>(`/api/v1/accounts/${account.id}/platform-intel`),
-  });
+  const meta = SUB_TABS.find((t) => t.id === sub)!;
 
   return (
     <div>
-      {/* Header — sub-tab pills + mode toggle */}
+      {/* Live banner */}
+      <div className="mb-3 flex items-center gap-3 px-3 py-2 rounded-md bg-beroe-teal/10 border border-beroe-teal/30">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-beroe-teal">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
+          </span>
+          LIVE
+        </span>
+        <div className="text-[11px] text-text-secondary flex-1">
+          Pulled from Redshift —{" "}
+          <span className="font-semibold">
+            {account.redshift_company_name ?? account.name}
+          </span>{" "}
+          · window: <span className="font-semibold">{period ?? "90d"}</span>
+        </div>
+      </div>
+
+      {/* Sub-tab strip + Numbers/Charts toggle */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="flex gap-1 flex-wrap">
           {SUB_TABS.map((t) => (
@@ -112,959 +168,499 @@ export default function AnalyticsTab() {
         </div>
       </div>
 
-      {/* M33 — period legend so users know what window is in effect. */}
-      <div className="text-[11px] text-text-muted mb-2">
-        Showing data scaled to{" "}
-        <b className="text-text-secondary">
-          {period === "30d"
-            ? "last 30 days"
-            : period === "FY"
-              ? "full year (annualised)"
-              : "last 90 days"}
-        </b>{" "}
-        · change in the top-right{" "}
-        <span className="font-semibold">30d / 90d / FY</span> pill group.
-      </div>
-
-      {isLoading || !data ? (
-        <Card>
-          <div className="text-sm text-text-muted">Loading analytics…</div>
-        </Card>
-      ) : !data.has_data ? (
-        <Card>
-          <div className="text-center py-12 text-text-muted">
-            <div className="text-[28px] mb-2">📈</div>
-            <div className="text-[13px] font-semibold">No platform data yet</div>
-            <div className="text-[11px] mt-1">
-              Analytics will populate once {account.name} starts using the Beroe
-              platform.
-            </div>
-          </div>
-        </Card>
-      ) : sub === "usage" ? (
-        <UsageSection data={data} mode={mode} period={period} />
-      ) : sub === "modules" ? (
-        <ModulesSection data={data} mode={mode} scale={scale} period={period} />
-      ) : sub === "cw" ? (
-        <CWSection data={data} mode={mode} scale={scale} />
-      ) : sub === "abi" ? (
-        <AbiSection data={data} mode={mode} scale={scale} />
-      ) : sub === "sd" ? (
-        <SDSection data={data} mode={mode} scale={scale} />
-      ) : sub === "srm" ? (
-        <SRMSection data={data} mode={mode} />
-      ) : sub === "cc" ? (
-        <CCSection data={data} mode={mode} scale={scale} />
-      ) : (
-        <SUSection data={data} scale={scale} />
-      )}
+      <SubLoader
+        accountId={account.id}
+        period={period}
+        sub={sub}
+        section={meta.section}
+        mode={mode}
+      />
     </div>
   );
 }
 
-// ============================================================
-// Usage & Logins
-// ============================================================
+// ---------------- lazy fetch + dispatch ----------------
 
-function UsageSection({
-  data,
-  mode,
+function SubLoader({
+  accountId,
   period,
-}: {
-  data: PlatformIntel;
-  mode: Mode;
-  period: AccountPeriod;
-}) {
-  const u = data.usage;
-  // Slice the 12-month series to match the period — 30d shows the last
-  // month, 90d shows the last 3, FY shows all 12.
-  const monthsToShow = period === "30d" ? 1 : period === "90d" ? 3 : 12;
-  const len = u.months.length || 0;
-  const months = u.months.slice(Math.max(0, len - monthsToShow));
-  const logins = u.monthly_logins.slice(Math.max(0, len - monthsToShow));
-  const active = u.monthly_active.slice(Math.max(0, len - monthsToShow));
-  const adoption = [
-    ["Active", u.active_seats, "#6EC457"],
-    ["Inactive", u.inactive_seats, "#CF4548"],
-    ["Total Licensed", u.licensed_users, "#4A00F8"],
-  ] as Array<[string, number, string]>;
-
-  if (mode === "numbers") {
-    return (
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>Monthly Logins · {period}</CardTitle>
-          <SimpleTable
-            rows={months.map((m, i) => [m, String(logins[i] ?? 0)])}
-            headers={["Month", "Logins"]}
-          />
-        </Card>
-        <Card>
-          <CardTitle>Monthly Active Users · {period}</CardTitle>
-          <SimpleTable
-            rows={months.map((m, i) => [m, String(active[i] ?? 0)])}
-            headers={["Month", "Active"]}
-          />
-        </Card>
-        <Card className="col-span-2">
-          <CardTitle>User Adoption</CardTitle>
-          <SimpleTable
-            rows={adoption.map(([l, v]) => [
-              l,
-              String(v),
-              `${Math.round((v / Math.max(1, u.licensed_users)) * 100)}%`,
-            ])}
-            headers={["Status", "Users", "%"]}
-          />
-        </Card>
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-3 gap-3">
-      <Card>
-        <CardTitle>Monthly Logins · {period}</CardTitle>
-        <LineChart labels={months} values={logins} color="#4A00F8" />
-      </Card>
-      <Card>
-        <CardTitle>Monthly Active Users · {period}</CardTitle>
-        <LineChart labels={months} values={active} color="#6EC457" />
-      </Card>
-      <Card>
-        <CardTitle>User Adoption</CardTitle>
-        <DonutChart
-          slices={adoption.map(([label, val, color]) => ({
-            label: label as string,
-            value: val as number,
-            color: color as string,
-          }))}
-        />
-      </Card>
-    </div>
-  );
-}
-
-// ============================================================
-// Module Activity
-// ============================================================
-
-function ModulesSection({
-  data,
+  sub,
+  section,
   mode,
-  scale,
-  period,
 }: {
-  data: PlatformIntel;
+  accountId: string;
+  period: ReturnType<typeof useAccountPeriod>["period"];
+  sub: Sub;
+  section: IntelSection;
   mode: Mode;
-  scale: number;
-  period: AccountPeriod;
 }) {
-  const m = data.modules;
-  const items: Array<[string, number, string, keyof typeof m.monthly]> = [
-    ["Market Monitor", scaleInt(m.mmd, scale), "#4A00F8", "mmd"],
-    ["Abi Queries", scaleInt(m.abi, scale), "#C344C7", "abi"],
-    ["Supplier Discovery", scaleInt(m.sd, scale), "#6EC457", "sd"],
-    ["Downloads", scaleInt(m.dl, scale), "#F0BC41", "dl"],
-    ["Benchmarks", scaleInt(m.bm, scale), "#35E1D4", "bm"],
-  ];
-  void period;
-  const total = items.reduce((s, [, v]) => s + v, 0);
+  switch (sub) {
+    case "usage":
+      return <FetchAndRender<AccountSubscribers> accountId={accountId} period={period} section={section}
+        render={(d) => <UsageSection data={d} mode={mode} />} />;
+    case "modules":
+    case "cw":
+      return <FetchAndRender<CategoryWatch> accountId={accountId} period={period} section={section}
+        render={(d) => sub === "modules"
+          ? <ModulesSection data={d} mode={mode} />
+          : <CWSection data={d} mode={mode} />} />;
+    case "abi":
+      return <FetchAndRender<Abi> accountId={accountId} period={period} section={section}
+        render={(d) => <AbiSection data={d} mode={mode} />} />;
+    case "sd":
+      return <FetchAndRender<SupplierDiscovery> accountId={accountId} period={period} section={section}
+        render={(d) => <SDSection data={d} mode={mode} />} />;
+    case "srm":
+      return <FetchAndRender<SupplierMonitoring> accountId={accountId} period={period} section={section}
+        render={(d) => <SRMSection data={d} mode={mode} />} />;
+    case "cc":
+      return <FetchAndRender<CustomUsage> accountId={accountId} period={period} section={section}
+        render={(d) => <CCSection data={d} mode={mode} />} />;
+    case "su":
+      return <FetchAndRender<SuperUsersBundle> accountId={accountId} period={period} section={section}
+        render={(d) => <SUSection data={d} mode={mode} />} />;
+  }
+}
 
-  if (mode === "numbers") {
+function FetchAndRender<T>({
+  accountId, period, section, render,
+}: {
+  accountId: string;
+  period: ReturnType<typeof useAccountPeriod>["period"];
+  section: IntelSection;
+  render: (d: T) => React.ReactNode;
+}) {
+  const { data, isLoading, isError, error } = useIntelBundle<T>(accountId, period, section);
+  if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>Module Activity</CardTitle>
-          <SimpleTable
-            headers={["Module", "Sessions", "Share"]}
-            rows={items.map(([label, val, col]) => [
-              <span key={label} className="inline-flex items-center gap-1.5">
-                <span
-                  className="w-2 h-2 rounded-sm"
-                  style={{ background: col }}
-                />
-                {label}
-              </span>,
-              String(val),
-              `${total > 0 ? Math.round((val / total) * 100) : 0}%`,
-            ])}
-          />
-        </Card>
-        <Card>
-          <CardTitle>Module Trend (12 months)</CardTitle>
-          <SimpleTable
-            headers={["Month", ...items.map(([l]) => l)]}
-            rows={data.usage.months.map((mo, i) => [
-              mo,
-              ...items.map(
-                ([, , , key]) => String(m.monthly[key]?.[i] ?? 0),
-              ),
-            ])}
-            compact
-          />
-        </Card>
-      </div>
+      <Card>
+        <div className="flex items-center gap-2 text-[12px] text-text-muted py-8 justify-center">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
+          </span>
+          Querying Redshift… (cold queries take 5–25s)
+        </div>
+      </Card>
     );
   }
-  return (
-    <div className="grid grid-cols-2 gap-3">
+  if (isError) {
+    const status = (error as { status?: number } | null)?.status;
+    return (
       <Card>
-        <CardTitle>Module Share</CardTitle>
-        <DonutChart
-          slices={items.map(([label, val, col]) => ({
-            label,
-            value: val,
-            color: col,
-          }))}
-        />
+        <div className="text-[13px] font-semibold mb-1 text-risk-red">Couldn't load this section</div>
+        <div className="text-[11px] text-text-secondary">
+          {status === 409
+            ? "Account not mapped to redshift_company_name yet."
+            : (error as { message?: string })?.message ?? "Unknown error"}
+        </div>
       </Card>
-      <Card>
-        <CardTitle>Module Trend (12 months)</CardTitle>
-        <MultiLineChart
-          labels={data.usage.months}
-          series={items.map(([label, , col, key]) => ({
-            label,
-            color: col,
-            values: m.monthly[key] ?? [],
-          }))}
-        />
-      </Card>
-    </div>
-  );
+    );
+  }
+  if (!data) return null;
+  return <>{render(data)}</>;
 }
 
 // ============================================================
-// Category Watch
+// Section components — Numbers + Charts variants
 // ============================================================
 
-function CWSection({
-  data,
-  mode,
-  scale,
-}: {
-  data: PlatformIntel;
-  mode: Mode;
-  scale: number;
-}) {
-  const ci = data.cat_intel;
-  // Visit counts scale with the period; section avg-time (minutes per page)
-  // is a per-session figure and stays stable.
-  const cats = ci.top_cats
-    .filter((c) => c.visits > 0)
-    .map((c) => ({ ...c, visits: scaleInt(c.visits, scale) }));
-  const sa = ci.section_avg;
-  const sectionRows: Array<[string, number, string]> = [
-    ["Price Intelligence", sa.price, "#4A00F8"],
-    ["Supplier Analysis", sa.supplier, "#C344C7"],
-    ["Market Dynamics", sa.market, "#35E1D4"],
-    ["Forecasts", sa.forecast, "#6EC457"],
-    ["Risk & Alerts", sa.risk, "#F0BC41"],
-  ];
-
-  if (mode === "numbers") {
-    return (
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>Section Time (min)</CardTitle>
-          <SimpleTable
-            headers={["Section", "Avg min"]}
-            rows={sectionRows.map(([label, val]) => [label, val.toFixed(1)])}
-          />
-        </Card>
-        <Card>
-          <CardTitle>Top Categories</CardTitle>
-          <SimpleTable
-            headers={["Category", "Visits", "Heat"]}
-            rows={cats.map((c) => [c.name, String(c.visits), c.heat])}
-          />
-        </Card>
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <Card>
-        <CardTitle>Avg time per section (min)</CardTitle>
-        <BarChart
-          rows={sectionRows.map(([label, val, col]) => ({
-            label,
-            value: val,
-            color: col,
-          }))}
-        />
-      </Card>
-      <Card>
-        <CardTitle>Top Categories — Visits</CardTitle>
-        <BarChart
-          rows={cats.map((c) => ({
-            label: c.name,
-            value: c.visits,
-            color:
-              c.heat === "hot"
-                ? "#CF4548"
-                : c.heat === "warm"
-                  ? "#F0BC41"
-                  : c.heat === "whitespace"
-                    ? "#94a3b8"
-                    : "#cbd5e1",
-          }))}
-        />
-      </Card>
-    </div>
-  );
-}
-
-// ============================================================
-// Abi Intelligence
-// ============================================================
-
-function AbiSection({
-  data,
-  mode,
-  scale,
-}: {
-  data: PlatformIntel;
-  mode: Mode;
-  scale: number;
-}) {
-  const abi = data.abi;
-  const totalQ = scaleInt(abi.total_queries, scale);
-  // Scale the complexity-mix counts too (they're query counts in the
-  // seeded data, not percentages). Proportions stay the same.
-  const cm = {
-    l1a: scaleInt(abi.complexity_mix.l1a, scale),
-    l1m: scaleInt(abi.complexity_mix.l1m, scale),
-    l2: scaleInt(abi.complexity_mix.l2, scale),
-    l3: scaleInt(abi.complexity_mix.l3, scale),
-    l4: scaleInt(abi.complexity_mix.l4, scale),
-  };
-  const totalMix = cm.l1a + cm.l1m + cm.l2 + cm.l3 + cm.l4 || 1;
-  const rows: Array<[string, number, string]> = [
-    ["L1 Auto", cm.l1a, "#4A00F8"],
-    ["L1 Manual", cm.l1m, "#C344C7"],
-    ["L2", cm.l2, "#6EC457"],
-    ["L3", cm.l3, "#F0BC41"],
-    ["L4", cm.l4, "#CF4548"],
-  ];
-
-  if (mode === "numbers") {
-    return (
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>Abi KPIs</CardTitle>
-          <SimpleTable
-            headers={["Metric", "Value"]}
-            rows={[
-              ["Total Queries", String(totalQ)],
-              ["Queries per User", abi.queries_per_user.toFixed(1)],
-              ["Resolution Rate", abi.resolution_rate ?? "—"],
-              ["Avg Response", abi.avg_response ?? "—"],
-            ]}
-          />
-        </Card>
-        <Card>
-          <CardTitle>Complexity Breakdown</CardTitle>
-          <SimpleTable
-            headers={["Level", "%", "Queries"]}
-            rows={rows.map(([label, val]) => {
-              const pct = Math.round((val / totalMix) * 100);
-              return [label, `${pct}%`, String(val)];
-            })}
-          />
-        </Card>
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <Card>
-        <CardTitle>Complexity Mix</CardTitle>
-        <DonutChart
-          slices={rows.map(([label, val, col]) => ({
-            label,
-            value: val,
-            color: col,
-          }))}
-        />
-      </Card>
-      <Card>
-        <CardTitle>Top Query Types</CardTitle>
-        <BarChart
-          rows={(abi.top_types ?? []).map((t, i) => ({
-            label: t,
-            value: 100 - i * 10,
-            color: ["#4A00F8", "#C344C7", "#6EC457", "#F0BC41", "#35E1D4"][i % 5],
-          }))}
-        />
-      </Card>
-    </div>
-  );
-}
-
-// ============================================================
-// Supplier Discovery
-// ============================================================
-
-function SDSection({
-  data,
-  mode,
-  scale,
-}: {
-  data: PlatformIntel;
-  mode: Mode;
-  scale: number;
-}) {
-  const sd = scaleInt(data.modules.sd, scale);
-  const monthly = data.modules.monthly.sd ?? [];
-  const months = data.usage.months;
-  const shortlists = Math.round(sd * 0.4);
-  const convRate = sd > 0 ? Math.round((shortlists / sd) * 100) : 0;
-  const regions: Array<[string, number, string]> = [
-    ["EMEA", Math.round(sd * 0.45), "#4A00F8"],
-    ["APAC", Math.round(sd * 0.3), "#6EC457"],
-    ["Americas", Math.round(sd * 0.25), "#C344C7"],
-  ];
-
-  if (mode === "numbers") {
-    return (
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>SD KPIs</CardTitle>
-          <SimpleTable
-            headers={["Metric", "Value"]}
-            rows={[
-              ["Searches", String(sd)],
-              ["Shortlists", String(shortlists)],
-              ["Conversion Rate", `${convRate}%`],
-            ]}
-          />
-        </Card>
-        <Card>
-          <CardTitle>Searches by Region</CardTitle>
-          <SimpleTable
-            headers={["Region", "Searches"]}
-            rows={regions.map(([r, v]) => [r, String(v)])}
-          />
-        </Card>
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <Card>
-        <CardTitle>Searches Trend (12 months)</CardTitle>
-        <LineChart labels={months} values={monthly} color="#6EC457" />
-      </Card>
-      <Card>
-        <CardTitle>Searches by Region</CardTitle>
-        <DonutChart
-          slices={regions.map(([label, val, col]) => ({
-            label,
-            value: val,
-            color: col,
-          }))}
-        />
-      </Card>
-    </div>
-  );
-}
-
-// ============================================================
-// Supplier Risk
-// ============================================================
-
-function SRMSection({ data, mode }: { data: PlatformIntel; mode: Mode }) {
-  const sw = data.supplier_watch;
-  const rows: Array<[string, number, string]> = [
-    ["High Risk", sw.by_risk.high, RISK_COLOR.high],
-    ["Med-High", sw.by_risk.med_high, RISK_COLOR.med_high],
-    ["Medium", sw.by_risk.med, RISK_COLOR.med],
-    ["Low Risk", sw.by_risk.low, RISK_COLOR.low],
-  ];
-
+function UsageSection({ data: a, mode }: { data: AccountSubscribers; mode: Mode }) {
   if (mode === "numbers") {
     return (
       <Card>
-        <CardTitle>Supplier Risk KPIs</CardTitle>
+        <CardTitle>Usage & Logins — raw figures</CardTitle>
         <SimpleTable
-          headers={["Metric", "Value"]}
+          cols={[
+            { key: "metric", label: "Metric" },
+            { key: "value", label: "Value", numeric: true },
+          ]}
           rows={[
-            ["Suppliers Tracked", String(sw.tracked)],
-            ...rows.map(([label, val]) => [label, String(val)] as [string, string]),
+            { metric: "Total subscribers", value: fmtNum(a.total_subscribers) },
+            { metric: "Active subscribers (≥1 login)", value: fmtNum(a.active_subscribers) },
+            { metric: "Total logins", value: fmtNum(a.total_logins) },
+            { metric: "Total time on platform (mins)", value: fmtNum(Math.round(a.total_time_spent_mins)) },
+            { metric: "Categories unlocked", value: fmtNum(a.categories_unlocked) },
+            { metric: "Subscription start", value: fmtDate(a.subscription_start) },
+            { metric: "Subscription end", value: fmtDate(a.subscription_end) },
+            { metric: "Company last login", value: fmtDate(a.company_last_login) },
           ]}
         />
-        <div className="mt-3">
-          <CardTitle>Top Tracked Suppliers</CardTitle>
-          {sw.suppliers.length === 0 ? (
-            <div className="text-[12px] text-text-muted">None tracked</div>
-          ) : (
-            <SimpleTable
-              headers={["Name", "Category", "Country", "Risk"]}
-              rows={sw.suppliers.map((s) => [
-                s.name,
-                s.cat ?? "—",
-                s.country ?? "—",
-                RISK_LABEL[s.risk],
-              ])}
-            />
-          )}
-        </div>
       </Card>
     );
   }
+  const active_pct = a.total_subscribers
+    ? Math.round((a.active_subscribers / a.total_subscribers) * 100)
+    : 0;
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <Card>
-        <CardTitle>Risk Distribution</CardTitle>
-        <DonutChart
-          slices={rows.map(([label, val, col]) => ({
-            label,
-            value: val,
-            color: col,
-          }))}
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total Subscribers" value={fmtNum(a.total_subscribers)} accent={PALETTE.indigo} />
+        <KpiTile
+          label="Active Subscribers"
+          value={fmtNum(a.active_subscribers)}
+          sub={`${active_pct}% of total`}
+          accent={PALETTE.aqua}
         />
-      </Card>
+        <KpiTile label="Total Logins" value={fmtNum(a.total_logins)} accent={PALETTE.fuscia} />
+        <KpiTile
+          label="Total Time (mins)"
+          value={fmtNum(Math.round(a.total_time_spent_mins))}
+          accent={PALETTE.bumblebee}
+        />
+      </div>
       <Card>
-        <CardTitle>Risk Tiers</CardTitle>
-        <BarChart
-          rows={rows.map(([label, val, col]) => ({
-            label,
-            value: val,
-            color: col,
-          }))}
+        <CardTitle>Active / Inactive split</CardTitle>
+        <DonutChart
+          slices={[
+            { label: "Active", value: a.active_subscribers, color: PALETTE.aqua },
+            {
+              label: "Inactive",
+              value: Math.max(0, a.total_subscribers - a.active_subscribers),
+              color: PALETTE.slate,
+            },
+          ]}
         />
       </Card>
     </div>
   );
 }
 
-// ============================================================
-// Custom Credits
-// ============================================================
-
-function CCSection({
-  data,
-  mode,
-  scale,
-}: {
-  data: PlatformIntel;
-  mode: Mode;
-  scale: number;
-}) {
-  const cm = data.abi.complexity_mix;
-  const totalMix = cm.l1a + cm.l1m + cm.l2 + cm.l3 + cm.l4 || 1;
-  const totalQ = scaleInt(data.abi.total_queries, scale);
-  const l1mQ = Math.round((totalQ * cm.l1m) / totalMix);
-  const l2Q = Math.round((totalQ * cm.l2) / totalMix);
-  const l3Q = Math.round((totalQ * cm.l3) / totalMix);
-  const l4Q = Math.round((totalQ * cm.l4) / totalMix);
-  const creditsEst = Math.round(l2Q * 0.5 + l3Q * 2 + l4Q * 5);
-
-  const rows: Array<[string, number, number, string]> = [
-    ["L1M", l1mQ, 0, "#C344C7"],
-    ["L2", l2Q, Math.round(l2Q * 0.5), "#6EC457"],
-    ["L3", l3Q, l3Q * 2, "#F0BC41"],
-    ["L4", l4Q, l4Q * 5, "#CF4548"],
-  ];
-
-  // Avg Feedback comes from the platform telemetry when available; until
-  // then we show "—" rather than a fabricated rating.
-  const avgFeedback =
-    (data.abi as unknown as { avg_feedback?: string | null }).avg_feedback ??
-    "—";
+function ModulesSection({ data: cw, mode }: { data: CategoryWatch; mode: Mode }) {
+  const mmd = cw.mmd;
   if (mode === "numbers") {
     return (
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>Custom Credits KPIs</CardTitle>
-          <SimpleTable
-            headers={["Metric", "Value"]}
-            rows={[
-              ["Credits Estimated", String(creditsEst)],
-              ["L3 Requests", String(l3Q)],
-              ["L4 Requests", String(l4Q)],
-              ["Avg Feedback", avgFeedback],
-            ]}
-          />
-        </Card>
-        <Card>
-          <CardTitle>Credits by Complexity</CardTitle>
-          <SimpleTable
-            headers={["Level", "Queries", "Est. Credits"]}
-            rows={rows.map(([label, q, c]) => [label, String(q), String(c)])}
-          />
-        </Card>
-      </div>
+      <Card>
+        <CardTitle>Module Activity (MMD) — raw figures</CardTitle>
+        <SimpleTable
+          cols={[
+            { key: "metric", label: "Metric" },
+            { key: "value", label: "Value", numeric: true },
+          ]}
+          rows={[
+            { metric: "MMD subscribers", value: fmtNum(mmd.subscribers) },
+            { metric: "Total time (mins)", value: fmtNum(Math.round(mmd.total_time_mins)) },
+            { metric: "Avg time per user (mins)", value: mmd.avg_time_per_user_mins.toFixed(1) },
+            { metric: "Unique categories viewed", value: fmtNum(mmd.unique_categories_viewed) },
+            { metric: "Avg categories per user", value: mmd.avg_categories_per_user.toFixed(1) },
+          ]}
+        />
+      </Card>
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <KpiTile label="MMD Subscribers" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
+        <KpiTile
+          label="Total Time (m)"
+          value={fmtNum(Math.round(mmd.total_time_mins))}
+          accent={PALETTE.aqua}
+        />
+        <KpiTile
+          label="Avg Time / User"
+          value={mmd.avg_time_per_user_mins.toFixed(1)}
+          accent={PALETTE.fuscia}
+        />
+        <KpiTile
+          label="Unique Categories"
+          value={fmtNum(mmd.unique_categories_viewed)}
+          accent={PALETTE.bumblebee}
+        />
+        <KpiTile label="Avg Cats / User" value={mmd.avg_categories_per_user.toFixed(1)} />
+      </div>
       <Card>
-        <CardTitle>Estimated Credits by Level</CardTitle>
+        <CardTitle>MMD activity — monthly</CardTitle>
+        {mmd.monthly_trend.length === 0 ? (
+          <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
+        ) : (
+          <LineChart
+            labels={mmd.monthly_trend.map((m) => m.month)}
+            values={mmd.monthly_trend.map((m) => m.visits)}
+            color={PALETTE.indigo}
+          />
+        )}
+      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card>
+          <CardTitle>Grades viewed</CardTitle>
+          <BarChart rows={barRows(mmd.grades_viewed)} />
+        </Card>
+        <Card>
+          <CardTitle>Regions viewed</CardTitle>
+          <BarChart rows={barRows(mmd.regions_viewed)} />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function CWSection({ data: cw, mode }: { data: CategoryWatch; mode: Mode }) {
+  // Category Intelligence — most KPIs are NA pills today.
+  void mode; // numbers/charts not differentiated for NA-heavy view
+  const ci = cw.category_intelligence;
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardTitle>Category Intelligence — data-pipeline status</CardTitle>
+        <div className="text-[11px] text-text-muted mb-3">
+          Most KPIs in this section need DBA grants on
+          <code className="mx-1">stg_user_cat_sup_report</code>
+          and the <code>stg_category*_reporttype</code> family. Surfaced below
+          for transparency.
+        </div>
+        <ul className="space-y-1.5 text-[11px]">
+          {Object.entries(ci).map(([k, v]) => (
+            <li key={k} className="flex items-start gap-2">
+              <span className="font-medium text-text-secondary flex-1">
+                {k.replace(/_/g, " ")}
+              </span>
+              {typeof v === "number" ? (
+                <span className="font-semibold tabular-nums">{fmtNum(v)}</span>
+              ) : isUnavailable(v) ? (
+                <NaPill reason={v.reason} />
+              ) : (
+                <span className="text-text-muted">—</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function AbiSection({ data: a, mode }: { data: Abi; mode: Mode }) {
+  if (mode === "numbers") {
+    return (
+      <Card>
+        <CardTitle>Abi Intelligence — raw figures</CardTitle>
+        <SimpleTable
+          cols={[
+            { key: "metric", label: "Metric" },
+            { key: "value", label: "Value", numeric: true },
+          ]}
+          rows={[
+            { metric: "Total queries", value: fmtNum(a.total_queries) },
+            { metric: "Unique users", value: fmtNum(a.unique_users) },
+            { metric: "Bot resolution %", value: `${a.bot_resolution_pct}%` },
+            { metric: "Repeat users %", value: `${a.repeat_users_pct}%` },
+            { metric: "Avg feedback (1-5)", value: a.avg_feedback == null ? "—" : a.avg_feedback.toFixed(2) },
+            { metric: "Thumbs-up %", value: a.thumbs_up_pct == null ? "—" : `${a.thumbs_up_pct}%` },
+          ]}
+        />
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total Queries" value={fmtNum(a.total_queries)} accent={PALETTE.indigo} />
+        <KpiTile label="Unique Users" value={fmtNum(a.unique_users)} accent={PALETTE.aqua} />
+        <KpiTile label="Bot Resolution" value={`${a.bot_resolution_pct}%`} accent={PALETTE.fuscia} />
+        <KpiTile label="Repeat Users" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card>
+          <CardTitle>Queries by complexity</CardTitle>
+          <DonutChart slices={a.by_complexity.map((c) => ({ label: c.label, value: c.count }))} />
+        </Card>
+        <Card>
+          <CardTitle>Query status</CardTitle>
+          <DonutChart slices={a.by_status.map((c) => ({ label: c.label, value: c.count }))} />
+        </Card>
+        <Card>
+          <CardTitle>Top deliverable</CardTitle>
+          <BarChart rows={barRows(a.top_deliverable)} />
+        </Card>
+        <Card>
+          <CardTitle>Query channel</CardTitle>
+          <BarChart rows={barRows(a.by_source)} />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function SDSection({ data: s, mode }: { data: SupplierDiscovery; mode: Mode }) {
+  if (mode === "numbers") {
+    return (
+      <Card>
+        <CardTitle>Supplier Discovery — raw figures</CardTitle>
+        <SimpleTable
+          cols={[{ key: "metric", label: "Metric" }, { key: "value", label: "Value", numeric: true }]}
+          rows={[
+            { metric: "Users", value: fmtNum(s.users) },
+            { metric: "Total searches", value: fmtNum(s.total_searches) },
+            { metric: "Total visits", value: fmtNum(s.total_visits) },
+            { metric: "Total time (mins)", value: fmtNum(Math.round(s.total_time_mins)) },
+            { metric: "Avg searches per user", value: s.avg_searches_per_user.toFixed(1) },
+            { metric: "Repeat users %", value: `${s.repeat_users_pct}%` },
+          ]}
+        />
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
+        <KpiTile label="Total Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
+        <KpiTile label="Total Visits" value={fmtNum(s.total_visits)} accent={PALETTE.fuscia} />
+        <KpiTile
+          label="Total Time (m)"
+          value={fmtNum(Math.round(s.total_time_mins))}
+          accent={PALETTE.bumblebee}
+        />
+      </div>
+      <Card>
+        <CardTitle>Top categories searched</CardTitle>
+        <BarChart rows={barRows(s.top_categories_searched)} />
+      </Card>
+    </div>
+  );
+}
+
+function SRMSection({ data: s, mode }: { data: SupplierMonitoring; mode: Mode }) {
+  void mode;
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardTitle>Supplier Monitoring Risk — data-pipeline status</CardTitle>
+        <div className="text-[11px] text-text-muted mb-3">
+          Most KPIs require <code>stg_user_cat_sup_report</code> — pending DBA grant.
+          Time-on-module is available via session_log filter.
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+          <KpiTile
+            label="SM Time (mins)"
+            value={fmtNum(Math.round(s.total_time_mins))}
+            accent={PALETTE.indigo}
+          />
+          {maybeKpi("Suppliers Monitored", s.suppliers_monitored)}
+          {maybeKpi("New This Period", s.new_suppliers_in_period)}
+          {maybeKpi("Users Adding", s.users_adding_suppliers)}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {maybeKpi("Data Refreshes 30d", s.data_refreshes_last_30d)}
+          {maybeKpi("Added vs Contracted %", s.suppliers_added_vs_contracted_pct)}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function CCSection({ data: c, mode }: { data: CustomUsage; mode: Mode }) {
+  const cbc = c.credits_by_complexity;
+  if (mode === "numbers") {
+    return (
+      <Card>
+        <CardTitle>Custom Credits — raw figures</CardTitle>
+        {c.credits_by_complexity_note && (
+          <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5 mb-2">
+            ⚠ {c.credits_by_complexity_note}
+          </div>
+        )}
+        <SimpleTable
+          cols={[{ key: "metric", label: "Metric" }, { key: "value", label: "Value", numeric: true }]}
+          rows={[
+            { metric: "L1", value: fmtNum(cbc.L1) },
+            { metric: "L2", value: fmtNum(cbc.L2) },
+            { metric: "L3", value: fmtNum(cbc.L3) },
+            { metric: "L4", value: fmtNum(cbc.L4) },
+            { metric: "Total (proxy)", value: fmtNum(c.total_credits_used) },
+            { metric: "Commodity dashboards", value: fmtNum(c.commodity_dashboards) },
+            { metric: "Country reports", value: fmtNum(c.country_reports) },
+            {
+              metric: "Client feedback",
+              value: c.client_feedback_score == null ? "—" : c.client_feedback_score.toFixed(2),
+            },
+          ]}
+        />
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {c.credits_by_complexity_note && (
+        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+          ⚠ {c.credits_by_complexity_note}
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total (proxy)" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
+        <KpiTile label="L1" value={fmtNum(cbc.L1)} accent={PALETTE.aqua} />
+        <KpiTile label="L2" value={fmtNum(cbc.L2)} accent={PALETTE.fuscia} />
+        <KpiTile label="L3+L4" value={fmtNum(cbc.L3 + cbc.L4)} accent={PALETTE.bumblebee} />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card>
+          <CardTitle>AI SWAT vs Basics</CardTitle>
+          <DonutChart
+            slices={c.ai_swat_vs_basics.map((r) => ({ label: r.label, value: r.count }))}
+          />
+        </Card>
+        <Card>
+          <CardTitle>Top deliverables</CardTitle>
+          <BarChart rows={barRows(c.top_deliverables)} />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function SUSection({ data: su, mode }: { data: SuperUsersBundle; mode: Mode }) {
+  if (mode === "numbers") {
+    return (
+      <Card>
+        <CardTitle>Super Users — top {su.top_n}</CardTitle>
+        <SimpleTable
+          cols={[
+            { key: "email", label: "User" },
+            { key: "score", label: "Score", numeric: true },
+            { key: "logins", label: "Logins", numeric: true },
+            { key: "queries", label: "Abi", numeric: true },
+            { key: "searches", label: "SD", numeric: true },
+            { key: "mmd_time", label: "MMD m", numeric: true },
+            { key: "downloads", label: "Downloads", numeric: true },
+            { key: "last_login", label: "Last login" },
+          ]}
+          rows={su.users.map((u) => ({
+            email: u.email,
+            score: u.activity_score,
+            logins: u.logins,
+            queries: u.abi_queries,
+            searches: u.sd_searches,
+            mmd_time: u.mmd_time_mins,
+            downloads: u.report_downloads,
+            last_login: fmtDate(u.last_login),
+          }))}
+        />
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardTitle>Login distribution (top 5)</CardTitle>
         <BarChart
-          rows={rows.map(([label, , credits, col]) => ({
-            label,
-            value: credits,
-            color: col,
+          rows={su.login_distribution_top5.map((u, i) => ({
+            label: u.email,
+            value: u.logins,
+            color: SERIES_COLORS[i % SERIES_COLORS.length],
           }))}
         />
       </Card>
       <Card>
-        <CardTitle>Total Credits Estimated</CardTitle>
-        <div className="text-center py-10">
-          <div className="text-[48px] font-extrabold text-beroe-teal">
-            {creditsEst}
-          </div>
-          <div className="text-[12px] text-text-muted mt-2">
-            Across {totalQ} Abi queries this period
-          </div>
-        </div>
+        <CardTitle>Activity score (top {Math.min(10, su.users.length)})</CardTitle>
+        <BarChart
+          rows={su.users.slice(0, 10).map((u, i) => ({
+            label: u.email,
+            value: u.activity_score,
+            color: SERIES_COLORS[i % SERIES_COLORS.length],
+          }))}
+        />
       </Card>
-    </div>
-  );
-}
-
-// ============================================================
-// Super Users
-// ============================================================
-
-function SUSection({ data, scale }: { data: PlatformIntel; scale: number }) {
-  const users = data.super_users.map((u) => ({
-    ...u,
-    logins: scaleInt(u.logins, scale),
-    cw_views: scaleInt(u.cw_views, scale),
-    abi_queries: scaleInt(u.abi_queries, scale),
-    sd_searches: scaleInt(u.sd_searches, scale),
-    hours: scaleInt(u.hours, scale),
-  }));
-  if (users.length === 0) {
-    return (
-      <Card>
-        <div className="text-center py-8 text-text-muted text-[13px]">
-          No super-user data recorded.
-        </div>
-      </Card>
-    );
-  }
-  return (
-    <Card>
-      <CardTitle>Super Users — top platform power-users</CardTitle>
-      <SimpleTable
-        headers={[
-          "User",
-          "Logins",
-          "CW Views",
-          "Abi Queries",
-          "SD Searches",
-          "Hours",
-        ]}
-        rows={users.map((u) => [
-          <div key={u.name}>
-            <div className="font-semibold">{u.name}</div>
-            {u.role && (
-              <div className="text-[10px] text-text-muted">{u.role}</div>
-            )}
-          </div>,
-          String(u.logins),
-          String(u.cw_views),
-          String(u.abi_queries),
-          String(u.sd_searches),
-          String(u.hours),
-        ])}
-      />
-    </Card>
-  );
-}
-
-// ============================================================
-// Inline SVG charts (zero-dependency)
-// ============================================================
-
-function LineChart({
-  labels,
-  values,
-  color,
-}: {
-  labels: string[];
-  values: number[];
-  color: string;
-}) {
-  const W = 280;
-  const H = 160;
-  const padding = { top: 10, right: 6, bottom: 22, left: 28 };
-  const innerW = W - padding.left - padding.right;
-  const innerH = H - padding.top - padding.bottom;
-  const max = Math.max(...values, 1);
-  const stepX = values.length > 1 ? innerW / (values.length - 1) : 0;
-  const pts = values.map((v, i) => {
-    const x = padding.left + i * stepX;
-    const y = padding.top + innerH - (v / max) * innerH;
-    return { x, y };
-  });
-  const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const area = `${path} L ${pts[pts.length - 1]?.x ?? 0} ${padding.top + innerH} L ${pts[0]?.x ?? 0} ${padding.top + innerH} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      <path d={area} fill={color} opacity={0.12} />
-      <path d={path} fill="none" stroke={color} strokeWidth={2} />
-      {pts.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={color} />
-      ))}
-      {labels.map((l, i) => (
-        <text
-          key={i}
-          x={padding.left + i * stepX}
-          y={H - 6}
-          fontSize={8}
-          textAnchor="middle"
-          fill="#64748b"
-        >
-          {l}
-        </text>
-      ))}
-      <text x={4} y={padding.top + 8} fontSize={8} fill="#64748b">
-        {max}
-      </text>
-      <text x={4} y={padding.top + innerH} fontSize={8} fill="#64748b">
-        0
-      </text>
-    </svg>
-  );
-}
-
-function MultiLineChart({
-  labels,
-  series,
-}: {
-  labels: string[];
-  series: Array<{ label: string; color: string; values: number[] }>;
-}) {
-  const W = 320;
-  const H = 200;
-  const padding = { top: 12, right: 6, bottom: 36, left: 28 };
-  const innerW = W - padding.left - padding.right;
-  const innerH = H - padding.top - padding.bottom;
-  const allVals = series.flatMap((s) => s.values);
-  const max = Math.max(...allVals, 1);
-  const len = Math.max(...series.map((s) => s.values.length), 1);
-  const stepX = len > 1 ? innerW / (len - 1) : 0;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      {series.map((s, si) => {
-        const pts = s.values.map((v, i) => {
-          const x = padding.left + i * stepX;
-          const y = padding.top + innerH - (v / max) * innerH;
-          return { x, y };
-        });
-        const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-        return (
-          <path
-            key={si}
-            d={path}
-            fill="none"
-            stroke={s.color}
-            strokeWidth={1.5}
-          />
-        );
-      })}
-      {labels.map((l, i) => (
-        <text
-          key={i}
-          x={padding.left + i * stepX}
-          y={H - 22}
-          fontSize={7}
-          textAnchor="middle"
-          fill="#64748b"
-        >
-          {l}
-        </text>
-      ))}
-      <text x={4} y={padding.top + 8} fontSize={8} fill="#64748b">
-        {max}
-      </text>
-      {/* Legend */}
-      {series.map((s, i) => (
-        <g key={i} transform={`translate(${padding.left + i * 60}, ${H - 8})`}>
-          <rect width={8} height={8} fill={s.color} />
-          <text x={12} y={7} fontSize={8} fill="#64748b">
-            {s.label.slice(0, 8)}
-          </text>
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-function BarChart({
-  rows,
-}: {
-  rows: Array<{ label: string; value: number; color: string }>;
-}) {
-  const max = Math.max(...rows.map((r) => r.value), 1);
-  return (
-    <div className="space-y-1.5">
-      {rows.map((r, i) => {
-        const pct = Math.max(2, Math.round((r.value / max) * 100));
-        return (
-          <div key={i}>
-            <div className="flex items-center justify-between text-[11px] mb-0.5">
-              <span className="font-medium">{r.label}</span>
-              <span className="font-semibold">{r.value}</span>
-            </div>
-            <div className="h-2.5 bg-beroe-bg rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${pct}%`, background: r.color }}
-              />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function DonutChart({
-  slices,
-}: {
-  slices: Array<{ label: string; value: number; color: string }>;
-}) {
-  const total = slices.reduce((s, x) => s + x.value, 0) || 1;
-  const size = 160;
-  const r = 60;
-  const cx = size / 2;
-  const cy = size / 2;
-  let acc = 0;
-  return (
-    <div className="flex items-center gap-4">
-      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-        {slices.map((sl, i) => {
-          const startAngle = (acc / total) * Math.PI * 2 - Math.PI / 2;
-          acc += sl.value;
-          const endAngle = (acc / total) * Math.PI * 2 - Math.PI / 2;
-          const x1 = cx + r * Math.cos(startAngle);
-          const y1 = cy + r * Math.sin(startAngle);
-          const x2 = cx + r * Math.cos(endAngle);
-          const y2 = cy + r * Math.sin(endAngle);
-          const large = endAngle - startAngle > Math.PI ? 1 : 0;
-          // Skip 0-value slices.
-          if (sl.value === 0) return null;
-          return (
-            <path
-              key={i}
-              d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`}
-              fill={sl.color}
-            />
-          );
-        })}
-        <circle cx={cx} cy={cy} r={36} fill="#fff" />
-        <text
-          x={cx}
-          y={cy + 4}
-          fontSize={14}
-          textAnchor="middle"
-          fontWeight="bold"
-          fill="#0d1b2e"
-        >
-          {total}
-        </text>
-      </svg>
-      <div className="space-y-1 text-[11px]">
-        {slices.map((sl) => (
-          <div key={sl.label} className="flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-sm"
-              style={{ background: sl.color }}
-            />
-            <span>{sl.label}</span>
-            <span className="font-semibold ml-1">{sl.value}</span>
-            <span className="text-text-muted">
-              ({total > 0 ? Math.round((sl.value / total) * 100) : 0}%)
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Shared primitives
-// ============================================================
-
-function Card({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "bg-white border border-beroe-card-border rounded-card p-4",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function CardTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[13px] font-bold text-text-primary mb-2.5">{children}</div>
-  );
-}
-
-function SimpleTable({
-  headers,
-  rows,
-  compact = false,
-}: {
-  headers: string[];
-  rows: Array<Array<React.ReactNode | string>>;
-  compact?: boolean;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[11px]">
-        <thead>
-          <tr className="text-[9px] uppercase tracking-wider text-text-muted text-left border-b border-beroe-card-border">
-            {headers.map((h, i) => (
-              <th
-                key={i}
-                className={cn("px-2 font-semibold", compact ? "py-1" : "py-2")}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr
-              key={i}
-              className="border-b border-beroe-card-border/40 last:border-b-0"
-            >
-              {row.map((cell, j) => (
-                <td
-                  key={j}
-                  className={cn(
-                    "px-2",
-                    compact ? "py-0.5" : "py-1.5",
-                    j === 0 ? "font-medium" : "",
-                  )}
-                >
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
