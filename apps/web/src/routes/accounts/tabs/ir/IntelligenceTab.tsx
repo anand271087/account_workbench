@@ -1,8 +1,10 @@
-// 05-Jun · Intelligence dashboard — live Redshift data via /intel/all.
+// 05-Jun · Intelligence dashboard — lazy-loaded per sub-tab.
 //
-// One sub-tab per Analytics_DataPoints_v10.xlsx section. Each renders
-// KPI tiles + charts (bar / line / donut / table). KPIs the reader role
-// can't fetch surface as 'data pipeline pending' pills via NaPill.
+// Each sub-tab fetches only its bundle. /intel/all (the full rollup) is
+// avoided because it's sequential server-side (17×5-25s each) and the
+// user only looks at one sub-tab at a time. With per-bundle fetching:
+// active tab loads 5-25s cold, then instant on revisit (TanStack Query
+// + 5-min server cache).
 //
 // All colors locked to the Beroe brand palette (charts.tsx).
 
@@ -10,8 +12,21 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { useAccountFromLayout, useAccountPeriod } from "../../AccountProfileLayout";
-import { useIntelAll } from "@/hooks/useIntelAll";
-import type { IntelAll, LabelCount, Maybe } from "@/types/intel";
+import { useIntelBundle, type IntelSection } from "@/hooks/useIntelAll";
+import type {
+  AccountSubscribers,
+  Abi,
+  CategoryWatch,
+  CustomUsage,
+  InflationWatch,
+  LabelCount,
+  Maybe,
+  Alerts as AlertsBundle,
+  SupplierDiscovery,
+  SupplierMonitoring,
+  SuperUsersBundle,
+  ThoughtLeadership,
+} from "@/types/intel";
 import { isUnavailable } from "@/types/intel";
 import {
   Card,
@@ -26,29 +41,22 @@ import {
   SimpleTable,
 } from "./charts";
 
-type SubTab =
-  | "subscribers"
-  | "abi"
-  | "supplier_discovery"
-  | "supplier_monitoring"
-  | "category_watch"
-  | "custom_usage"
-  | "inflation_watch"
-  | "thought_leadership"
-  | "alerts"
-  | "super_users";
+interface SubMeta {
+  id: IntelSection;
+  label: string;
+}
 
-const SUB_TABS: Array<{ id: SubTab; label: string }> = [
-  { id: "subscribers", label: "Account & Subscribers" },
-  { id: "category_watch", label: "Category Watch + MMD" },
+const SUB_TABS: SubMeta[] = [
+  { id: "account-subscribers", label: "Account & Subscribers" },
+  { id: "category-watch", label: "Category Watch + MMD" },
   { id: "abi", label: "Abi" },
-  { id: "supplier_discovery", label: "Supplier Discovery" },
-  { id: "supplier_monitoring", label: "Supplier Monitoring" },
-  { id: "custom_usage", label: "Custom Usage" },
-  { id: "thought_leadership", label: "Thought Leadership" },
-  { id: "inflation_watch", label: "Inflation Watch" },
+  { id: "supplier-discovery", label: "Supplier Discovery" },
+  { id: "supplier-monitoring", label: "Supplier Monitoring" },
+  { id: "custom-usage", label: "Custom Usage" },
+  { id: "thought-leadership", label: "Thought Leadership" },
+  { id: "inflation-watch", label: "Inflation Watch" },
   { id: "alerts", label: "Alerts" },
-  { id: "super_users", label: "Super Users" },
+  { id: "super-users", label: "Super Users" },
 ];
 
 // ---------- helpers ----------
@@ -94,9 +102,7 @@ function barRows(items: LabelCount[]): Array<{ label: string; value: number; col
 export default function IntelligenceTab() {
   const account = useAccountFromLayout();
   const { period } = useAccountPeriod();
-  const [sub, setSub] = useState<SubTab>("subscribers");
-
-  const { data, isLoading, isError, error } = useIntelAll(account.id, period);
+  const [sub, setSub] = useState<IntelSection>("account-subscribers");
 
   return (
     <div>
@@ -112,9 +118,9 @@ export default function IntelligenceTab() {
         <div className="text-[11px] text-text-secondary flex-1">
           Pulled from Redshift —{" "}
           <span className="font-semibold">
-            {data?.redshift_company_name ?? account.redshift_company_name ?? account.name}
+            {account.redshift_company_name ?? account.name}
           </span>{" "}
-          · window: <span className="font-semibold">{period}</span> · cached 5 min
+          · window: <span className="font-semibold">{period ?? "90d"}</span> · cached 5 min
         </div>
       </div>
 
@@ -136,54 +142,131 @@ export default function IntelligenceTab() {
         ))}
       </div>
 
-      {isLoading ? (
-        <Card>
-          <div className="text-[12px] text-text-muted py-8 text-center">
-            Loading live telemetry…
-          </div>
-        </Card>
-      ) : isError ? (
-        <Card>
-          <div className="text-[13px] font-semibold mb-1 text-risk-red">
-            Couldn't load Intelligence
-          </div>
-          <div className="text-[11px] text-text-secondary">
-            {(error as { status?: number; message?: string })?.status === 409
-              ? "This account isn't mapped to a Redshift companyname yet. Set accounts.redshift_company_name to enable live data."
-              : ((error as { message?: string })?.message ?? "Unknown error")}
-          </div>
-        </Card>
-      ) : !data ? null : sub === "subscribers" ? (
-        <SubscribersDash data={data} />
-      ) : sub === "category_watch" ? (
-        <CategoryWatchDash data={data} />
-      ) : sub === "abi" ? (
-        <AbiDash data={data} />
-      ) : sub === "supplier_discovery" ? (
-        <SupplierDiscoveryDash data={data} />
-      ) : sub === "supplier_monitoring" ? (
-        <SupplierMonitoringDash data={data} />
-      ) : sub === "custom_usage" ? (
-        <CustomUsageDash data={data} />
-      ) : sub === "thought_leadership" ? (
-        <ThoughtLeadershipDash data={data} />
-      ) : sub === "inflation_watch" ? (
-        <InflationWatchDash data={data} />
-      ) : sub === "alerts" ? (
-        <AlertsDash data={data} />
-      ) : (
-        <SuperUsersDash data={data} />
-      )}
+      <SubLoader accountId={account.id} period={period} section={sub} />
     </div>
   );
 }
 
+// Lazy loader — fetches only the active section's bundle.
+function SubLoader({
+  accountId,
+  period,
+  section,
+}: {
+  accountId: string;
+  period: ReturnType<typeof useAccountPeriod>["period"];
+  section: IntelSection;
+}) {
+  // useIntelBundle re-keys on (accountId, section, window). React renders
+  // a single SubLoader at any time; switching tabs unmounts the prior one.
+  switch (section) {
+    case "account-subscribers":
+      return <FetchAndRender<AccountSubscribers>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <SubscribersDash data={d} />}
+      />;
+    case "category-watch":
+      return <FetchAndRender<CategoryWatch>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <CategoryWatchDash data={d} />}
+      />;
+    case "abi":
+      return <FetchAndRender<Abi>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <AbiDash data={d} />}
+      />;
+    case "supplier-discovery":
+      return <FetchAndRender<SupplierDiscovery>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <SupplierDiscoveryDash data={d} />}
+      />;
+    case "supplier-monitoring":
+      return <FetchAndRender<SupplierMonitoring>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <SupplierMonitoringDash data={d} />}
+      />;
+    case "custom-usage":
+      return <FetchAndRender<CustomUsage>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <CustomUsageDash data={d} />}
+      />;
+    case "thought-leadership":
+      return <FetchAndRender<ThoughtLeadership>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <ThoughtLeadershipDash data={d} />}
+      />;
+    case "inflation-watch":
+      return <FetchAndRender<InflationWatch>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <InflationWatchDash data={d} />}
+      />;
+    case "alerts":
+      return <FetchAndRender<AlertsBundle>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <AlertsDash data={d} />}
+      />;
+    case "super-users":
+      return <FetchAndRender<SuperUsersBundle>
+        accountId={accountId} period={period} section={section}
+        render={(d) => <SuperUsersDash data={d} />}
+      />;
+  }
+}
+
+function FetchAndRender<T>({
+  accountId,
+  period,
+  section,
+  render,
+}: {
+  accountId: string;
+  period: ReturnType<typeof useAccountPeriod>["period"];
+  section: IntelSection;
+  render: (data: T) => React.ReactNode;
+}) {
+  const { data, isLoading, isError, error } = useIntelBundle<T>(
+    accountId,
+    period,
+    section,
+  );
+
+  if (isLoading) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2 text-[12px] text-text-muted py-8 justify-center">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
+          </span>
+          Querying Redshift… (cold queries take 5–25s)
+        </div>
+      </Card>
+    );
+  }
+  if (isError) {
+    const status = (error as { status?: number } | null)?.status;
+    return (
+      <Card>
+        <div className="text-[13px] font-semibold mb-1 text-risk-red">
+          Couldn't load this section
+        </div>
+        <div className="text-[11px] text-text-secondary">
+          {status === 409
+            ? "This account isn't mapped to a Redshift companyname yet. Set accounts.redshift_company_name to enable live data."
+            : (error as { message?: string })?.message ?? "Unknown error"}
+        </div>
+      </Card>
+    );
+  }
+  if (!data) return null;
+  return <>{render(data)}</>;
+}
+
 // ============================================================
-// Sub-dashes
+// Sub-dashes — each takes ONLY its own bundle
 // ============================================================
 
-function SubscribersDash({ data }: { data: IntelAll }) {
-  const a = data.account_subscribers;
+function SubscribersDash({ data: a }: { data: AccountSubscribers }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -227,8 +310,7 @@ function SubscribersDash({ data }: { data: IntelAll }) {
   );
 }
 
-function CategoryWatchDash({ data }: { data: IntelAll }) {
-  const cw = data.category_watch;
+function CategoryWatchDash({ data: cw }: { data: CategoryWatch }) {
   const mmd = cw.mmd;
   return (
     <div className="space-y-3">
@@ -285,8 +367,7 @@ function CategoryWatchDash({ data }: { data: IntelAll }) {
   );
 }
 
-function AbiDash({ data }: { data: IntelAll }) {
-  const a = data.abi;
+function AbiDash({ data: a }: { data: Abi }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -373,8 +454,7 @@ function AbiDash({ data }: { data: IntelAll }) {
   );
 }
 
-function SupplierDiscoveryDash({ data }: { data: IntelAll }) {
-  const s = data.supplier_discovery;
+function SupplierDiscoveryDash({ data: s }: { data: SupplierDiscovery }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -410,8 +490,7 @@ function SupplierDiscoveryDash({ data }: { data: IntelAll }) {
   );
 }
 
-function SupplierMonitoringDash({ data }: { data: IntelAll }) {
-  const s = data.supplier_monitoring;
+function SupplierMonitoringDash({ data: s }: { data: SupplierMonitoring }) {
   return (
     <div className="space-y-3">
       <div className="text-[11px] text-text-muted">
@@ -436,8 +515,7 @@ function SupplierMonitoringDash({ data }: { data: IntelAll }) {
   );
 }
 
-function CustomUsageDash({ data }: { data: IntelAll }) {
-  const c = data.custom_usage;
+function CustomUsageDash({ data: c }: { data: CustomUsage }) {
   const cbc = c.credits_by_complexity;
   return (
     <div className="space-y-3">
@@ -489,8 +567,7 @@ function CustomUsageDash({ data }: { data: IntelAll }) {
   );
 }
 
-function ThoughtLeadershipDash({ data }: { data: IntelAll }) {
-  const t = data.thought_leadership;
+function ThoughtLeadershipDash({ data: t }: { data: ThoughtLeadership }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -515,8 +592,7 @@ function ThoughtLeadershipDash({ data }: { data: IntelAll }) {
   );
 }
 
-function InflationWatchDash({ data }: { data: IntelAll }) {
-  const iw = data.inflation_watch;
+function InflationWatchDash({ data: iw }: { data: InflationWatch }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -572,8 +648,7 @@ function InflationWatchDash({ data }: { data: IntelAll }) {
   );
 }
 
-function AlertsDash({ data }: { data: IntelAll }) {
-  const al = data.alerts;
+function AlertsDash({ data: al }: { data: AlertsBundle }) {
   return (
     <div className="space-y-3">
       <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
@@ -603,8 +678,7 @@ function AlertsDash({ data }: { data: IntelAll }) {
   );
 }
 
-function SuperUsersDash({ data }: { data: IntelAll }) {
-  const su = data.super_users;
+function SuperUsersDash({ data: su }: { data: SuperUsersBundle }) {
   return (
     <div className="space-y-3">
       <Card>

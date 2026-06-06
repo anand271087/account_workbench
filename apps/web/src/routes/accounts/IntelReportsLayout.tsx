@@ -7,10 +7,9 @@
 //
 // Cyan theme matches the prototype (#35E1D4).
 
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
-import { useAccountFromLayout } from "./AccountProfileLayout";
 
 interface IRSub {
   to: string;
@@ -24,7 +23,12 @@ const IR_SUB_NAV: IRSub[] = [
 ];
 
 export default function IntelReportsLayout() {
-  const account = useAccountFromLayout();
+  // 05-Jun bug — re-pass the FULL parent outlet context (account + period)
+  // so leaf tabs that call useAccountPeriod() get a defined period instead
+  // of undefined → `?window=undefined` 422 from /intel/all. Same fix is
+  // needed in the other group layouts (AccountKit / Growth / SuccessMgmt)
+  // when their leaves start consuming the period.
+  const ctx = useOutletContext<Record<string, unknown>>();
   const nav = useNavigate();
   const loc = useLocation();
 
@@ -56,7 +60,7 @@ export default function IntelReportsLayout() {
         ))}
       </div>
 
-      <Outlet context={{ account }} />
+      <Outlet context={ctx} />
     </div>
   );
 }

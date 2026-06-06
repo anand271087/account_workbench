@@ -224,7 +224,13 @@ export interface IntelAll {
 
 // Period → window adapter used by every hook.
 // Account header trio uses "30d" | "90d" | "FY"; backend expects
-// "30d" | "90d" | "fy" | "all".
-export function periodToWindow(p: "30d" | "90d" | "FY"): "30d" | "90d" | "fy" {
+// "30d" | "90d" | "fy" | "all". `undefined` defends against outlet
+// contexts that don't propagate the period (group layouts that only
+// re-pass `{account}`); defaults to "90d" to match the period selector
+// default.
+export function periodToWindow(
+  p: "30d" | "90d" | "FY" | undefined,
+): "30d" | "90d" | "fy" {
+  if (!p) return "90d";
   return p === "FY" ? "fy" : p;
 }
