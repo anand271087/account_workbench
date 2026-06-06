@@ -460,6 +460,7 @@ async def get_account(
         headquarters=a.headquarters,
         annual_revenue_text=a.annual_revenue_text,
         sf_link=a.sf_link,
+        redshift_company_name=a.redshift_company_name,
         csm_user_id=a.csm_user_id, co_user_id=a.co_user_id,
         csm_full_name=row[1], co_full_name=row[4],
         category=a.category, tier=a.tier,

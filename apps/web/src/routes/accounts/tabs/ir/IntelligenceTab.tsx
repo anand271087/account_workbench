@@ -1,54 +1,124 @@
-// M29 — Intelligence & Reports · Intelligence section.
+// 05-Jun · Intelligence dashboard — live Redshift data via /intel/all.
 //
-// 6 sub-tabs (faithful port of prototype bIntel):
-//   Category Watch · Supplier Watch · Abi Engagement · Industry Benchmark
-//   · Engagement Metrics · NPS
+// One sub-tab per Analytics_DataPoints_v10.xlsx section. Each renders
+// KPI tiles + charts (bar / line / donut / table). KPIs the reader role
+// can't fetch surface as 'data pipeline pending' pills via NaPill.
+//
+// All colors locked to the Beroe brand palette (charts.tsx).
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 
-import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useAccountFromLayout } from "../../AccountProfileLayout";
+import { useAccountFromLayout, useAccountPeriod } from "../../AccountProfileLayout";
+import { useIntelAll } from "@/hooks/useIntelAll";
+import type { IntelAll, LabelCount, Maybe } from "@/types/intel";
+import { isUnavailable } from "@/types/intel";
 import {
-  HEAT_COLOR,
-  HEAT_ICON,
-  RISK_COLOR,
-  RISK_LABEL,
-  type PlatformIntel,
-  type SupplierRisk,
-} from "@/types/platform_intel";
+  Card,
+  CardTitle,
+  KpiTile,
+  BarChart,
+  DonutChart,
+  LineChart,
+  NaPill,
+  PALETTE,
+  SERIES_COLORS,
+  SimpleTable,
+} from "./charts";
 
 type SubTab =
-  | "category"
-  | "supplier"
+  | "subscribers"
   | "abi"
-  | "benchmark"
-  | "engagement"
-  | "nps";
+  | "supplier_discovery"
+  | "supplier_monitoring"
+  | "category_watch"
+  | "custom_usage"
+  | "inflation_watch"
+  | "thought_leadership"
+  | "alerts"
+  | "super_users";
 
 const SUB_TABS: Array<{ id: SubTab; label: string }> = [
-  { id: "category", label: "Category Watch" },
-  { id: "supplier", label: "Supplier Watch" },
-  { id: "abi", label: "Abi Engagement" },
-  { id: "benchmark", label: "Industry Benchmark" },
-  { id: "engagement", label: "Engagement Metrics" },
-  { id: "nps", label: "NPS" },
+  { id: "subscribers", label: "Account & Subscribers" },
+  { id: "category_watch", label: "Category Watch + MMD" },
+  { id: "abi", label: "Abi" },
+  { id: "supplier_discovery", label: "Supplier Discovery" },
+  { id: "supplier_monitoring", label: "Supplier Monitoring" },
+  { id: "custom_usage", label: "Custom Usage" },
+  { id: "thought_leadership", label: "Thought Leadership" },
+  { id: "inflation_watch", label: "Inflation Watch" },
+  { id: "alerts", label: "Alerts" },
+  { id: "super_users", label: "Super Users" },
 ];
+
+// ---------- helpers ----------
+
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(1)}k`;
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function maybeKpi(label: string, v: Maybe<number>, accent?: string) {
+  if (isUnavailable(v)) {
+    return <KpiTile label={label} value="" na={{ reason: v.reason }} accent={accent} />;
+  }
+  return <KpiTile label={label} value={fmtNum(v as number)} accent={accent} />;
+}
+
+function barRows(items: LabelCount[]): Array<{ label: string; value: number; color: string }> {
+  return items.slice(0, 10).map((r, i) => ({
+    label: r.label || "(blank)",
+    value: r.count,
+    color: SERIES_COLORS[i % SERIES_COLORS.length],
+  }));
+}
+
+// ============================================================
+// Top-level component
+// ============================================================
 
 export default function IntelligenceTab() {
   const account = useAccountFromLayout();
-  const [sub, setSub] = useState<SubTab>("category");
+  const { period } = useAccountPeriod();
+  const [sub, setSub] = useState<SubTab>("subscribers");
 
-  const { data, isLoading } = useQuery<PlatformIntel>({
-    queryKey: ["platform-intel", account.id],
-    queryFn: () =>
-      api.get<PlatformIntel>(`/api/v1/accounts/${account.id}/platform-intel`),
-  });
+  const { data, isLoading, isError, error } = useIntelAll(account.id, period);
 
   return (
     <div>
-      {/* Pill sub-tab strip */}
+      {/* Live banner */}
+      <div className="mb-3 flex items-center gap-3 px-3 py-2 rounded-md bg-beroe-teal/10 border border-beroe-teal/30">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-beroe-teal">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
+          </span>
+          LIVE
+        </span>
+        <div className="text-[11px] text-text-secondary flex-1">
+          Pulled from Redshift —{" "}
+          <span className="font-semibold">
+            {data?.redshift_company_name ?? account.redshift_company_name ?? account.name}
+          </span>{" "}
+          · window: <span className="font-semibold">{period}</span> · cached 5 min
+        </div>
+      </div>
+
+      {/* Sub-tab strip */}
       <div className="flex gap-1 mb-3 flex-wrap">
         {SUB_TABS.map((t) => (
           <button
@@ -57,7 +127,7 @@ export default function IntelligenceTab() {
             className={cn(
               "text-[12px] px-3 py-1.5 rounded-md border-[1.5px] transition-colors",
               sub === t.id
-                ? "border-beroe-teal/40 bg-beroe-teal/100/10 text-beroe-teal font-bold"
+                ? "border-beroe-teal/40 bg-beroe-teal/10 text-beroe-teal font-bold"
                 : "border-beroe-card-border bg-white text-text-secondary font-medium hover:bg-beroe-bg/60",
             )}
           >
@@ -66,589 +136,514 @@ export default function IntelligenceTab() {
         ))}
       </div>
 
-      {isLoading || !data ? (
+      {isLoading ? (
         <Card>
-          <div className="text-sm text-text-muted">Loading intelligence…</div>
-        </Card>
-      ) : !data.has_data ? (
-        <Card>
-          <div className="text-center py-12 text-text-muted">
-            <div className="text-[28px] mb-2">📡</div>
-            <div className="text-[13px] font-semibold">No platform data yet</div>
-            <div className="text-[11px] mt-1">
-              Once {account.name} starts using the Beroe platform, intelligence
-              will populate here automatically.
-            </div>
+          <div className="text-[12px] text-text-muted py-8 text-center">
+            Loading live telemetry…
           </div>
         </Card>
-      ) : sub === "category" ? (
-        <CategoryWatch data={data} />
-      ) : sub === "supplier" ? (
-        <SupplierWatch data={data} />
+      ) : isError ? (
+        <Card>
+          <div className="text-[13px] font-semibold mb-1 text-risk-red">
+            Couldn't load Intelligence
+          </div>
+          <div className="text-[11px] text-text-secondary">
+            {(error as { status?: number; message?: string })?.status === 409
+              ? "This account isn't mapped to a Redshift companyname yet. Set accounts.redshift_company_name to enable live data."
+              : ((error as { message?: string })?.message ?? "Unknown error")}
+          </div>
+        </Card>
+      ) : !data ? null : sub === "subscribers" ? (
+        <SubscribersDash data={data} />
+      ) : sub === "category_watch" ? (
+        <CategoryWatchDash data={data} />
       ) : sub === "abi" ? (
-        <AbiEngagement data={data} />
-      ) : sub === "benchmark" ? (
-        <IndustryBenchmark data={data} accountName={account.name} accountIndustry={account.industry} />
-      ) : sub === "engagement" ? (
-        <EngagementMetrics data={data} />
+        <AbiDash data={data} />
+      ) : sub === "supplier_discovery" ? (
+        <SupplierDiscoveryDash data={data} />
+      ) : sub === "supplier_monitoring" ? (
+        <SupplierMonitoringDash data={data} />
+      ) : sub === "custom_usage" ? (
+        <CustomUsageDash data={data} />
+      ) : sub === "thought_leadership" ? (
+        <ThoughtLeadershipDash data={data} />
+      ) : sub === "inflation_watch" ? (
+        <InflationWatchDash data={data} />
+      ) : sub === "alerts" ? (
+        <AlertsDash data={data} />
       ) : (
-        <Nps data={data} />
+        <SuperUsersDash data={data} />
       )}
     </div>
   );
 }
 
 // ============================================================
-// Sub-tab — Category Watch
+// Sub-dashes
 // ============================================================
 
-function CategoryWatch({ data }: { data: PlatformIntel }) {
-  const ci = data.cat_intel;
-  const sectionRows: Array<[string, number, string]> = [
-    ["Price Intelligence", ci.section_avg.price, "#4A00F8"],
-    ["Supplier Analysis", ci.section_avg.supplier, "#C344C7"],
-    ["Market Dynamics", ci.section_avg.market, "#35E1D4"],
-    ["Forecasts", ci.section_avg.forecast, "#6EC457"],
-    ["Risk & Alerts", ci.section_avg.risk, "#F0BC41"],
-  ];
-  const maxVisits = Math.max(...(ci.top_cats?.map((c) => c.visits) ?? [1]), 1);
-
+function SubscribersDash({ data }: { data: IntelAll }) {
+  const a = data.account_subscribers;
   return (
-    <Card>
-      <div className="text-[14px] font-bold mb-3">
-        Category Watch — Section-Level Analysis
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total Subscribers" value={fmtNum(a.total_subscribers)} accent={PALETTE.indigo} />
+        <KpiTile
+          label="Active (≥1 login)"
+          value={fmtNum(a.active_subscribers)}
+          sub={`${a.total_subscribers ? Math.round((a.active_subscribers / a.total_subscribers) * 100) : 0}% of total`}
+          accent={PALETTE.aqua}
+        />
+        <KpiTile label="Total Logins" value={fmtNum(a.total_logins)} accent={PALETTE.fuscia} />
+        <KpiTile
+          label="Total Time (mins)"
+          value={fmtNum(Math.round(a.total_time_spent_mins))}
+          accent={PALETTE.bumblebee}
+        />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        {/* Left: section avg */}
-        <div>
-          <SectionHeader>Avg time per section (min)</SectionHeader>
-          <div className="space-y-1.5 mt-2">
-            {sectionRows.map(([label, val, col]) => (
-              <div
-                key={label}
-                className="flex items-center justify-between text-[12px]"
-              >
-                <span className="flex items-center gap-2">
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ background: col }}
-                  />
-                  {label}
-                </span>
-                <b style={{ color: col }}>{val.toFixed(1)} min</b>
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* Right: category heat */}
-        <div>
-          <SectionHeader>Category activity + heat</SectionHeader>
-          <div className="space-y-2 mt-2">
-            {(ci.top_cats ?? []).map((cat) => {
-              const pct = Math.min(100, Math.round((cat.visits / maxVisits) * 100));
-              return (
-                <div key={cat.name}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[12px]">
-                      {HEAT_ICON[cat.heat]} <b>{cat.name}</b>
-                    </span>
-                    <span className="text-[11px] font-semibold">
-                      {cat.visits} visits
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-beroe-bg rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${pct}%`, background: HEAT_COLOR[cat.heat] }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <KpiTile label="Categories Unlocked" value={fmtNum(a.categories_unlocked)} />
+        {maybeKpi("Suppliers Added", a.suppliers_added)}
+        <KpiTile label="Last Login" value={fmtDate(a.company_last_login)} />
       </div>
-
-      {(ci.insights ?? []).length > 0 && (
-        <div className="mt-4">
-          <SectionHeader>Insights</SectionHeader>
-          <div className="space-y-1.5 mt-2">
-            {ci.insights.map((ins, i) => {
-              const tone =
-                ins.tone === "red"
-                  ? "bg-beroe-red/10 text-beroe-red border-beroe-red/30"
-                  : ins.tone === "warn"
-                    ? "bg-beroe-amber/15 text-beroe-amber border-beroe-amber/40"
-                    : "bg-beroe-green/15 text-beroe-green border-beroe-green/30";
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    "text-[12px] px-3 py-2 rounded-md border",
-                    tone,
-                  )}
-                >
-                  {ins.text}
-                </div>
-              );
-            })}
+      <Card>
+        <CardTitle>Subscription window</CardTitle>
+        <div className="grid grid-cols-2 gap-3 text-[12px]">
+          <div>
+            <div className="text-text-muted text-[10px] uppercase tracking-wider mb-1">
+              Start
+            </div>
+            <div className="font-semibold">{fmtDate(a.subscription_start)}</div>
+          </div>
+          <div>
+            <div className="text-text-muted text-[10px] uppercase tracking-wider mb-1">
+              End
+            </div>
+            <div className="font-semibold">{fmtDate(a.subscription_end)}</div>
           </div>
         </div>
-      )}
-    </Card>
+      </Card>
+    </div>
   );
 }
 
-// ============================================================
-// Sub-tab — Supplier Watch
-// ============================================================
-
-function SupplierWatch({ data }: { data: PlatformIntel }) {
-  const sw = data.supplier_watch;
-  const cards: Array<[string, number, string]> = [
-    ["Total Tracked", sw.tracked, "#4A00F8"],
-    ["High Risk", sw.by_risk.high, RISK_COLOR.high],
-    ["Med-High", sw.by_risk.med_high, RISK_COLOR.med_high],
-    ["Medium", sw.by_risk.med, RISK_COLOR.med],
-    ["Low Risk", sw.by_risk.low, RISK_COLOR.low],
-  ];
+function CategoryWatchDash({ data }: { data: IntelAll }) {
+  const cw = data.category_watch;
+  const mmd = cw.mmd;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-5 gap-2">
-        {cards.map(([label, val, col]) => (
-          <Kpi key={label} label={label} value={String(val)} color={col} />
-        ))}
+      <div className="text-[11px] text-text-muted">
+        Market Movement Dashboard (live) — Category Intelligence + Benchmarks
+        sections pending DBA grants on stg_user_cat_sup_report,
+        stg_categoryview_reporttype, stg_benchmark.
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <KpiTile label="MMD Subscribers" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
+        <KpiTile
+          label="Total Time (mins)"
+          value={fmtNum(Math.round(mmd.total_time_mins))}
+          accent={PALETTE.aqua}
+        />
+        <KpiTile
+          label="Avg Time / User"
+          value={`${mmd.avg_time_per_user_mins} m`}
+          accent={PALETTE.fuscia}
+        />
+        <KpiTile
+          label="Unique Categories"
+          value={fmtNum(mmd.unique_categories_viewed)}
+          accent={PALETTE.bumblebee}
+        />
+        <KpiTile
+          label="Avg Categories / User"
+          value={mmd.avg_categories_per_user.toFixed(1)}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card>
+          <CardTitle>Grades viewed</CardTitle>
+          <BarChart rows={barRows(mmd.grades_viewed)} />
+        </Card>
+        <Card>
+          <CardTitle>Regions viewed</CardTitle>
+          <BarChart rows={barRows(mmd.regions_viewed)} />
+        </Card>
       </div>
       <Card>
-        <div className="text-[13px] font-bold mb-3">Tracked Suppliers</div>
-        {sw.suppliers.length === 0 ? (
-          <div className="text-center py-5 text-text-muted text-[12px]">
-            No suppliers tracked yet
-          </div>
+        <CardTitle>MMD activity — monthly</CardTitle>
+        {mmd.monthly_trend.length === 0 ? (
+          <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
         ) : (
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-text-muted text-left border-b border-beroe-card-border">
-                <th className="py-2 px-2">Supplier</th>
-                <th className="py-2 px-2">Category</th>
-                <th className="py-2 px-2">Country</th>
-                <th className="py-2 px-2">Risk Level</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sw.suppliers.map((s, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-beroe-card-border/60 last:border-b-0"
-                >
-                  <td className="py-2 px-2 font-semibold">{s.name}</td>
-                  <td className="py-2 px-2">{s.cat ?? "—"}</td>
-                  <td className="py-2 px-2">{s.country ?? "—"}</td>
-                  <td className="py-2 px-2">
-                    <RiskPill risk={s.risk} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <LineChart
+            labels={mmd.monthly_trend.map((m) => m.month)}
+            values={mmd.monthly_trend.map((m) => m.visits)}
+            color={PALETTE.indigo}
+          />
         )}
       </Card>
     </div>
   );
 }
 
-function RiskPill({ risk }: { risk: SupplierRisk }) {
-  const col = RISK_COLOR[risk];
+function AbiDash({ data }: { data: IntelAll }) {
+  const a = data.abi;
   return (
-    <span
-      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-      style={{ background: col + "18", color: col }}
-    >
-      {RISK_LABEL[risk]}
-    </span>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total Queries" value={fmtNum(a.total_queries)} accent={PALETTE.indigo} />
+        <KpiTile label="Unique Users" value={fmtNum(a.unique_users)} accent={PALETTE.aqua} />
+        <KpiTile
+          label="Bot Resolution"
+          value={`${a.bot_resolution_pct}%`}
+          accent={PALETTE.fuscia}
+        />
+        <KpiTile
+          label="Repeat Users"
+          value={`${a.repeat_users_pct}%`}
+          accent={PALETTE.bumblebee}
+        />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
+        <KpiTile
+          label="Avg Feedback (1-5)"
+          value={a.avg_feedback == null ? "—" : a.avg_feedback.toFixed(2)}
+        />
+        <KpiTile
+          label="Thumbs-up %"
+          value={a.thumbs_up_pct == null ? "—" : `${a.thumbs_up_pct}%`}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card>
+          <CardTitle>Queries by complexity</CardTitle>
+          <DonutChart
+            slices={a.by_complexity.map((c) => ({ label: c.label, value: c.count }))}
+          />
+        </Card>
+        <Card>
+          <CardTitle>Query status</CardTitle>
+          <DonutChart
+            slices={a.by_status.map((c) => ({ label: c.label, value: c.count }))}
+          />
+        </Card>
+        <Card>
+          <CardTitle>Top deliverable</CardTitle>
+          <BarChart rows={barRows(a.top_deliverable)} />
+        </Card>
+        <Card>
+          <CardTitle>Query channel</CardTitle>
+          <BarChart rows={barRows(a.by_source)} />
+        </Card>
+        <Card>
+          <CardTitle>Top declined deliverable</CardTitle>
+          <BarChart rows={barRows(a.top_declined_deliverable)} />
+        </Card>
+        <Card>
+          <CardTitle>Research referral reasons</CardTitle>
+          <BarChart rows={barRows(a.research_referral_reasons)} />
+        </Card>
+        <Card>
+          <CardTitle>Top geographies</CardTitle>
+          <BarChart rows={barRows(a.top_geographies)} />
+        </Card>
+        <Card>
+          <CardTitle>Inside vs Outside Live.ai</CardTitle>
+          <DonutChart
+            slices={a.inside_vs_outside_split.map((c) => ({
+              label: c.label,
+              value: c.count,
+            }))}
+          />
+        </Card>
+      </div>
+      <Card>
+        <CardTitle>Time on Abi per user (top 50)</CardTitle>
+        <SimpleTable
+          cols={[
+            { key: "email", label: "User" },
+            { key: "hours", label: "Hours", numeric: true },
+          ]}
+          rows={a.time_per_user_top50.map((u) => ({
+            email: u.email,
+            hours: u.hours.toFixed(1),
+          }))}
+        />
+      </Card>
+    </div>
   );
 }
 
-// ============================================================
-// Sub-tab — Abi Engagement
-// ============================================================
-
-function AbiEngagement({ data }: { data: PlatformIntel }) {
-  const abi = data.abi;
-  const cm = abi.complexity_mix;
-  const totalMix = cm.l1a + cm.l1m + cm.l2 + cm.l3 + cm.l4 || 1;
-  // Usage Trend can be carried directly on the abi payload when telemetry
-  // exists (allowed via extra="allow" on AbiIntel). Falls back to "—"
-  // until the field is populated.
-  const usageTrend =
-    (abi as unknown as { usage_trend?: string | null }).usage_trend ?? "—";
-  const cards: Array<[string, string, string]> = [
-    ["Total Queries", String(abi.total_queries), "#4A00F8"],
-    ["Queries/User", abi.queries_per_user.toFixed(1), "#C344C7"],
-    ["Resolution Rate", abi.resolution_rate ?? "—", "#6EC457"],
-    ["Avg Response", abi.avg_response ?? "—", "#F0BC41"],
-    ["Usage Trend", usageTrend, "#6EC457"],
-  ];
-  const complexityRows: Array<[string, number, string, string]> = [
-    ["L1 Auto", cm.l1a, "#4A00F8", "Quick lookups"],
-    ["L1 Manual", cm.l1m, "#C344C7", "Guided queries"],
-    ["L2", cm.l2, "#6EC457", "Multi-source analysis"],
-    ["L3", cm.l3, "#F0BC41", "Deep research"],
-    ["L4", cm.l4, "#CF4548", "Strategic advisory"],
-  ];
+function SupplierDiscoveryDash({ data }: { data: IntelAll }) {
+  const s = data.supplier_discovery;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-5 gap-2">
-        {cards.map(([label, val, col]) => (
-          <Kpi key={label} label={label} value={val} color={col} />
-        ))}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
+        <KpiTile label="Total Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
+        <KpiTile label="Total Visits" value={fmtNum(s.total_visits)} accent={PALETTE.fuscia} />
+        <KpiTile
+          label="Total Time (mins)"
+          value={fmtNum(Math.round(s.total_time_mins))}
+          accent={PALETTE.bumblebee}
+        />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <KpiTile label="Avg Searches / User" value={s.avg_searches_per_user.toFixed(1)} />
+        <KpiTile label="Repeat Users %" value={`${s.repeat_users_pct}%`} />
+        {maybeKpi("SD Downloads", s.sd_downloads as Maybe<number>)}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
-          <div className="text-[14px] font-bold mb-3">
-            Query Complexity Breakdown
-          </div>
-          <div className="space-y-2">
-            {complexityRows.map(([label, val, col, hint]) => {
-              const pct = Math.round((val / totalMix) * 100);
-              return (
-                <div key={label}>
-                  <div className="flex items-center justify-between text-[12px] mb-0.5">
-                    <span>
-                      <b style={{ color: col }}>{label}</b>{" "}
-                      <span className="text-text-muted">— {hint}</span>
-                    </span>
-                    <span className="font-semibold">
-                      {val} <span className="text-text-muted">({pct}%)</span>
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-beroe-bg rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${pct}%`, background: col }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <CardTitle>Top categories searched</CardTitle>
+          <BarChart rows={barRows(s.top_categories_searched)} />
         </Card>
         <Card>
-          <div className="text-[14px] font-bold mb-3">Top Query Types</div>
-          {(abi.top_types ?? []).length === 0 ? (
-            <div className="text-text-muted text-[12px]">No query types logged</div>
+          <CardTitle>Top Regions Scoped</CardTitle>
+          {isUnavailable(s.top_regions_scoped) ? (
+            <NaPill reason={s.top_regions_scoped.reason} />
           ) : (
-            <div className="space-y-2">
-              {abi.top_types.map((t, i) => {
-                const col = ["#4A00F8", "#C344C7", "#6EC457", "#F0BC41", "#35E1D4"][i % 5];
-                return (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 py-1.5 border-b border-beroe-card-border/60 last:border-b-0 text-[12px]"
-                  >
-                    <span
-                      className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px]"
-                      style={{ background: col + "20", color: col }}
-                    >
-                      {i + 1}
-                    </span>
-                    <span>{t}</span>
-                  </div>
-                );
-              })}
-            </div>
+            <div className="text-[11px] text-text-muted">No data</div>
           )}
         </Card>
       </div>
-      {abi.insight && (
-        <Card>
-          <div className="text-[14px] font-bold mb-2">Abi Usage Insight</div>
-          <div className="text-[12px] text-text-secondary bg-beroe-teal/10 border border-beroe-teal/30 rounded px-3 py-2 leading-relaxed">
-            {abi.insight}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
 
-// ============================================================
-// Sub-tab — Industry Benchmark
-// ============================================================
-
-function IndustryBenchmark({
-  data,
-  accountName,
-  accountIndustry,
-}: {
-  data: PlatformIntel;
-  accountName: string;
-  accountIndustry: string | null;
-}) {
-  const b = data.benchmark;
-  // Account-side numbers come from M27 signals + M20 metrics in production;
-  // here we render straight from the seeded data.
-  const accAbi = data.abi.total_queries;
-  const accEngagement =
-    data.engagement.alerts +
-    data.engagement.newsletters +
-    data.engagement.webinars +
-    data.engagement.podcasts +
-    data.engagement.training;
-
-  const metrics: Array<[string, number, number, string]> = [
-    ["Abi Queries", accAbi, b.avg_abi, "#C344C7"],
-    ["Engagement", accEngagement, b.avg_engagement, "#6EC457"],
-    ["Health Avg", b.avg_health, b.avg_health, "#4A00F8"],
-    ["Seat % Avg", b.avg_seat_pct, b.avg_seat_pct, "#35E1D4"],
-    ["Logins Avg", b.avg_logins, b.avg_logins, "#F0BC41"],
-  ];
-
+function SupplierMonitoringDash({ data }: { data: IntelAll }) {
+  const s = data.supplier_monitoring;
   return (
-    <Card>
-      <div className="text-[14px] font-bold mb-1">
-        Industry Benchmark Comparison
+    <div className="space-y-3">
+      <div className="text-[11px] text-text-muted">
+        Most KPIs need access to <code>stg_user_cat_sup_report</code> — pending
+        DBA grant. The time-spent KPI works via session_log + module filter.
       </div>
-      <div className="text-[12px] text-text-muted mb-3">
-        {accountName} vs {accountIndustry ?? "—"}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile
+          label="SM Time (mins)"
+          value={fmtNum(Math.round(s.total_time_mins))}
+          accent={PALETTE.indigo}
+        />
+        {maybeKpi("Suppliers Monitored", s.suppliers_monitored)}
+        {maybeKpi("New This Period", s.new_suppliers_in_period)}
+        {maybeKpi("Users Adding", s.users_adding_suppliers)}
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        {metrics.map(([label, val, avg, col]) => {
-          const pct = avg > 0 ? Math.round((val / avg) * 100) : 0;
-          const status = pct >= 120 ? "Above" : pct >= 80 ? "On Par" : "Below";
-          const sc =
-            pct >= 120 ? "#6EC457" : pct >= 80 ? "#4A00F8" : "#CF4548";
-          return (
-            <div
-              key={label}
-              className="bg-beroe-bg rounded-md p-3.5 text-center"
-            >
-              <div
-                className="text-[24px] font-extrabold"
-                style={{ color: col }}
-              >
-                {val}
-              </div>
-              <div className="text-[10px] text-text-muted my-1">{label}</div>
-              <div className="text-[10px] text-text-muted mb-1.5">
-                Avg: {avg}
-              </div>
-              <span
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                style={{ background: sc + "15", color: sc }}
-              >
-                {status} ({pct}%)
-              </span>
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        {maybeKpi("Data Refreshes 30d", s.data_refreshes_last_30d)}
+        {maybeKpi("Added vs Contracted %", s.suppliers_added_vs_contracted_pct)}
       </div>
-    </Card>
+    </div>
   );
 }
 
-// ============================================================
-// Sub-tab — Engagement Metrics
-// ============================================================
-
-function EngagementMetrics({ data }: { data: PlatformIntel }) {
-  const e = data.engagement;
-  const items: Array<[string, number, number, string]> = [
-    ["🔔 Alerts", e.alerts, 100, "#4A00F8"],
-    ["📧 Newsletters", e.newsletters, 100, "#6EC457"],
-    ["🎥 Webinars", e.webinars, 30, "#C344C7"],
-    ["🎙 Podcasts", e.podcasts, 20, "#F0BC41"],
-    ["📚 Training", e.training, 30, "#35E1D4"],
-  ];
-  const us = e.user_segmentation;
-  const segRows: Array<[string, number, string]> = [
-    ["Cat. Managers", us.cat_managers, "#4A00F8"],
-    ["Buyers", us.buyers, "#6EC457"],
-    ["Sourcing", us.sourcing_analysts, "#C344C7"],
-    ["Directors", us.directors, "#F0BC41"],
-    ["Exec Team", us.exec_team, "#CF4548"],
-    ["COE", us.coe, "#35E1D4"],
-    ["CPO", us.cpo, "#C344C7"],
-  ];
-  const segHasData = segRows.some(([, v]) => v > 0);
-
+function CustomUsageDash({ data }: { data: IntelAll }) {
+  const c = data.custom_usage;
+  const cbc = c.credits_by_complexity;
   return (
-    <Card>
-      <div className="text-[14px] font-bold mb-3">Engagement Activeness</div>
-      <div className="grid grid-cols-5 gap-2 mb-4">
-        {items.map(([label, val, max, col]) => {
-          const pct = Math.min(100, Math.round((val / max) * 100));
-          return (
-            <div
-              key={label}
-              className="bg-beroe-bg rounded-md p-3.5 text-center"
-            >
-              <div
-                className="text-[20px] font-extrabold"
-                style={{ color: col }}
-              >
-                {val}
-              </div>
-              <div className="text-[10px] text-text-muted my-1">{label}</div>
-              <div className="h-1 bg-beroe-bg rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${pct}%`, background: col }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {segHasData && (
-        <div>
-          <div className="text-[14px] font-bold mb-2">User Segmentation</div>
-          <div className="grid grid-cols-7 gap-1.5">
-            {segRows.map(([label, val, col]) => (
-              <div
-                key={label}
-                className="bg-beroe-bg rounded-md p-2 text-center"
-              >
-                <div
-                  className="text-[16px] font-extrabold"
-                  style={{ color: col }}
-                >
-                  {val}
-                </div>
-                <div className="text-[9px] text-text-muted mt-0.5 leading-tight">
-                  {label}
-                </div>
-              </div>
-            ))}
-          </div>
+    <div className="space-y-3">
+      {c.credits_by_complexity_note && (
+        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+          ⚠ {c.credits_by_complexity_note}
         </div>
       )}
-    </Card>
-  );
-}
-
-// ============================================================
-// Sub-tab — NPS
-// ============================================================
-
-function Nps({ data }: { data: PlatformIntel }) {
-  const nps = data.nps;
-  const score = nps.score;
-  const npsCol =
-    score === null
-      ? "#94a3b8"
-      : score >= 50
-        ? "#6EC457"
-        : score >= 0
-          ? "#F0BC41"
-          : "#CF4548";
-  const label =
-    score === null
-      ? "—"
-      : score >= 50
-        ? "Promoter"
-        : score >= 0
-          ? "Passive"
-          : "Detractor";
-
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <Card>
-        <div className="text-[14px] font-bold mb-3">NPS Score</div>
-        {score !== null ? (
-          <div className="text-center py-5">
-            <div className="text-[48px] font-extrabold" style={{ color: npsCol }}>
-              {score}
-            </div>
-            <div
-              className="text-[13px] font-semibold mt-1"
-              style={{ color: npsCol }}
-            >
-              {label}
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-text-muted text-[12px]">
-            No NPS score recorded yet.
-          </div>
-        )}
-      </Card>
-      <Card>
-        <div className="text-[14px] font-bold mb-3">Voice of Customer</div>
-        {nps.voc.length === 0 ? (
-          <div className="text-center py-8 text-text-muted text-[12px]">
-            No testimonials yet
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {nps.voc.map((v, i) => {
-              const sc =
-                v.sentiment === "positive"
-                  ? "#6EC457"
-                  : v.sentiment === "negative"
-                    ? "#CF4548"
-                    : "#64748b";
-              return (
-                <div
-                  key={i}
-                  className="border-l-[3px] rounded-r-md px-3 py-2"
-                  style={{ borderLeftColor: sc, background: sc + "08" }}
-                >
-                  <div className="text-[12px] italic text-text-primary leading-relaxed">
-                    “{v.quote}”
-                  </div>
-                  <div className="text-[11px] text-text-muted mt-1">
-                    — {v.author ?? "—"}
-                    {v.role && <>, {v.role}</>}
-                    {v.date && (
-                      <> · {new Date(v.date).toLocaleDateString()}</>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-// ============================================================
-// Shared primitives
-// ============================================================
-
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      {children}
-    </div>
-  );
-}
-
-function SectionHeader({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-      {children}
-    </div>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div className="bg-white border border-beroe-card-border rounded-card px-3 py-3 text-center">
-      <div className="text-[18px] font-extrabold" style={{ color }}>
-        {value}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Total (proxy)" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
+        <KpiTile label="L1" value={fmtNum(cbc.L1)} accent={PALETTE.aqua} />
+        <KpiTile label="L2" value={fmtNum(cbc.L2)} accent={PALETTE.fuscia} />
+        <KpiTile label="L3+L4" value={fmtNum(cbc.L3 + cbc.L4)} accent={PALETTE.bumblebee} />
       </div>
-      <div className="text-[10px] text-text-muted mt-0.5">{label}</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <KpiTile label="Commodity Dashboards" value={fmtNum(c.commodity_dashboards)} />
+        <KpiTile label="Country Reports" value={fmtNum(c.country_reports)} />
+        <KpiTile
+          label="Client Feedback"
+          value={c.client_feedback_score == null ? "—" : c.client_feedback_score.toFixed(2)}
+        />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        {maybeKpi("Credits Estimated", c.credits_estimated_active)}
+        {maybeKpi("Credits Allocated", c.credits_allocated_tier)}
+        {maybeKpi("Utilization %", c.credits_utilization_pct)}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card>
+          <CardTitle>AI SWAT vs Basics</CardTitle>
+          <DonutChart
+            slices={c.ai_swat_vs_basics.map((r) => ({ label: r.label, value: r.count }))}
+          />
+        </Card>
+        <Card>
+          <CardTitle>Top categories</CardTitle>
+          <BarChart rows={barRows(c.top_categories)} />
+        </Card>
+        <Card>
+          <CardTitle>Top spendpools</CardTitle>
+          <BarChart rows={barRows(c.top_spendpools)} />
+        </Card>
+        <Card>
+          <CardTitle>Top deliverables</CardTitle>
+          <BarChart rows={barRows(c.top_deliverables)} />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ThoughtLeadershipDash({ data }: { data: IntelAll }) {
+  const t = data.thought_leadership;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Webinar Views" value={fmtNum(t.webinar_views)} accent={PALETTE.indigo} />
+        <KpiTile label="Articles Opened" value={fmtNum(t.articles_opened)} accent={PALETTE.aqua} />
+        <KpiTile
+          label="Beigebook Views"
+          value={fmtNum(t.beigebook_views)}
+          accent={PALETTE.fuscia}
+        />
+        <KpiTile
+          label="Beigebook Downloads"
+          value={fmtNum(t.beigebook_downloads)}
+          accent={PALETTE.bumblebee}
+        />
+      </div>
+      <Card>
+        <CardTitle>By type</CardTitle>
+        <BarChart rows={barRows(t.by_type)} />
+      </Card>
+    </div>
+  );
+}
+
+function InflationWatchDash({ data }: { data: IntelAll }) {
+  const iw = data.inflation_watch;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Unique Visitors" value={fmtNum(iw.unique_visitors)} accent={PALETTE.indigo} />
+        <KpiTile label="Total Sessions" value={fmtNum(iw.total_sessions)} accent={PALETTE.aqua} />
+        <KpiTile
+          label="Total Time (mins)"
+          value={fmtNum(Math.round(iw.total_time_mins))}
+          accent={PALETTE.fuscia}
+        />
+        <KpiTile
+          label="Avg Sessions / Visitor"
+          value={iw.avg_sessions_per_visitor.toFixed(1)}
+          accent={PALETTE.bumblebee}
+        />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <KpiTile label="Avg Session Time" value={`${iw.avg_session_time_mins.toFixed(1)} m`} />
+        <KpiTile
+          label="Avg Time / Visitor"
+          value={`${iw.avg_time_per_visitor_mins.toFixed(1)} m`}
+        />
+        <KpiTile
+          label="Scenario Modelling Ran"
+          value={fmtNum(iw.scenario_modelling.ran)}
+          sub={`saved: ${iw.scenario_modelling.saved}`}
+        />
+      </div>
+      <Card>
+        <CardTitle>Top features (visitors / views)</CardTitle>
+        <SimpleTable
+          cols={[
+            { key: "feature", label: "Feature" },
+            { key: "visitors", label: "Visitors", numeric: true },
+            { key: "views", label: "Views", numeric: true },
+          ]}
+          rows={iw.top_features.map((f) => ({
+            feature: f.feature,
+            visitors: f.visitors,
+            views: f.views,
+          }))}
+        />
+      </Card>
+      <Card>
+        <CardTitle>Top pages</CardTitle>
+        {isUnavailable(iw.top_pages) ? (
+          <NaPill reason={iw.top_pages.reason} />
+        ) : (
+          <div className="text-[11px] text-text-muted">No data</div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function AlertsDash({ data }: { data: IntelAll }) {
+  const al = data.alerts;
+  return (
+    <div className="space-y-3">
+      <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-1.5">
+        ⚠ {al._scope_note}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
+        <KpiTile label="Open Rate" value={`${al.open_rate_pct}%`} accent={PALETTE.indigo} />
+        <KpiTile label="# Alert types" value={fmtNum(al.types_sent.length)} accent={PALETTE.aqua} />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card>
+          <CardTitle>Type of alert sent</CardTitle>
+          <BarChart rows={barRows(al.types_sent)} />
+        </Card>
+        <Card>
+          <CardTitle>Open rate by category</CardTitle>
+          <BarChart
+            rows={al.open_rate_by_category.slice(0, 10).map((r, i) => ({
+              label: r.label,
+              value: r.open_rate_pct,
+              color: SERIES_COLORS[i % SERIES_COLORS.length],
+            }))}
+          />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function SuperUsersDash({ data }: { data: IntelAll }) {
+  const su = data.super_users;
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardTitle>Top {su.top_n} super-users — activity score</CardTitle>
+        <SimpleTable
+          cols={[
+            { key: "email", label: "User" },
+            { key: "score", label: "Score", numeric: true },
+            { key: "logins", label: "Logins", numeric: true },
+            { key: "queries", label: "Abi", numeric: true },
+            { key: "searches", label: "SD", numeric: true },
+            { key: "mmd_time", label: "MMD min", numeric: true },
+            { key: "sm_time", label: "SM min", numeric: true },
+            { key: "downloads", label: "Downloads", numeric: true },
+            { key: "last_login", label: "Last login" },
+          ]}
+          rows={su.users.map((u) => ({
+            email: u.email,
+            score: u.activity_score,
+            logins: u.logins,
+            queries: u.abi_queries,
+            searches: u.sd_searches,
+            mmd_time: u.mmd_time_mins,
+            sm_time: u.sm_time_mins,
+            downloads: u.report_downloads,
+            last_login: fmtDate(u.last_login),
+          }))}
+        />
+      </Card>
+      <Card>
+        <CardTitle>Login distribution (top 5)</CardTitle>
+        <BarChart
+          rows={su.login_distribution_top5.map((u, i) => ({
+            label: u.email,
+            value: u.logins,
+            color: SERIES_COLORS[i % SERIES_COLORS.length],
+          }))}
+        />
+      </Card>
     </div>
   );
 }

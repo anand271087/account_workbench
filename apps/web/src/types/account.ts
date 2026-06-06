@@ -50,6 +50,8 @@ export interface AccountDetail {
   headquarters: string | null;
   annual_revenue_text: string | null;
   sf_link: string | null;
+  // 05-Jun · Intelligence & Reports — canonical Redshift companyname.
+  redshift_company_name: string | null;
   csm_user_id: string | null;
   co_user_id: string | null;
   csm_full_name: string | null;

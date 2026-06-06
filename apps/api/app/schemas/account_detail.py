@@ -26,6 +26,8 @@ class AccountDetail(BaseModel):
     headquarters: str | None = None
     annual_revenue_text: str | None = None
     sf_link: str | None = None
+    # 05-Jun · Intelligence & Reports — canonical Redshift companyname.
+    redshift_company_name: str | None = None
 
     csm_user_id: UUID | None
     co_user_id: UUID | None
