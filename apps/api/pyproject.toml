@@ -27,6 +27,9 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.18.0",
     # Intelligence & Reports — Redshift via SSM tunnel.
     "redshift-connector>=2.1.4",
+    # Phase 3 — sync Supabase Postgres reads from bundle layer (offline
+    # source staging tables). asyncpg drives the async ORM elsewhere.
+    "psycopg[binary]>=3.2.0",
 ]
 
 [project.optional-dependencies]

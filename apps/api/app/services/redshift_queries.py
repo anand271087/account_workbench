@@ -93,6 +93,50 @@ def _window_range(window: str) -> tuple[date | None, date]:
 
 
 # ============================================================
+# Supabase sync helper (Phase 3 offline staging tables).
+# Uses psycopg (sync) so bundle functions stay synchronous.
+# Connection per-query — keeps the helper symmetric with _scalar /
+# _rows and avoids holding a session-pooler slot.
+# ============================================================
+
+
+def _pg_url() -> str | None:
+    """Return a psycopg-friendly DSN, or None if not configured."""
+    from app.core.config import get_settings
+    url = get_settings().database_url
+    if not url:
+        return None
+    # asyncpg URL prefix → psycopg (sync) prefix
+    if url.startswith("postgresql+asyncpg://"):
+        url = url.replace("postgresql+asyncpg://", "postgresql://")
+    return url
+
+
+def _pg_rows(sql: str, params: tuple = ()) -> list[tuple]:
+    """Run a query against Supabase Postgres; return [] on any error."""
+    import psycopg
+    dsn = _pg_url()
+    if not dsn:
+        return []
+    try:
+        with psycopg.connect(dsn, autocommit=True, connect_timeout=10) as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                return list(cur.fetchall())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pg rows failed: %s — %s", sql[:120].replace("\n", " "), exc)
+        return []
+
+
+def _pg_scalar(sql: str, params: tuple = (), default: Any = None) -> Any:
+    rs = _pg_rows(sql, params)
+    if not rs:
+        return default
+    first = rs[0][0]
+    return default if first is None else first
+
+
+# ============================================================
 # Query primitives — every query opens its own connection so a
 # permission-denied error on one query doesn't poison the next.
 # (Redshift 25P02 cascade if you reuse a poisoned txn.)
@@ -831,39 +875,141 @@ def inflation_watch_bundle(acct: str, window: str = "90d") -> dict:
 
 
 def cirtuo_bundle(acct: str, window: str = "fy") -> dict:
-    return {
+    # Phase 3 — query public.intel_cirtuo_projects. Returns NA when the
+    # loader hasn't run yet (no rows for this companyname).
+    key = ("cirtuo", acct, window)
+    if (c := _cache_get(key)) is not None:
+        return c
+    rs = _pg_rows(
+        "SELECT SUM(categories_supported), SUM(feedback_received), SUM(feedback_total), "
+        "AVG(feedback_score_avg) FROM public.intel_cirtuo_projects "
+        "WHERE company_name = %s",
+        (acct,),
+    )
+    has_data = rs and rs[0][0] is not None
+    if not has_data:
+        return _cache_put_and_return(key, {
+            "window": window,
+            "categories_supported": _na("Awaiting offline CSV load — scripts/intel_loaders/load_cirtuo.py"),
+            "feedback_captured_pct": _na("Awaiting offline CSV load — scripts/intel_loaders/load_cirtuo.py"),
+            "average_feedback": _na("Awaiting offline CSV load — scripts/intel_loaders/load_cirtuo.py"),
+            "source": "offline",
+        })
+    cat_total, fb_recv, fb_total, fb_avg = rs[0]
+    fb_pct = (float(fb_recv or 0) / float(fb_total)) * 100 if fb_total else None
+    return _cache_put_and_return(key, {
         "window": window,
-        "categories_supported": _na("offline — Cirtuo file"),
-        "feedback_captured_pct": _na("offline — Cirtuo file"),
-        "average_feedback": _na("offline — Cirtuo file"),
+        "categories_supported": int(cat_total or 0),
+        "feedback_captured_pct": round(fb_pct, 1) if fb_pct is not None else None,
+        "average_feedback": round(float(fb_avg), 2) if fb_avg is not None else None,
         "source": "offline",
-    }
+    })
 
 
 def nnamu_bundle(acct: str, window: str = "fy") -> dict:
-    return {
+    # Phase 3 — query public.intel_nnamu_savings.
+    key = ("nnamu", acct, window)
+    if (c := _cache_get(key)) is not None:
+        return c
+    rs = _pg_rows(
+        "SELECT SUM(initial_comparison_price), SUM(final_comparison_price), "
+        "SUM(absolute_savings) FROM public.intel_nnamu_savings "
+        "WHERE company_name = %s",
+        (acct,),
+    )
+    has_data = rs and rs[0][0] is not None
+    if not has_data:
+        reason = "Awaiting offline CSV load — scripts/intel_loaders/load_nnamu.py"
+        return _cache_put_and_return(key, {
+            "window": window,
+            "total_spend_negotiated": _na(reason),
+            "total_final_price": _na(reason),
+            "total_absolute_savings": _na(reason),
+            "avg_relative_savings_pct": _na(reason),
+            "savings_by_customer": _na(reason),
+            "customers_with_savings": _na(reason),
+            "source": "offline",
+        })
+    initial, final, abs_savings = rs[0]
+    initial_f = float(initial or 0); final_f = float(final or 0)
+    pct = (initial_f - final_f) / initial_f * 100 if initial_f else None
+    customers_with_savings = _pg_scalar(
+        "SELECT COUNT(DISTINCT company_name) FROM public.intel_nnamu_savings "
+        "WHERE absolute_savings > 0", default=0,
+    )
+    return _cache_put_and_return(key, {
         "window": window,
-        "total_spend_negotiated": _na("offline — staging.nnamu_savings not loaded"),
-        "total_final_price": _na("offline — staging.nnamu_savings not loaded"),
-        "total_absolute_savings": _na("offline — staging.nnamu_savings not loaded"),
-        "avg_relative_savings_pct": _na("offline — staging.nnamu_savings not loaded"),
-        "savings_by_customer": _na("offline — staging.nnamu_savings not loaded"),
-        "customers_with_savings": _na("offline — staging.nnamu_savings not loaded"),
+        "total_spend_negotiated": round(initial_f, 2),
+        "total_final_price": round(final_f, 2),
+        "total_absolute_savings": round(float(abs_savings or initial_f - final_f), 2),
+        "avg_relative_savings_pct": round(pct, 1) if pct is not None else None,
+        "savings_by_customer": [
+            {"company_name": r[0], "absolute_savings": float(r[1] or 0)}
+            for r in _pg_rows(
+                "SELECT company_name, SUM(absolute_savings) FROM public.intel_nnamu_savings "
+                "GROUP BY company_name ORDER BY 2 DESC NULLS LAST LIMIT 20",
+            )
+        ],
+        "customers_with_savings": int(customers_with_savings or 0),
         "source": "offline",
-    }
+    })
 
 
 def upply_bundle(acct: str, window: str = "90d") -> dict:
-    return {
+    # Phase 3 — query public.intel_upply_tracking.
+    key = ("upply", acct, window)
+    if (c := _cache_get(key)) is not None:
+        return c
+    start, _ = _window_range(window)
+    where = " AND request_date >= %s" if start else ""
+    p: tuple = (acct, start) if start else (acct,)
+    total = _pg_scalar(
+        f"SELECT COUNT(*) FROM public.intel_upply_tracking WHERE company_name = %s{where}",
+        p, default=0,
+    )
+    if not total:
+        reason = "Awaiting offline CSV load — scripts/intel_loaders/load_upply.py"
+        return _cache_put_and_return(key, {
+            "window": window,
+            "routes_benchmarked": _na(reason),
+            "unique_users": _na(reason),
+            "avg_routes_per_user": _na(reason),
+            "routes_by_medium": _na(reason),
+            "top_lanes": _na(reason),
+            "benchmarks_trend_monthly": _na(reason),
+            "source": "offline",
+        })
+    unique = _pg_scalar(
+        f"SELECT COUNT(DISTINCT user_email) FROM public.intel_upply_tracking "
+        f"WHERE company_name = %s{where}", p, default=0,
+    )
+    by_medium = [{"label": r[0] or "Unknown", "count": int(r[1])}
+                 for r in _pg_rows(
+                     f"SELECT medium, COUNT(*) FROM public.intel_upply_tracking "
+                     f"WHERE company_name = %s{where} GROUP BY medium ORDER BY 2 DESC", p,
+                 )]
+    top_lanes = [{"origin": r[0], "destination": r[1], "count": int(r[2])}
+                 for r in _pg_rows(
+                     f"SELECT origin, destination, COUNT(*) FROM public.intel_upply_tracking "
+                     f"WHERE company_name = %s{where} GROUP BY origin, destination "
+                     f"ORDER BY 3 DESC LIMIT 10", p,
+                 )]
+    trend = [{"month": str(r[0])[:7], "count": int(r[1])}
+             for r in _pg_rows(
+                 f"SELECT DATE_TRUNC('month', request_date)::date, COUNT(*) "
+                 f"FROM public.intel_upply_tracking WHERE company_name = %s{where} "
+                 f"GROUP BY 1 ORDER BY 1", p,
+             )]
+    return _cache_put_and_return(key, {
         "window": window,
-        "routes_benchmarked": _na("offline — staging.upply_tracking not loaded"),
-        "unique_users": _na("offline — staging.upply_tracking not loaded"),
-        "avg_routes_per_user": _na("offline — staging.upply_tracking not loaded"),
-        "routes_by_medium": _na("offline — staging.upply_tracking not loaded"),
-        "top_lanes": _na("offline — staging.upply_tracking not loaded"),
-        "benchmarks_trend_monthly": _na("offline — staging.upply_tracking not loaded"),
+        "routes_benchmarked": int(total),
+        "unique_users": int(unique or 0),
+        "avg_routes_per_user": round(float(total) / unique, 1) if unique else 0.0,
+        "routes_by_medium": by_medium,
+        "top_lanes": top_lanes,
+        "benchmarks_trend_monthly": trend,
         "source": "offline",
-    }
+    })
 
 
 # ============================================================
@@ -928,20 +1074,58 @@ def alerts_bundle(acct: str, window: str = "90d") -> dict:
 
 
 def training_bundle(acct: str, window: str = "fy") -> dict:
-    return {
+    # Phase 3 — query public.intel_training_attendance.
+    key = ("training", acct, window)
+    if (c := _cache_get(key)) is not None:
+        return c
+    rs = _pg_rows(
+        "SELECT SUM(users_attended), SUM(users_invited) FROM public.intel_training_attendance "
+        "WHERE company_name = %s",
+        (acct,),
+    )
+    attended, invited = (rs[0] if rs else (None, None))
+    if attended is None:
+        reason = "Awaiting offline CSV load — scripts/intel_loaders/load_training.py"
+        return _cache_put_and_return(key, {
+            "window": window,
+            "users_attended": _na(reason),
+            "users_attended_pct": _na(reason),
+            "source": "offline",
+        })
+    pct = (float(attended) / float(invited)) * 100 if invited else None
+    return _cache_put_and_return(key, {
         "window": window,
-        "users_attended": _na("offline — SharePoint training file"),
-        "users_attended_pct": _na("offline — SharePoint training file"),
+        "users_attended": int(attended or 0),
+        "users_attended_pct": round(pct, 1) if pct is not None else None,
         "source": "offline",
-    }
+    })
 
 
 def nps_bundle(acct: str, window: str = "fy") -> dict:
-    return {
+    # Phase 3 — query public.intel_nps_scores. Uses the latest period.
+    key = ("nps", acct, window)
+    if (c := _cache_get(key)) is not None:
+        return c
+    rs = _pg_rows(
+        "SELECT nps_score, report_period FROM public.intel_nps_scores "
+        "WHERE company_name = %s ORDER BY report_period DESC LIMIT 1",
+        (acct,),
+    )
+    if not rs:
+        return _cache_put_and_return(key, {
+            "window": window,
+            "average_feedback_nps": _na(
+                "Awaiting offline CSV load — scripts/intel_loaders/load_nps.py"
+            ),
+            "source": "offline",
+        })
+    score, period = rs[0]
+    return _cache_put_and_return(key, {
         "window": window,
-        "average_feedback_nps": _na("offline — SharePoint NPS file"),
+        "average_feedback_nps": float(score) if score is not None else None,
+        "report_period": period.isoformat() if period else None,
         "source": "offline",
-    }
+    })
 
 
 # ============================================================
