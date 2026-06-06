@@ -17,8 +17,12 @@ import { MODE_CONF } from "@/types/play";
 // toggle in the top-right. We store the choice in localStorage scoped by
 // account so navigation keeps your view stable across reloads, and pass
 // it down via outlet context so leaf tabs (Home, Analytics) can react.
-export type AccountPeriod = "30d" | "90d" | "FY";
-const PERIODS: AccountPeriod[] = ["30d", "90d", "FY"];
+// "All" added 05-Jun for Intelligence dashboards — Redshift extract is
+// stale by ~7 months on some tables (freshservice_abi etc.) so 30d/90d/FY
+// return zeros even though historical data exists. The "All" pill is a
+// stakeholder workaround until the extract refresh ships.
+export type AccountPeriod = "30d" | "90d" | "FY" | "All";
+const PERIODS: AccountPeriod[] = ["30d", "90d", "FY", "All"];
 const PERIOD_KEY = "awb:account-period";
 
 interface SubNavItem {
@@ -104,7 +108,7 @@ export default function AccountProfileLayout() {
   const [period, setPeriodState] = useState<AccountPeriod>(() => {
     if (typeof window === "undefined") return "90d";
     const v = window.localStorage.getItem(PERIOD_KEY);
-    return v === "30d" || v === "90d" || v === "FY" ? v : "90d";
+    return v === "30d" || v === "90d" || v === "FY" || v === "All" ? v : "90d";
   });
   const setPeriod = (p: AccountPeriod) => {
     setPeriodState(p);
@@ -118,7 +122,7 @@ export default function AccountProfileLayout() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onStorage = (e: StorageEvent) => {
-      if (e.key === PERIOD_KEY && (e.newValue === "30d" || e.newValue === "90d" || e.newValue === "FY")) {
+      if (e.key === PERIOD_KEY && (e.newValue === "30d" || e.newValue === "90d" || e.newValue === "FY" || e.newValue === "All")) {
         setPeriodState(e.newValue);
       }
     };

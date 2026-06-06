@@ -28,7 +28,12 @@ import {
 // 12-month annualised view). Stored numbers in platform_intel are the
 // 90d baseline; this multiplier shifts the surfaced view client-side.
 function periodScale(p: AccountPeriod): number {
-  return p === "30d" ? 1 / 3 : p === "FY" ? 4 : 1;
+  // "All" treated like FY for the client-side scale until AnalyticsTab
+  // is wired to live Redshift (Phase 2b) — backend will then honor the
+  // window param directly.
+  if (p === "30d") return 1 / 3;
+  if (p === "FY" || p === "All") return 4;
+  return 1;
 }
 function scaleInt(v: number, s: number): number {
   return Math.round(v * s);
