@@ -6,7 +6,7 @@
 // from its spec sheet — live values for what we can fetch, NaPill for
 // what's pending DBA grants or offline.
 
-import React from "react";
+import React, { useState } from "react";
 
 import type {
   Abi,
@@ -283,6 +283,21 @@ export function AbiSheet({ data: a, mode }: { data: Abi; mode?: SheetMode }) {
 
   if (mode === "numbers") return paramList;
 
+  return <AbiDashboard data={a} paramList={paramList} />;
+}
+
+// AbiDashboard — compact above-fold layout. Previous version sprawled
+// vertically (4 KPI tiles + 16-row param list + 8 chart cards + 50-row
+// user table). New layout: KPI strip → 3-up donut row → 2×2 bar grid
+// → top-10 users with show-all toggle. Param list + lower-priority
+// breakdowns hidden behind a <details> accordion.
+function AbiDashboard({ data: a, paramList }: { data: Abi; paramList: React.ReactNode }) {
+  const [showAllUsers, setShowAllUsers] = useState(false);
+  const totalUsers = a.time_per_user_top50.length;
+  const usersToShow = showAllUsers
+    ? a.time_per_user_top50
+    : a.time_per_user_top50.slice(0, 10);
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -291,8 +306,8 @@ export function AbiSheet({ data: a, mode }: { data: Abi; mode?: SheetMode }) {
         <KpiTile label="Bot Resolution" value={`${a.bot_resolution_pct}%`} accent={PALETTE.fuscia} />
         <KpiTile label="Repeat Users" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
       </div>
-      {paramList}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card>
           <CardTitle>Queries by complexity</CardTitle>
           <DonutChart slices={a.by_complexity.map((c) => ({ label: c.label, value: c.count }))} />
@@ -301,6 +316,15 @@ export function AbiSheet({ data: a, mode }: { data: Abi; mode?: SheetMode }) {
           <CardTitle>Query status</CardTitle>
           <DonutChart slices={a.by_status.map((c) => ({ label: c.label, value: c.count }))} />
         </Card>
+        <Card>
+          <CardTitle>Inside vs Outside Live.ai</CardTitle>
+          <DonutChart
+            slices={a.inside_vs_outside_split.map((c) => ({ label: c.label, value: c.count }))}
+          />
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
           <CardTitle>Top deliverable (top 5)</CardTitle>
           <BarChart rows={barRows(a.top_deliverable)} />
@@ -314,30 +338,53 @@ export function AbiSheet({ data: a, mode }: { data: Abi; mode?: SheetMode }) {
           <BarChart rows={barRows(a.top_declined_deliverable)} />
         </Card>
         <Card>
-          <CardTitle>Research referral reasons</CardTitle>
-          <BarChart rows={barRows(a.research_referral_reasons)} />
-        </Card>
-        <Card>
           <CardTitle>Top geographies</CardTitle>
           <BarChart rows={barRows(a.top_geographies)} />
         </Card>
-        <Card>
-          <CardTitle>Inside vs Outside Live.ai</CardTitle>
-          <DonutChart
-            slices={a.inside_vs_outside_split.map((c) => ({ label: c.label, value: c.count }))}
-          />
-        </Card>
       </div>
+
       <Card>
-        <CardTitle>Time on Abi per user (top 50)</CardTitle>
+        <div className="flex items-center justify-between mb-2">
+          <CardTitle>
+            Time on Abi per user — top {showAllUsers ? totalUsers : Math.min(10, totalUsers)}
+          </CardTitle>
+          {totalUsers > 10 && (
+            <button
+              type="button"
+              onClick={() => setShowAllUsers((v) => !v)}
+              className="text-[11px] font-semibold text-beroe-teal hover:underline"
+            >
+              {showAllUsers ? "Show top 10" : `Show all ${totalUsers}`}
+            </button>
+          )}
+        </div>
         <SimpleTable
           cols={[
             { key: "email", label: "User" },
             { key: "hours", label: "Hours", numeric: true },
           ]}
-          rows={a.time_per_user_top50.map((u) => ({ email: u.email, hours: u.hours.toFixed(1) }))}
+          rows={usersToShow.map((u) => ({ email: u.email, hours: u.hours.toFixed(1) }))}
         />
       </Card>
+
+      <details className="bg-white border border-beroe-card-border rounded-card">
+        <summary className="cursor-pointer px-4 py-2 text-[12px] font-semibold text-text-secondary hover:bg-beroe-bg/60">
+          More breakdowns + all 16 spec parameters
+        </summary>
+        <div className="px-4 pb-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
+            <Card>
+              <CardTitle># declined queries — module-wise</CardTitle>
+              <BarChart rows={barRows(a.declined_by_module)} />
+            </Card>
+            <Card>
+              <CardTitle>Research referral reasons</CardTitle>
+              <BarChart rows={barRows(a.research_referral_reasons)} />
+            </Card>
+          </div>
+          {paramList}
+        </div>
+      </details>
     </div>
   );
 }
@@ -760,11 +807,70 @@ export function SuperUsersSheet({ data: su, mode }: { data: SuperUsersBundle; mo
       </Card>
   );
   if (mode === "numbers") return paramList;
+  return <SuperUsersDashboard data={su} paramList={paramList} />;
+}
+
+// SuperUsersDashboard — compact view. 20-user table → top 10 by default
+// with show-all toggle. Login-distribution chart prominent at top so
+// users see the concentration at a glance. Param list accordion'd.
+function SuperUsersDashboard({
+  data: su,
+  paramList,
+}: {
+  data: SuperUsersBundle;
+  paramList: React.ReactNode;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const totalUsers = su.users.length;
+  const usersToShow = showAll ? su.users : su.users.slice(0, 10);
+
+  // 4 headline KPIs derived from the user list
+  const topScore = su.users[0]?.activity_score ?? 0;
+  const totalLogins = su.users.reduce((s, u) => s + u.logins, 0);
+  const totalQueries = su.users.reduce((s, u) => s + u.abi_queries, 0);
+  const totalPlatformMins = Math.round(
+    su.users.reduce((s, u) => s + u.total_platform_mins, 0),
+  );
+
   return (
     <div className="space-y-3">
-      {paramList}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <KpiTile label="Top Activity Score" value={fmtNum(topScore)} accent={PALETTE.indigo} />
+        <KpiTile label="Total Logins" value={fmtNum(totalLogins)} accent={PALETTE.aqua} />
+        <KpiTile label="Total Abi Queries" value={fmtNum(totalQueries)} accent={PALETTE.fuscia} />
+        <KpiTile
+          label="Total Platform Mins"
+          value={fmtNum(totalPlatformMins)}
+          accent={PALETTE.bumblebee}
+        />
+      </div>
+
       <Card>
-        <CardTitle>Top {su.top_n} super-users — activity score</CardTitle>
+        <CardTitle>Login distribution — top 5</CardTitle>
+        <BarChart
+          rows={su.login_distribution_top5.map((u, i) => ({
+            label: u.email,
+            value: u.logins,
+            color: SERIES_COLORS[i % SERIES_COLORS.length],
+          }))}
+        />
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between mb-2">
+          <CardTitle>
+            Super-users — top {showAll ? totalUsers : Math.min(10, totalUsers)} by activity score
+          </CardTitle>
+          {totalUsers > 10 && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="text-[11px] font-semibold text-beroe-teal hover:underline"
+            >
+              {showAll ? "Show top 10" : `Show all ${totalUsers}`}
+            </button>
+          )}
+        </div>
         <SimpleTable
           cols={[
             { key: "email", label: "User" },
@@ -778,7 +884,7 @@ export function SuperUsersSheet({ data: su, mode }: { data: SuperUsersBundle; mo
             { key: "downloads", label: "Downloads", numeric: true },
             { key: "last_login", label: "Last login" },
           ]}
-          rows={su.users.map((u) => ({
+          rows={usersToShow.map((u) => ({
             email: u.email,
             score: u.activity_score,
             logins: u.logins,
@@ -792,16 +898,13 @@ export function SuperUsersSheet({ data: su, mode }: { data: SuperUsersBundle; mo
           }))}
         />
       </Card>
-      <Card>
-        <CardTitle>Login distribution (top 5)</CardTitle>
-        <BarChart
-          rows={su.login_distribution_top5.map((u, i) => ({
-            label: u.email,
-            value: u.logins,
-            color: SERIES_COLORS[i % SERIES_COLORS.length],
-          }))}
-        />
-      </Card>
+
+      <details className="bg-white border border-beroe-card-border rounded-card">
+        <summary className="cursor-pointer px-4 py-2 text-[12px] font-semibold text-text-secondary hover:bg-beroe-bg/60">
+          All 12 spec parameters
+        </summary>
+        <div className="px-4 pb-4 pt-2">{paramList}</div>
+      </details>
     </div>
   );
 }
