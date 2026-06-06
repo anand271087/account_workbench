@@ -37,6 +37,7 @@ import {
   ParamRow,
   SERIES_COLORS,
   SimpleTable,
+  SplitBar,
 } from "./charts";
 
 // AnalyticsTab passes mode="numbers" to render a compact parameter
@@ -307,7 +308,16 @@ function AbiDashboard({ data: a, paramList }: { data: Abi; paramList: React.Reac
         <KpiTile label="Repeat Users" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* Inside vs Outside renders as a compact horizontal SplitBar (low
+          cardinality → donut overkill) above the two main donuts. */}
+      <Card>
+        <CardTitle>Inside vs Outside Live.ai</CardTitle>
+        <SplitBar
+          slices={a.inside_vs_outside_split.map((c) => ({ label: c.label, value: c.count }))}
+        />
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
           <CardTitle>Queries by complexity</CardTitle>
           <DonutChart slices={a.by_complexity.map((c) => ({ label: c.label, value: c.count }))} />
@@ -315,12 +325,6 @@ function AbiDashboard({ data: a, paramList }: { data: Abi; paramList: React.Reac
         <Card>
           <CardTitle>Query status</CardTitle>
           <DonutChart slices={a.by_status.map((c) => ({ label: c.label, value: c.count }))} />
-        </Card>
-        <Card>
-          <CardTitle>Inside vs Outside Live.ai</CardTitle>
-          <DonutChart
-            slices={a.inside_vs_outside_split.map((c) => ({ label: c.label, value: c.count }))}
-          />
         </Card>
       </div>
 

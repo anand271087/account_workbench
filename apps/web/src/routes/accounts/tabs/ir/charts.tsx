@@ -271,6 +271,67 @@ export function BarChart({
 }
 
 // ============================================================
+// SplitBar — single-row horizontal stacked bar for 2-4 slice metrics
+// (Inside-vs-Outside, AI-SWAT vs Basics, etc). Way more compact than
+// a donut+legend for low-cardinality splits.
+// ============================================================
+
+export function SplitBar({
+  slices,
+}: {
+  slices: Array<{ label: string; value: number; color?: string }>;
+}) {
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  if (total === 0) {
+    return <div className="text-[11px] text-text-muted py-3 text-center">No data</div>;
+  }
+  return (
+    <div>
+      <div className="flex h-3 w-full rounded-full overflow-hidden bg-beroe-bg">
+        {slices.map((sl, i) => {
+          if (sl.value === 0) return null;
+          const pct = (sl.value / total) * 100;
+          const color = sl.color ?? SERIES_COLORS[i % SERIES_COLORS.length];
+          return (
+            <div
+              key={sl.label}
+              title={`${sl.label}: ${sl.value} (${pct.toFixed(1)}%)`}
+              className="h-full transition-all"
+              style={{ width: `${pct}%`, background: color }}
+            />
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
+        {slices.map((sl, i) => {
+          const pct = (sl.value / total) * 100;
+          const color = sl.color ?? SERIES_COLORS[i % SERIES_COLORS.length];
+          return (
+            <span key={sl.label} className="flex items-center gap-1.5">
+              <span
+                className="w-2 h-2 rounded-sm flex-shrink-0"
+                style={{ background: color }}
+              />
+              <span className="font-medium" title={sl.label}>
+                {sl.label}
+              </span>
+              <span className="font-semibold tabular-nums">{fmtNumCompact(sl.value)}</span>
+              <span className="text-text-muted tabular-nums">({pct.toFixed(0)}%)</span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function fmtNumCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(1)}k`;
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+// ============================================================
 // DonutChart — proportional slices + centre total + legend
 // ============================================================
 
