@@ -298,12 +298,24 @@ export default function PreSalesTab() {
                 Must be today or earlier — discovery is a past event.
               </div>
             </Field>
+            {/* 05-Jun bug 211 — Discovery Lead + SDR / Lead Source are
+                now open-text inputs (was BeroeUserPicker). The picker
+                paired with the MoM extractor's auto-mirroring filled
+                these fields even when the doc didn't name the role.
+                Sales Lead keeps the picker — only the two flagged by
+                the bug report change. Stub-mirror was also removed
+                in services/extract_mom.py. */}
             <Field label="Discovery lead">
-              <BeroeUserPicker
-                value={form.discovery_lead ?? null}
-                onChange={(v) => setForm({ ...form, discovery_lead: v })}
+              <input
+                type="text"
+                value={form.discovery_lead ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, discovery_lead: e.target.value || null })
+                }
                 disabled={!form.is_editable}
-                placeholder="Pick the teammate running discovery"
+                placeholder="Name of the teammate running discovery"
+                className={inputCls(form.is_editable)}
+                maxLength={200}
               />
             </Field>
             <Field label="Sales lead">
@@ -315,11 +327,16 @@ export default function PreSalesTab() {
               />
             </Field>
             <Field label="SDR / lead source">
-              <BeroeUserPicker
-                value={form.sdr_lead ?? null}
-                onChange={(v) => setForm({ ...form, sdr_lead: v })}
+              <input
+                type="text"
+                value={form.sdr_lead ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, sdr_lead: e.target.value || null })
+                }
                 disabled={!form.is_editable}
-                placeholder="Pick the SDR who sourced this account"
+                placeholder="Name of the SDR / lead source"
+                className={inputCls(form.is_editable)}
+                maxLength={200}
               />
             </Field>
           </div>

@@ -609,49 +609,9 @@ function BlockCommitment({
     </Card>
   );
 }
-// ─────────────────────────────────────────────────────────────
-// Block 5 (NEW · 04-Jun bug 11) — Shortcut to Success Management.
-// The full Goal Validation & Alignment block + its supporting
-// GoalCard/Pill helpers were moved to Success Management → Goal
-// Validation and Alignment. This card just deep-links there.
-// ─────────────────────────────────────────────────────────────
-function BlockGoalsShortcut({
-  accountId,
-  goalsCount,
-}: {
-  accountId: string;
-  goalsCount: number;
-}) {
-  return (
-    <Card leftBorderColor={C.BLUE}>
-      <SectionHead
-        n="5"
-        color={C.BLUE}
-        title="Goal Validation & Alignment"
-        teamLabel="CS"
-        teamColor={C.BLUE}
-        trailing={
-          <Link
-            to={`/accounts/${accountId}/success-management/goal-alignment`}
-            className="ml-auto text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white"
-            style={{ background: C.BLUE }}
-          >
-            Open Goal Validation →
-          </Link>
-        }
-      />
-      <div className="text-[12px] text-text-secondary leading-relaxed">
-        Walk every goal through the three alignment checks (means · groundwork ·
-        agreed target) and freeze it for Value Tracking.{" "}
-        <b className="text-text-primary">
-          {goalsCount > 0
-            ? `${goalsCount} goal${goalsCount === 1 ? "" : "s"} captured.`
-            : "No goals captured yet."}
-        </b>
-      </div>
-    </Card>
-  );
-}
+// 05-Jun bug 212 — BlockGoalsShortcut removed. Goal Validation & Alignment
+// is now exclusively in Success Management → Contract & Goals. CS Hand-off
+// no longer surfaces a goals shortcut card per stakeholder direction.
 
 // ─────────────────────────────────────────────────────────────
 // Banners (success-journey-started · realignment-pending) + stage bar
@@ -863,7 +823,6 @@ function RealignBanner({
 function FinalActions({
   account,
   form,
-  goals,
   contactsItems,
   realigning,
   onStart,
@@ -871,7 +830,6 @@ function FinalActions({
 }: {
   account: ReturnType<typeof useAccountFromLayout>;
   form: CSOnboarding;
-  goals: CSGoal[];
   contactsItems: ContactRow[];
   realigning: boolean;
   onStart: () => void;
@@ -884,12 +842,13 @@ function FinalActions({
   const powerUsers = contactsItems.filter(
     (c) => !c.is_spoc && !c.is_sponsor && c.decision_power !== "executive_sponsor",
   );
-  const allAligned = goals.every(
-    (g) => goalAlignment(g).status === "aligned" || g.validation_status === "removed",
-  );
-  const accepted = goals.filter((g) => g.validation_status === "accepted").length;
-  const flagged = goals.filter((g) => g.validation_status === "flagged").length;
-
+  // 05-Jun bug 212 — Goal-related checks ("All goals aligned" + "≥1
+  // goal accepted, none flagged") removed from the Ready-to-Start
+  // checklist. Goal Validation lives in Success Management; CS
+  // Hand-off no longer gates the journey start on goal alignment.
+  // `goals` + `realigning` are kept in scope because realigning is
+  // still used as a blocker, and BlockCommitment + other downstream
+  // sections reference goals.length.
   const checks: Array<[string, boolean]> = [
     ["Entry type selected", !!form.cs_entry_type],
     ["Commercial audited", account.gate_signed],
@@ -897,20 +856,12 @@ function FinalActions({
     ["Budget Owner assigned", !!budgetOwner],
     ["Power users listed", powerUsers.length > 0],
     ["Kickoff date set", !!account.gate_signed_date],
-    ["All goals aligned (Phase A · B · C)", allAligned && goals.length > 0],
-    ["≥1 goal accepted, none flagged", accepted > 0 && flagged === 0],
   ];
   const allOk = checks.every(([, ok]) => ok);
   const blockedReason = realigning
     ? "Re-alignment in flight"
     : !allOk
-      ? flagged > 0
-        ? `${flagged} goal${flagged > 1 ? "s" : ""} flagged — resolve or remove`
-        : !allAligned
-          ? "Complete Phase A · B · C on every goal"
-          : accepted === 0
-            ? "Accept at least one aligned goal"
-            : "Complete the checks below"
+      ? "Complete the checks below"
       : "";
 
   return (
@@ -950,7 +901,7 @@ function FinalActions({
             <div className="text-[13px] font-bold">Start Success Journey</div>
             <div className="text-[11px] opacity-90 leading-[1.4]">
               {allOk && !realigning
-                ? `Lock CS Handoff and activate Success Management. ${accepted} aligned goals will be tracked.`
+                ? "Lock CS Handoff and activate Success Management."
                 : blockedReason}
             </div>
           </div>
@@ -1574,13 +1525,16 @@ export default function CSOnboardingTab() {
         accountId={account.id}
         goalsCount={goals.length}
       />
-      <BlockGoalsShortcut accountId={account.id} goalsCount={goals.length} />
+      {/* 05-Jun bug 212 — Goal Validation & Alignment shortcut removed.
+          The full block lives in Success Management → Contract & Goals
+          (sm/GoalAlignmentTab + sm/ContractGoalsTab). Stakeholder ask:
+          'totally removed from CS Hand-off and come directly in Success
+          Management - Contract and goals'. */}
 
       {!journeyStarted && (
         <FinalActions
           account={account}
           form={data}
-          goals={goals}
           contactsItems={contacts}
           realigning={!!realignment}
           onStart={startJourney}
