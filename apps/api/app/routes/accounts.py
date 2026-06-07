@@ -375,6 +375,29 @@ async def create_account(
             status.HTTP_400_BAD_REQUEST, "contract_start must be on or before contract_end"
         )
 
+    # 08-Jun · Per stakeholder: reject duplicate account names. Case-
+    # insensitive + whitespace-trimmed lookup against live (non-deleted)
+    # rows. Soft-deleted rows don't count — same name can be reused
+    # after a delete. The DB enforces this too via the partial unique
+    # index ux_accounts_name_live (migration 0067) — this preflight
+    # just turns the IntegrityError into a friendlier 409 response.
+    norm_name = body.name.strip()
+    if norm_name:
+        existing = (
+            await db.execute(
+                select(Account.id, Account.name).where(
+                    func.lower(func.trim(Account.name)) == norm_name.lower(),
+                    Account.deleted_at.is_(None),
+                )
+            )
+        ).first()
+        if existing is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f'An account named "{existing.name}" already exists. '
+                f"Account names must be unique — pick a different name or open the existing one.",
+            )
+
     slug = await _unique_slug(db, _slugify(body.name))
 
     acc = Account(
