@@ -103,18 +103,29 @@ def _parse_date_near(text: str, anchor_words: list[str]) -> date | None:
 
 
 # ACV-specific anchors (annual). TCV / multi-year are covered by _parse_tcv.
+# 05-Jun bug 209 — broadened to include common phrasings missed before
+# ("yearly subscription", "platform fee", "license fee", "per year",
+# "p.a.", "per annum") so a wider set of contract layouts auto-populate.
 _ACV_ANCHOR_RE = (
     r"(?:ACV|annual\s+contract\s+value|annual\s+fee|annual\s+subscription|"
-    r"annual\s+value|annual\s+spend)"
+    r"annual\s+value|annual\s+spend|annual\s+investment|yearly\s+subscription|"
+    r"yearly\s+fee|platform\s+fee|license\s+fee|licence\s+fee|"
+    r"subscription\s+fee\s+per\s+year|fee\s+per\s+year|per\s+annum|p\.?a\.?)"
 )
 # Looser anchors used only when the strict ones don't match.
-_ACV_FALLBACK_ANCHOR_RE = r"(?:contract\s+value|subscription\s+fee)"
+_ACV_FALLBACK_ANCHOR_RE = (
+    r"(?:contract\s+value|subscription\s+fee|engagement\s+fee|"
+    r"total\s+fee|total\s+investment|investment)"
+)
 
 
 def _scan_acv(text: str, anchor_re: str) -> list[Decimal]:
     out: list[Decimal] = []
+    # 05-Jun bug 209 — accept $/€/£/USD/EUR/GBP currency markers (was $-only).
     for m in re.finditer(
-        anchor_re + r"[^\d$\n]{0,24}\$?\s*(?P<n>[\d,]+(?:\.\d+)?)\s*(?P<u>[KkMm])?",
+        anchor_re
+        + r"[^\d$€£\n]{0,30}(?:USD|EUR|GBP|US\$)?\s*[$€£]?\s*"
+        + r"(?P<n>[\d,]+(?:\.\d+)?)\s*(?P<u>[KkMm])?",
         text,
         re.IGNORECASE,
     ):
@@ -150,7 +161,7 @@ def _parse_acv(text: str) -> Decimal | None:
 def _parse_term(text: str) -> str | None:
     """Map common term phrasings to the gate_contract_term picker values."""
     lower = text.lower()
-    # Year-based
+    # Year-based — numeric ("3-year", "3 years")
     m = re.search(r"(\d+)\s*[- ]\s*year", lower)
     if m:
         n = int(m.group(1))
@@ -158,11 +169,16 @@ def _parse_term(text: str) -> str | None:
             return "1 year"
         if 2 <= n <= 5:
             return f"{n} years"
-    if "annual" in lower or "1-year" in lower:
+    # 05-Jun bug 209 — spelled-out numbers ("one-year", "three year term")
+    _WORD_TO_N = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+    for word, n in _WORD_TO_N.items():
+        if re.search(rf"\b{word}[- ]year", lower):
+            return "1 year" if n == 1 else f"{n} years"
+    if "annual" in lower or "1-year" in lower or "yearly" in lower:
         return "1 year"
-    if "two-year" in lower or "2-year" in lower:
+    if "biennial" in lower or "2-year" in lower or "two-year" in lower:
         return "2 years"
-    if "three-year" in lower or "3-year" in lower:
+    if "triennial" in lower or "3-year" in lower or "three-year" in lower:
         return "3 years"
     if "multi-year" in lower or "custom term" in lower or "bespoke term" in lower:
         return "Custom"
@@ -426,7 +442,17 @@ def _stub_extract(document_id: str, text: str) -> HandoffExtractionResult:
         document_id=document_id,
         is_stub=True,
         gate_signed_date=_parse_date_near(
-            text, ["signed", "signing", "effective date", "execution date"],
+            text,
+            [
+                # Existing anchors
+                "signed", "signing", "effective date", "execution date",
+                # 05-Jun bug 209 — broader anchors so contracts that use
+                # alternative phrasings still auto-populate.
+                "agreement date", "contract date", "start date",
+                "commencement date", "service start", "effective from",
+                "starting on", "agreement effective", "entered into",
+                "entered into on", "executed on", "dated as of",
+            ],
         ),
         gate_renewal_date=_parse_renewal_date(text),
         gate_contract_acv_usd=_parse_acv(text),
@@ -547,7 +573,19 @@ async def _real_extract(document_id: str, text: str) -> HandoffExtractionResult 
             other_terms=data.get("other_terms"),
         )
     except Exception as exc:
-        logger.warning("Handoff Claude extract failed (falling back to stub): %s", exc)
+        # 05-Jun bug 209 — surface enough context to debug PDFs that don't
+        # auto-populate. doc_id + exception type + extracted-text length +
+        # a short prefix (so we can see if markitdown got something usable
+        # vs returned empty / garbage characters).
+        preview = (text[:160] or "").replace("\n", " ")
+        logger.warning(
+            "Handoff Claude extract failed (falling back to stub) "
+            "doc=%s exc=%s text_len=%d preview=%r",
+            document_id,
+            exc,
+            len(text or ""),
+            preview,
+        )
         return None
 
 

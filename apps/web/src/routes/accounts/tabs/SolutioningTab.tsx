@@ -814,9 +814,21 @@ function inputCls(enabled: boolean) {
 
 function diff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
   const out: Record<string, unknown> = {};
+  // 05-Jun bug 210 — keys MUST cover every field in SolutioningUpdate
+  // or the diff silently drops them and Save persists nothing. Trial
+  // Summary (7 fields) and Sales Hand-off context (8 fields) were
+  // missing → user typed values, clicked Save, server never received
+  // them, refetch / lock blanked the form.
   const keys: (keyof SolutioningUpdate)[] = [
     "proposed_solution", "engagement_type", "engagement_duration_months",
     "value_themes", "value_definition", "estimated_value_musd",
+    // Trial Summary (03-Jun bug 7)
+    "trial_client_type", "trial_type", "trial_payment_type", "trial_date",
+    "trial_modules_tested", "trial_outcome", "trial_feedback",
+    // Sales Hand-off context (M13)
+    "sh_value_validation", "sh_validation_notes", "sh_go_live_date",
+    "sh_first_checkpoint", "sh_stakeholder_signoff", "sh_commercial_context",
+    "sales_watchouts", "handoff_file_name",
   ];
   for (const k of keys) {
     if (JSON.stringify(next[k]) !== JSON.stringify(prev[k])) out[k] = next[k];

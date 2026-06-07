@@ -230,20 +230,22 @@ GUIDANCE:
       Commercial Lead / Account Manager       → sales_lead
 
   Examples:
-    "Nivedha, SDR, Beroe"                  → sdr_lead="Nivedha", discovery_lead="Nivedha"
-    "Anurag Bhagat, CSM, Beroe"            → discovery_lead="Anurag Bhagat", sdr_lead="Anurag Bhagat"
+    "Nivedha, SDR, Beroe"                  → sdr_lead="Nivedha"
+    "Anurag Bhagat, CSM, Beroe"            → discovery_lead="Anurag Bhagat"
     "Dinesh Gokhale, Commercial Owner, Beroe" → sales_lead="Dinesh Gokhale"
     "Alekh Chatterji, Sales, Beroe"        → sales_lead="Alekh Chatterji"
     "Aditya Pherwani — Sales Lead"         → sales_lead="Aditya Pherwani"
     "Recorded by: Nivedha, SDR"            → sdr_lead="Nivedha"
-    "MEETING NOTES BY: Anurag Bhagat, CSM, Beroe" → discovery_lead + sdr_lead = "Anurag Bhagat"
 
-  When the SDR isn't named but a CSM is, mirror the CSM into sdr_lead
-  (and vice versa) — the discovery facilitator is the SDR-equivalent.
-  When the same person filled multiple Beroe roles, set them in each
-  field. Strip honorifics and trailing role markers — only the name
-  ("Aditya Pherwani"), no titles, no commas, no parenthetical notes.
-  NEVER guess Beroe-side names that aren't named in the doc — leave null.
+  05-Jun bug 211 — DO NOT mirror SDR ↔ discovery_lead. Only populate a
+  field when the source document EXPLICITLY names that role. If the doc
+  lists only a CSM, fill discovery_lead and LEAVE sdr_lead null. If the
+  doc lists only an SDR, fill sdr_lead and LEAVE discovery_lead null.
+  When the same person filled multiple Beroe roles (e.g. "Anurag, SDR &
+  CSM, Beroe"), set them in each field. Strip honorifics and trailing
+  role markers — only the name ("Aditya Pherwani"), no titles, no
+  commas, no parenthetical notes. NEVER guess Beroe-side names that
+  aren't named in the doc — leave null.
 - brief.call_type: first_discovery for any discovery / intro / initial
   meeting; qbr for "QBR" or "quarterly business review"; renewal for
   "renewal" discussions; expansion for "expand" / "add-on"; other for
@@ -931,23 +933,26 @@ def _extract_engagement_leads(text: str) -> dict:
         rec_name = rec.group(1).strip()
         # The "Recorded by:" line often carries a role suffix — pull that
         # too if present so "Recorded by: Anurag, CSM, Beroe" classifies
-        # correctly instead of defaulting to SDR.
+        # correctly instead of defaulting to a generic role.
         tail = text[rec.end() : rec.end() + 80]
         tail_role_m = re.match(r"\s*,\s*([\w/ ]+?)\s*(?:,|\n|$)", tail)
         slot = (
             _classify_beroe_role(tail_role_m.group(1))
             if tail_role_m else None
-        ) or "discovery"
-        seen_by_role.setdefault(slot, rec_name)
-        # The recorded-by person almost always also sourced the call.
-        seen_by_role.setdefault("sdr", rec_name)
+        )
+        # 05-Jun bug 211 — only assign if the role is explicit. Previously
+        # defaulted to "discovery" + auto-mirrored to "sdr" which filled
+        # those fields even when the doc never named that role. The user
+        # wants no auto-population unless the source document actually
+        # specifies the role.
+        if slot:
+            seen_by_role.setdefault(slot, rec_name)
 
-    # Mirror SDR ↔ discovery when only one is present (the SDR usually
-    # runs discovery, and a CSM-led discovery doc usually has no SDR row).
-    if "sdr" in seen_by_role and "discovery" not in seen_by_role:
-        seen_by_role["discovery"] = seen_by_role["sdr"]
-    if "discovery" in seen_by_role and "sdr" not in seen_by_role:
-        seen_by_role["sdr"] = seen_by_role["discovery"]
+    # 05-Jun bug 211 — Mirror SDR ↔ discovery removed. Only populate a
+    # role when the source document explicitly names that role. Mirroring
+    # caused Discovery Lead / SDR Lead to fill with the same name even
+    # when only one was mentioned (or when only a CSM was listed and
+    # neither role was actually present in the doc).
 
     if "sdr" in seen_by_role:
         out["sdr_lead"] = seen_by_role["sdr"]
