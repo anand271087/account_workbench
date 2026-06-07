@@ -78,17 +78,31 @@ export function KindUploadCard({
 
   // Auto-refetch when anything's processing — even if we didn't kick it off
   // in this session (cross-tab pickups also flip pills here). We also keep
-  // polling for ~2 min after AI summary completes on an MoM until the worker
-  // writes the structured-extraction result, so the "Extracting fields…"
-  // chip eventually flips to "Fields populated" without a manual refresh.
-  const EXTRACTION_WINDOW_MS = 120_000;
+  // polling for ~3 min after AI summary completes on an MoM/VPD until the
+  // worker writes every structured-extraction result, so the "Extracting
+  // fields…" chip eventually flips to "Fields populated" without a manual
+  // refresh.
+  //
+  // For VPD specifically the worker writes TWO commits sequentially:
+  //   1) vpd_extracted_at      → Solutioning candidate fields
+  //   2) cs_goals_extracted_at → candidate Goals (M15.1)
+  // We MUST keep polling until BOTH are set; otherwise the "Review N
+  // candidate goals" CTA never appears (bug: new accounts where the
+  // second commit lands after the first 1.5s refetch).
+  const EXTRACTION_WINDOW_MS = 180_000;
   const liveCount =
     data?.items.filter((d) => {
       if (d.deleted_at) return false;
       if (d.ai_status === "pending" || d.ai_status === "processing") return true;
       const recent = Date.now() - new Date(d.uploaded_at).getTime() < EXTRACTION_WINDOW_MS;
       if (kind === "mom" && d.ai_status === "complete" && !d.mom_extracted_at && recent) return true;
-      if (kind === "vpd" && d.ai_status === "complete" && !d.vpd_extracted_at && recent) return true;
+      if (
+        kind === "vpd" &&
+        d.ai_status === "complete" &&
+        (!d.vpd_extracted_at || !d.cs_goals_extracted_at) &&
+        recent
+      )
+        return true;
       return false;
     }).length ?? 0;
 
