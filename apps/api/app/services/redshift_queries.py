@@ -43,7 +43,7 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from app.core.redshift import ensure_tunnel, get_connection
+from app.core.redshift import ensure_tunnel, get_connection, lease_connection
 
 logger = logging.getLogger(__name__)
 
@@ -51,24 +51,29 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # In-process TTL cache (per worker). 5-minute TTL matches the per-tab
 # refresh expectation; clears between deploys.
+#
+# 08-Jun · Swapped the hand-rolled dict for cachetools.TTLCache +
+# threading.Lock. Required because bundle execution now runs inside
+# a threadpool (Priority 1 fix in intel routes) — multiple threads
+# can race on cache reads/writes for the same key.
 # ============================================================
-_CACHE: dict[tuple, tuple[float, Any]] = {}
-_CACHE_TTL = 300.0
+import threading
+
+from cachetools import TTLCache
+
+_CACHE_TTL = 300.0  # seconds — env-tunable later if needed
+_CACHE: TTLCache = TTLCache(maxsize=512, ttl=_CACHE_TTL)
+_CACHE_LOCK = threading.Lock()
 
 
 def _cache_get(key: tuple) -> Any | None:
-    hit = _CACHE.get(key)
-    if not hit:
-        return None
-    when, value = hit
-    if (time.time() - when) > _CACHE_TTL:
-        _CACHE.pop(key, None)
-        return None
-    return value
+    with _CACHE_LOCK:
+        return _CACHE.get(key)
 
 
 def _cache_put_and_return(key: tuple, value: Any) -> Any:
-    _CACHE[key] = (time.time(), value)
+    with _CACHE_LOCK:
+        _CACHE[key] = value
     return value
 
 
@@ -189,15 +194,17 @@ def infra_status() -> dict | None:
 
 
 def _scalar(sql: str, params: tuple = (), default: Any = None) -> Any:
+    # 08-Jun · Was: get_connection() + close() on every call (new SSL
+    # handshake each query). Now: lease from the process-wide pool in
+    # app.core.redshift; pool returns the connection on context exit.
     for attempt in (1, 2):
-        conn = None
         try:
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute(sql, params)
-            row = cur.fetchone()
-            cur.close()
-            return row[0] if row and row[0] is not None else default
+            with lease_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(sql, params)
+                row = cur.fetchone()
+                cur.close()
+                return row[0] if row and row[0] is not None else default
         except Exception as exc:  # noqa: BLE001
             if attempt == 1 and _is_connection_error(exc):
                 logger.warning("Redshift connection refused; healing tunnel and retrying once…")
@@ -206,23 +213,18 @@ def _scalar(sql: str, params: tuple = (), default: Any = None) -> Any:
             logger.warning("redshift scalar failed: %s — %s", sql[:120].replace("\n", " "), exc)
             _mark_unhealthy()
             return default
-        finally:
-            if conn:
-                try: conn.close()
-                except Exception: pass  # noqa: BLE001
     return default
 
 
 def _rows(sql: str, params: tuple = ()) -> list[tuple]:
     for attempt in (1, 2):
-        conn = None
         try:
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute(sql, params)
-            rs = cur.fetchall()
-            cur.close()
-            return rs or []
+            with lease_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(sql, params)
+                rs = cur.fetchall()
+                cur.close()
+                return rs or []
         except Exception as exc:  # noqa: BLE001
             if attempt == 1 and _is_connection_error(exc):
                 logger.warning("Redshift connection refused; healing tunnel and retrying once…")
@@ -231,10 +233,6 @@ def _rows(sql: str, params: tuple = ()) -> list[tuple]:
             logger.warning("redshift rows failed: %s — %s", sql[:120].replace("\n", " "), exc)
             _mark_unhealthy()
             return []
-        finally:
-            if conn:
-                try: conn.close()
-                except Exception: pass  # noqa: BLE001
     return []
 
 

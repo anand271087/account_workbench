@@ -262,3 +262,115 @@ def smoke_test() -> tuple[bool, str]:
         except Exception:  # noqa: BLE001
             pass
         return (False, f"Query failed: {exc}")
+
+
+# ============================================================
+# 08-Jun · Connection pool. Was: open + close a fresh Redshift
+# connection on every _scalar/_rows call. With 16 bundles × N
+# users, that's hundreds of SSL handshakes/min. Now: a process-
+# wide pool of up to REDSHIFT_POOL_SIZE connections, FIFO leased
+# by the threadpool that runs the sync bundle code.
+# ============================================================
+
+import logging as _pool_logging
+import queue as _pool_queue
+import threading as _pool_threading
+from contextlib import contextmanager as _contextmanager
+from typing import Iterator as _Iterator
+
+_pool_log = _pool_logging.getLogger(__name__)
+_POOL: _pool_queue.Queue | None = None
+_POOL_LOCK = _pool_threading.Lock()
+_POOL_SIZE = 10  # 16 bundles × N users; 10 covers concurrent load
+
+
+def _ensure_pool() -> _pool_queue.Queue:
+    """Lazily create the pool on first use. Idempotent + thread-safe."""
+    global _POOL
+    if _POOL is not None:
+        return _POOL
+    with _POOL_LOCK:
+        if _POOL is None:
+            _POOL = _pool_queue.Queue(maxsize=_POOL_SIZE)
+    return _POOL
+
+
+def _is_alive(conn) -> bool:  # noqa: ANN001
+    """Cheap liveness check — sub-1ms when healthy, fast-fails on broken pipe."""
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+@_contextmanager
+def lease_connection(timeout: float = 30.0) -> _Iterator:
+    """Lease one Redshift connection from the pool. Self-heals dead
+    connections + opens new ones up to _POOL_SIZE on demand.
+
+    Usage (inside the sync bundle code that runs in run_in_threadpool):
+
+        from app.core.redshift import lease_connection
+        with lease_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            ...
+
+    On exit, the connection goes back to the pool (or is dropped if a
+    poisoned-txn exception bubbled out — Redshift's 25P02 cascade).
+    """
+    pool = _ensure_pool()
+    conn = None
+    poisoned = False
+    try:
+        try:
+            conn = pool.get_nowait()
+            if not _is_alive(conn):
+                try: conn.close()
+                except Exception: pass  # noqa: BLE001, S110
+                conn = None
+        except _pool_queue.Empty:
+            conn = None
+
+        if conn is None:
+            ensure_tunnel()
+            conn = get_connection()
+
+        yield conn
+    except Exception:
+        poisoned = True
+        raise
+    finally:
+        if conn is not None:
+            if poisoned:
+                try: conn.close()
+                except Exception: pass  # noqa: BLE001, S110
+            else:
+                try:
+                    pool.put_nowait(conn)
+                except _pool_queue.Full:
+                    # Pool already at capacity — drop this connection.
+                    try: conn.close()
+                    except Exception: pass  # noqa: BLE001, S110
+
+
+def drain_pool() -> None:
+    """Close every pooled connection. Call from FastAPI lifespan shutdown."""
+    global _POOL
+    if _POOL is None:
+        return
+    drained = 0
+    while True:
+        try:
+            conn = _POOL.get_nowait()
+        except _pool_queue.Empty:
+            break
+        try: conn.close()
+        except Exception: pass  # noqa: BLE001, S110
+        drained += 1
+    _POOL = None
+    _pool_log.info("Redshift pool drained · closed %d connection(s)", drained)

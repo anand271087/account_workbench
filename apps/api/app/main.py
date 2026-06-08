@@ -61,6 +61,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     except Exception:  # noqa: BLE001
         log.exception("Redshift bootstrap failed (non-fatal)")
     yield
+    # 08-Jun · Drain the Redshift connection pool before stopping the
+    # tunnel so we don't leak sessions on the cluster side.
+    try:
+        await asyncio.to_thread(redshift_core.drain_pool)
+    except Exception:  # noqa: BLE001
+        log.exception("Redshift pool drain failed")
     try:
         await asyncio.to_thread(redshift_core.stop_tunnel)
     except Exception:  # noqa: BLE001
