@@ -14,7 +14,7 @@
 //
 // Demo state toggle (fixed top-right) mirrors the prototype's mock-toggle.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
@@ -22,22 +22,20 @@ import { authProvider } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { useConfirm, useNotify, usePrompt } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../AccountProfileLayout";
+import { KindUploadCard } from "@/components/KindUploadCard";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeHandoffSlice,
-  saveExtractionDraft,
 } from "@/lib/extractionDraft";
 import type { HandoffExtractionResult } from "@/types/handoff_extraction";
 import type {
   SigningGate,
   SignAccountBody,
   ModuleName,
-  DocType,
   ModuleField,
 } from "@/types/signing";
 import {
   ALL_MODULES,
-  DOC_TYPES,
   BILLING_FREQ_OPTIONS,
   PAYMENT_TERM_OPTIONS,
   GEO_OPTIONS,
@@ -366,16 +364,20 @@ function SalesHandoffSection({
         />
       </Field>
 
-      {/* Contract Documents */}
+      {/* Contract Documents — 08-Jun · swapped from the bespoke
+          ContractDocsList to KindUploadCard so this section matches
+          the MoM / VPD upload UX (drag-drop, AI status pill, summary,
+          AI-assisted badge) and rides on KindUploadCard's built-in
+          contract auto-apply that stashes handoff_extracted_fields
+          into the localStorage draft → the drain() effect above
+          consumes it → Contract Audit fields populate. */}
       <GroupHead>Contract Documents</GroupHead>
-      <div className="text-[11px] text-text-muted mb-2">
-        Upload the signed contract or supporting files with type tagged. Preferred: <b>Signed Proposal</b> or <b>MSA</b>.
-      </div>
-      <ContractDocsList
+      <KindUploadCard
         accountId={account.id}
-        docs={contractDocs}
-        locked={locked}
-        onMutate={onMutate}
+        kind="contract"
+        title="Signed Contract"
+        description="Upload the signed contract (MSA or Signed Proposal). Claude reads it and auto-populates the Contract Audit fields below — signed date, term, ACV, modules, tier, segment, subscribers, plus payment terms and other contract clauses when present. Review and adjust anything that's off."
+        emptyHint="No contracts yet. Drag a .pdf, .docx or .txt onto the card above."
       />
 
       {/* Lock CTA */}
@@ -607,157 +609,6 @@ function PowerUserRow({
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Contract documents — typed upload + list + download/remove
-// ─────────────────────────────────────────────────────────────
-function ContractDocsList({
-  accountId,
-  docs,
-  locked,
-  onMutate,
-}: {
-  accountId: string;
-  docs: Document[];
-  locked: boolean;
-  onMutate: () => void;
-}) {
-  const qc = useQueryClient();
-  const notify = useNotify();
-  const confirm = useConfirm();
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const [docType, setDocType] = useState<DocType>("Signed Proposal");
-  const [chosenFile, setChosenFile] = useState<File | null>(null);
-
-  const uploadMutation = useMutation({
-    mutationFn: async () => {
-      if (!chosenFile) return null;
-      const fd = new FormData();
-      fd.append("kind", "contract");
-      fd.append("contract_subtype", docType);
-      fd.append("file", chosenFile);
-      return api.postForm(`/api/v1/accounts/${accountId}/documents`, fd);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["documents", accountId, "contract"] });
-      setChosenFile(null);
-      if (fileRef.current) fileRef.current.value = "";
-      onMutate();
-      notify({ title: "Document uploaded", tone: "success" });
-    },
-    onError: (e: ApiError) =>
-      notify({ title: "Upload failed", body: e.message, tone: "error" }),
-  });
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/v1/documents/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", accountId, "contract"] }),
-  });
-
-  async function downloadDoc(d: Document) {
-    try {
-      const r = await api.get<{ url: string }>(`/api/v1/documents/${d.id}/download-url`);
-      window.open(r.url, "_blank", "noopener");
-    } catch (e) {
-      notify({
-        title: "Download failed",
-        body: e instanceof ApiError ? e.message : undefined,
-        tone: "error",
-      });
-    }
-  }
-
-  return (
-    <>
-      {docs.map((d) => (
-        <div
-          key={d.id}
-          className="grid grid-cols-[140px_1fr_auto_auto] gap-2 items-center px-2.5 py-2 border rounded-[8px] mb-1.5"
-          style={{ background: "#f0fdf4", borderColor: `${C.GREEN}40` }}
-        >
-          <span
-            className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-center"
-            style={{ background: "#ede6ff", color: "#3800CC" }}
-          >
-            {d.contract_subtype ?? "Untagged"}
-          </span>
-          <div className="min-w-0">
-            <div className="text-[12px] font-semibold truncate" style={{ color: "#2fb87a" }}>
-              📄 {d.filename}
-            </div>
-            <div className="text-[10px] text-text-muted">
-              Uploaded {fd(d.uploaded_at)}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => downloadDoc(d)}
-            className="text-[10px] px-2 py-1 rounded-[6px] font-semibold"
-            style={{ background: "#ede6ff", color: C.BLUE, border: "1px solid #c9b5ff" }}
-          >
-            ⬇ Download
-          </button>
-          {!locked && (
-            <button
-              type="button"
-              onClick={async () => {
-                const ok = await confirm({
-                  title: "Remove this document?",
-                  body: `Soft-delete "${d.filename}". Admins can restore within 30 days.`,
-                  confirmLabel: "Remove",
-                  danger: true,
-                });
-                if (ok) deleteMutation.mutate(d.id);
-              }}
-              className="text-[10px] px-2 py-1 rounded-[6px] font-semibold border bg-white text-text-secondary"
-              style={{ borderColor: C.CB }}
-            >
-              Remove
-            </button>
-          )}
-        </div>
-      ))}
-      {!locked && (
-        <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr_auto] gap-2.5 items-end mt-2">
-          <Field label="Document Type">
-            <Select
-              value={docType}
-              disabled={false}
-              onChange={(v) => setDocType(v as DocType)}
-            >
-              {DOC_TYPES.map((t) => <option key={t}>{t}</option>)}
-            </Select>
-          </Field>
-          <Field label="File">
-            <div
-              className="border-[1.5px] border-dashed rounded-[10px] px-3 py-2 text-center cursor-pointer transition"
-              style={{ background: "#fafbfe", borderColor: C.CB }}
-              onClick={() => fileRef.current?.click()}
-            >
-              <span className="text-[11px] text-text-secondary">
-                📁 {chosenFile ? chosenFile.name : "Choose file (PDF, DOCX)"}
-              </span>
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.docx,.doc,.txt"
-              onChange={(e) => setChosenFile(e.target.files?.[0] ?? null)}
-            />
-          </Field>
-          <button
-            type="button"
-            disabled={!chosenFile || uploadMutation.isPending}
-            onClick={() => uploadMutation.mutate()}
-            className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold text-white disabled:opacity-50 self-end h-[34px]"
-            style={{ background: C.BLUE }}
-          >
-            {uploadMutation.isPending ? "Uploading…" : "+ Add"}
-          </button>
-        </div>
-      )}
-    </>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // Section B — Contract Audit (amber card)
@@ -1919,54 +1770,12 @@ export default function SalesHandoffTab() {
     queryKey: ["documents", account.id, "contract"],
     queryFn: () => api.get(`/api/v1/accounts/${account.id}/documents?kind=contract`),
     staleTime: 15_000,
-    // 08-Jun · Poll while the worker is running extraction so the
-    // handoff_extracted_at column landing kicks the stash effect
-    // below without the user having to manually refresh.
-    refetchInterval: (q) => {
-      const items = (q.state.data?.items ?? []) as Document[];
-      const anyPending = items.some(
-        (d) => !d.deleted_at && !d.handoff_extracted_at && d.ai_status !== "complete",
-      );
-      return anyPending ? 2000 : false;
-    },
   });
 
-  // 08-Jun · Auto-apply Handoff extraction. SalesHandoffTab uploads
-  // contracts via its own form (not KindUploadCard), so the auto-stash
-  // logic that KindUploadCard runs for MoM / VPD never ran for
-  // contracts → handoff_extracted_fields landed in the DB but the
-  // localStorage draft was never written, so the drain() effect below
-  // had nothing to consume and the Contract Audit fields stayed blank.
-  // This mirrors KindUploadCard's contract auto-apply for the docs we
-  // fetch directly here.
-  useEffect(() => {
-    const items = docsQ.data?.items ?? [];
-    if (items.length === 0) return;
-    const pending = items.filter(
-      (d) =>
-        !d.deleted_at &&
-        d.handoff_extracted_fields &&
-        !sessionStorage.getItem(
-          `awb:extraction-applied:${d.id}:${d.handoff_extracted_at ?? ""}`,
-        ) &&
-        !localStorage.getItem(
-          `awb:extraction-applied:${d.id}:${d.handoff_extracted_at ?? ""}`,
-        ),
-    );
-    if (pending.length === 0) return;
-    pending.forEach((d) => {
-      const stamp = d.handoff_extracted_at ?? "";
-      const key = `awb:extraction-applied:${d.id}:${stamp}`;
-      sessionStorage.setItem(key, "1");
-      const h = d.handoff_extracted_fields as unknown as HandoffExtractionResult;
-      saveExtractionDraft(account.id, {
-        filename: d.filename,
-        appliedAt: new Date().toISOString(),
-        handoff: h,
-      });
-      localStorage.setItem(key, new Date().toISOString());
-    });
-  }, [docsQ.data?.items, account.id]);
+  // 08-Jun · The earlier polling+stash useEffect was removed once
+  // ContractDocsList → KindUploadCard. KindUploadCard owns the
+  // contract auto-apply (poll for handoff_extracted_fields landing →
+  // saveExtractionDraft → drain() consumes → form patched).
 
   // Force auth header injection — same as KindUploadCard for postForm.
   useEffect(() => { void authProvider.getAccessToken().catch(() => null); }, []);
