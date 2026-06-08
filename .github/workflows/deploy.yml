@@ -86,7 +86,7 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.environment != 'development'
-    uses: Beroe-Inc/common-actions/.github/workflows/branch-access-control.yml@main
+    uses: Beroe-Common-Project/common-actions/.github/workflows/branch-access-control.yml@main
     with:
       allowed_teams: ${{ github.event.inputs.environment == 'production' && 'prod-team' || 'qa-team' }}
     secrets:
