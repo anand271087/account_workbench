@@ -1088,25 +1088,122 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
   if (mode === "numbers") {
     return <div className="space-y-3">{note}{paramList}</div>;
   }
+  // 08-Jun · Charts mode per Analytics_DataPoints_v10.xlsx · Custom Usage.
+  // Spec → KPI stats for totals + Stacked bar for L1-L4 + Gauge for %
+  // utilized + Stacked bar for AI SWAT vs BASICS + chips for top
+  // Categories / Spendpools / Deliverables.
+  const utilizationPct = !isUnavailable(c.credits_utilization_pct) && typeof c.credits_utilization_pct === "number"
+    ? (c.credits_utilization_pct as number) : null;
   return (
     <div className="space-y-3">
       {note}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Total (proxy)" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
-        <KpiTile label="L1" value={fmtNum(cbc.L1)} accent={PALETTE.aqua} />
-        <KpiTile label="L2" value={fmtNum(cbc.L2)} accent={PALETTE.fuscia} />
-        <KpiTile label="L3+L4" value={fmtNum(cbc.L3 + cbc.L4)} accent={PALETTE.bumblebee} />
+      <Card>
+        <CardTitle>Custom Credits</CardTitle>
+
+        {/* KPI tiles — totals + per-tier counts */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-3">
+          <KpiTile label="Total credits used" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
+          <KpiTile
+            label="Estimated (active)"
+            value={isUnavailable(c.credits_estimated_active) ? "—" : fmtNum(c.credits_estimated_active as number)}
+            na={isUnavailable(c.credits_estimated_active) ? { reason: c.credits_estimated_active.reason } : undefined}
+            accent={PALETTE.aqua}
+          />
+          <KpiTile
+            label="Allocated (tier)"
+            value={isUnavailable(c.credits_allocated_tier) ? "—" : fmtNum(c.credits_allocated_tier as number)}
+            na={isUnavailable(c.credits_allocated_tier) ? { reason: c.credits_allocated_tier.reason } : undefined}
+            accent={PALETTE.fuscia}
+          />
+          <KpiTile label="Commodity dashboards" value={fmtNum(c.commodity_dashboards)} accent={PALETTE.bumblebee} />
+          <KpiTile label="Country reports" value={fmtNum(c.country_reports)} accent={PALETTE.midnight} />
+          <KpiTile
+            label="Feedback score"
+            value={c.client_feedback_score == null ? "—" : c.client_feedback_score.toFixed(2)}
+            accent={PALETTE.indigo}
+          />
+        </div>
+
+        {/* L1-L4 stacked bar + utilization gauge */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div className="md:col-span-2">
+            <div className="text-[11px] font-semibold mb-1">Credits used by complexity (L1-L4)</div>
+            <SplitBar
+              slices={[
+                { label: "L1", value: cbc.L1, color: SERIES_COLORS[0] },
+                { label: "L2", value: cbc.L2, color: SERIES_COLORS[1] },
+                { label: "L3", value: cbc.L3, color: SERIES_COLORS[2] },
+                { label: "L4", value: cbc.L4, color: SERIES_COLORS[3] },
+              ]}
+            />
+          </div>
+          {utilizationPct != null ? (
+            <RadialGauge label="% utilized" pct={utilizationPct} color={PALETTE.fuscia} />
+          ) : (
+            <KpiTile
+              label="% utilized"
+              value="—"
+              na={isUnavailable(c.credits_utilization_pct) ? { reason: c.credits_utilization_pct.reason } : undefined}
+            />
+          )}
+        </div>
+
+        {/* AI SWAT vs BASICS — Stacked bar (was donut) */}
+        <div className="mb-3">
+          <div className="text-[11px] font-semibold mb-1">AI SWAT vs BASICS split</div>
+          <SplitBar
+            slices={c.ai_swat_vs_basics.map((r, i) => ({
+              label: r.label, value: r.count, color: SERIES_COLORS[i % SERIES_COLORS.length],
+            }))}
+          />
+        </div>
+
+        {/* Top categories / spendpools / deliverables — chips */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <ChipCloud title="Top categories" items={c.top_categories} />
+          <ChipCloud title="Top spendpools" items={c.top_spendpools} />
+          <ChipCloud title="Top deliverables" items={c.top_deliverables} />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// 08-Jun · Chip-cloud rendering for spec "Table / chips" representations.
+// Each item becomes a coloured pill showing its label + count.
+function ChipCloud({
+  title, items, max = 16,
+}: {
+  title: string;
+  items: Array<{ label: string; count: number }>;
+  max?: number;
+}) {
+  if (items.length === 0) {
+    return (
+      <div>
+        <div className="text-[11px] font-semibold mb-1">{title}</div>
+        <div className="text-[11px] text-text-muted">No data</div>
       </div>
-      {paramList}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>AI SWAT vs Basics</CardTitle>
-          <DonutChart slices={c.ai_swat_vs_basics.map((r) => ({ label: r.label, value: r.count }))} />
-        </Card>
-        <Card>
-          <CardTitle>Top deliverables</CardTitle>
-          <BarChart rows={barRows(c.top_deliverables)} />
-        </Card>
+    );
+  }
+  return (
+    <div>
+      <div className="text-[11px] font-semibold mb-1">{title}</div>
+      <div className="flex flex-wrap gap-1">
+        {items.slice(0, max).map((it, i) => (
+          <span
+            key={i}
+            className="text-[10px] px-1.5 py-0.5 rounded-full bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/20"
+            title={`${it.label} · ${it.count}`}
+          >
+            {it.label} <span className="font-semibold">· {it.count}</span>
+          </span>
+        ))}
+        {items.length > max && (
+          <span className="text-[10px] text-text-muted self-center">
+            +{items.length - max} more
+          </span>
+        )}
       </div>
     </div>
   );
@@ -1149,11 +1246,27 @@ export function TLSheet({ data: t, mode }: { data: ThoughtLeadership; mode?: She
 // ============================================================
 
 export function DataHubSheet({ data: d, mode }: { data: DataHubBundle; mode?: SheetMode }) {
-  void mode; // single-param sheet — same layout either way
-  return (
+  const paramList = (
     <Card>
       <CardTitle>1 parameter from spec sheet</CardTitle>
       <ParamRow label="# data pulls" value={maybeVal(d.data_pulls)} />
+    </Card>
+  );
+  if (mode === "numbers") return paramList;
+  // 08-Jun · Spec → KPI stat. Wide single tile centered.
+  const pulls = typeof d.data_pulls === "number" ? d.data_pulls : null;
+  return (
+    <Card>
+      <CardTitle>DataHub</CardTitle>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <KpiTile
+          label="Data pulls"
+          value={pulls != null ? fmtNum(pulls) : "—"}
+          sub="API calls × frequency"
+          na={isUnavailable(d.data_pulls) ? { reason: d.data_pulls.reason } : undefined}
+          accent={PALETTE.indigo}
+        />
+      </div>
     </Card>
   );
 }
@@ -1181,33 +1294,70 @@ export function IWSheet({ data: iw, mode }: { data: InflationWatch; mode?: Sheet
       </Card>
   );
   if (mode === "numbers") return paramList;
+  // 08-Jun · Charts mode per Analytics_DataPoints_v10.xlsx · Inflation Watch.
+  // Spec → 6 KPI stats, 2 Table/bar (top pages + top features), 1 Funnel
+  // (Scenario Modelling completion).
+  const topPagesList = Array.isArray(iw.top_pages)
+    ? (iw.top_pages as Array<{ page: string; views: number }>)
+    : null;
+  const sm = iw.scenario_modelling ?? { ran: 0, saved: 0 };
+  const completionPct = sm.ran > 0 ? Math.round((sm.saved / sm.ran) * 100) : 0;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Unique Visitors" value={fmtNum(iw.unique_visitors)} accent={PALETTE.indigo} />
-        <KpiTile label="Total Sessions" value={fmtNum(iw.total_sessions)} accent={PALETTE.aqua} />
-        <KpiTile
-          label="Total Time (m)"
-          value={fmtNum(Math.round(iw.total_time_mins))}
-          accent={PALETTE.fuscia}
-        />
-        <KpiTile
-          label="Avg Sessions / Visitor"
-          value={iw.avg_sessions_per_visitor.toFixed(1)}
-          accent={PALETTE.bumblebee}
-        />
-      </div>
-      {paramList}
       <Card>
-        <CardTitle>Top features (visitors / views)</CardTitle>
-        <SimpleTable
-          cols={[
-            { key: "feature", label: "Feature" },
-            { key: "visitors", label: "Visitors", numeric: true },
-            { key: "views", label: "Views", numeric: true },
-          ]}
-          rows={iw.top_features.map((f) => ({ feature: f.feature, visitors: f.visitors, views: f.views }))}
-        />
+        <CardTitle>Inflation Watch · GIT</CardTitle>
+        {/* 6 KPI tiles per spec */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">
+          <KpiTile label="Unique visitors" value={fmtNum(iw.unique_visitors)} accent={PALETTE.indigo} />
+          <KpiTile label="Total sessions" value={fmtNum(iw.total_sessions)} accent={PALETTE.aqua} />
+          <KpiTile label="Time spent (m)" value={fmtNum(Math.round(iw.total_time_mins))} accent={PALETTE.fuscia} />
+          <KpiTile label="Avg sessions / visitor" value={iw.avg_sessions_per_visitor.toFixed(1)} accent={PALETTE.bumblebee} />
+          <KpiTile label="Avg session time (m)" value={iw.avg_session_time_mins.toFixed(1)} accent={PALETTE.midnight} />
+          <KpiTile label="Avg time / visitor (m)" value={iw.avg_time_per_visitor_mins.toFixed(1)} accent={PALETTE.indigo} />
+        </div>
+
+        {/* Top features + Top pages — Table / bar pair */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Top features (visitors / views)</div>
+            <SimpleTable
+              cols={[
+                { key: "feature", label: "Feature" },
+                { key: "visitors", label: "Visitors", numeric: true },
+                { key: "views", label: "Views", numeric: true },
+              ]}
+              rows={iw.top_features.map((f) => ({
+                feature: f.feature, visitors: f.visitors, views: f.views,
+              }))}
+            />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Top pages</div>
+            {isUnavailable(iw.top_pages) ? (
+              <NaPill reason={(iw.top_pages as { reason: string }).reason} />
+            ) : !topPagesList || topPagesList.length === 0 ? (
+              <div className="text-[11px] text-text-muted py-3 text-center">No data</div>
+            ) : (
+              <BarChart
+                rows={topPagesList.map((p, i) => ({
+                  label: p.page,
+                  value: p.views,
+                  color: SERIES_COLORS[i % SERIES_COLORS.length],
+                }))}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Scenario Modelling — Funnel-ish KPI (Ran → Saved with completion %) */}
+        <div>
+          <div className="text-[11px] font-semibold mb-1">Scenario modelling completion</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <KpiTile label="Scenarios ran" value={fmtNum(sm.ran)} accent={PALETTE.aqua} />
+            <KpiTile label="Scenarios saved" value={fmtNum(sm.saved)} accent={PALETTE.fuscia} />
+            <RadialGauge label="Completion %" pct={completionPct} color={PALETTE.indigo} />
+          </div>
+        </div>
       </Card>
     </div>
   );
@@ -1336,30 +1486,61 @@ export function AlertsSheet({ data: al, mode }: { data: AlertsBundle; mode?: She
   if (mode === "numbers") {
     return <div className="space-y-3">{scopeNote}{paramList}</div>;
   }
+  // 08-Jun · Charts mode per Analytics_DataPoints_v10.xlsx · Alerts.
+  // Spec → Open rate Gauge + Bar charts for the by-category and
+  // by-reachout breakdowns + chips for types sent.
   return (
     <div className="space-y-3">
       {scopeNote}
-      <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
-        <KpiTile label="Open Rate" value={`${al.open_rate_pct}%`} accent={PALETTE.indigo} />
-        <KpiTile label="# Alert Types" value={fmtNum(al.types_sent.length)} accent={PALETTE.aqua} />
-      </div>
-      {paramList}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>Type of alert sent</CardTitle>
-          <BarChart rows={barRows(al.types_sent)} />
-        </Card>
-        <Card>
-          <CardTitle>Open rate by category</CardTitle>
-          <BarChart
-            rows={al.open_rate_by_category.slice(0, 10).map((r, i) => ({
-              label: r.label,
-              value: r.open_rate_pct,
-              color: SERIES_COLORS[i % SERIES_COLORS.length],
-            }))}
+      <Card>
+        <CardTitle>Alerts</CardTitle>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <RadialGauge label="Open rate" pct={al.open_rate_pct ?? 0} color={PALETTE.indigo} />
+          <KpiTile label="# Alert types" value={fmtNum(al.types_sent.length)} accent={PALETTE.aqua} />
+          <KpiTile
+            label="Total alerts sent"
+            value={fmtNum(al.types_sent.reduce((s, r) => s + r.count, 0))}
+            accent={PALETTE.fuscia}
           />
-        </Card>
-      </div>
+        </div>
+
+        {/* Types sent — chips (spec: Table / chips) */}
+        <div className="mb-3">
+          <ChipCloud title="Type of alert sent" items={al.types_sent} max={20} />
+        </div>
+
+        {/* Open rate by category + by reachout — Bar charts */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Open rate by category</div>
+            {al.open_rate_by_category.length === 0 ? (
+              <div className="text-[11px] text-text-muted py-3 text-center">No data</div>
+            ) : (
+              <BarChart
+                rows={al.open_rate_by_category.slice(0, 10).map((r, i) => ({
+                  label: r.label,
+                  value: r.open_rate_pct,
+                  color: SERIES_COLORS[i % SERIES_COLORS.length],
+                }))}
+              />
+            )}
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Open rate by type of reach-out</div>
+            {al.open_rate_by_reachout.length === 0 ? (
+              <div className="text-[11px] text-text-muted py-3 text-center">No data</div>
+            ) : (
+              <BarChart
+                rows={al.open_rate_by_reachout.slice(0, 10).map((r, i) => ({
+                  label: r.label,
+                  value: r.open_rate_pct,
+                  color: SERIES_COLORS[i % SERIES_COLORS.length],
+                }))}
+              />
+            )}
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
