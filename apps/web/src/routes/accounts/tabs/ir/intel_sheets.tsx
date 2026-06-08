@@ -68,18 +68,45 @@ function fmtDate(iso: string | null): string {
   }
 }
 
-function val(v: number | string | null | undefined): React.ReactNode {
+function val(v: unknown): React.ReactNode {
   if (v == null || v === "") return <span className="text-text-muted">—</span>;
-  return typeof v === "number" ? fmtNum(v) : v;
+  if (typeof v === "number") return fmtNum(v);
+  if (typeof v === "string") return v;
+  // 08-Jun · Defensive — after wiring Redshift bundles, several fields
+  // that used to be Maybe<number> stubs now return arrays of
+  // {label, count} / {month, value} / row records. Rendering an object
+  // directly throws "Objects are not valid as a React child", blanking
+  // the whole sheet. Summarize gracefully here so the Numbers view
+  // still loads; Chart mode renders these as bars / lists / tables.
+  if (Array.isArray(v)) {
+    if (v.length === 0) return <span className="text-text-muted">—</span>;
+    // Short list of strings? Join. Otherwise show a count summary.
+    if (v.every((x) => typeof x === "string")) {
+      const s = (v as string[]).slice(0, 6).join(", ");
+      return v.length > 6 ? `${s} · +${v.length - 6} more` : s;
+    }
+    return `${v.length} entries`;
+  }
+  if (typeof v === "object") {
+    const entries = Object.entries(v as Record<string, unknown>);
+    const compact = entries.every(
+      ([, x]) => typeof x === "number" || typeof x === "string",
+    );
+    if (compact && entries.length <= 6) {
+      return entries.map(([k, x]) => `${k}: ${x}`).join(" · ");
+    }
+    return `${entries.length} fields`;
+  }
+  return String(v);
 }
 
 function na(reason: string): React.ReactNode {
   return <NaPill reason={reason} />;
 }
 
-function maybeVal(m: Maybe<number | string>): React.ReactNode {
+function maybeVal(m: Maybe<unknown>): React.ReactNode {
   if (isUnavailable(m)) return na(m.reason);
-  return val(m as number | string);
+  return val(m);
 }
 
 function barRows(items: LabelCount[]): Array<{ label: string; value: number; color: string }> {
