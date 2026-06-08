@@ -9,6 +9,7 @@
 // Promise.allSettled. No retry — re-open the modal to try again.
 
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
@@ -45,6 +46,7 @@ export function VpdGoalsExtractionReview({
   onClose,
 }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [rows, setRows] = useState<RowState[]>(() =>
     result.goals.map((g) => ({
       ...g,
@@ -111,8 +113,11 @@ export function VpdGoalsExtractionReview({
       }),
     );
 
-    // Invalidate cs-goals for this account so the Contract & Goals tab refreshes.
-    qc.invalidateQueries({ queryKey: ["cs-goals", accountId] });
+    // Invalidate cs-goals for this account so the Contract & Goals tab
+    // refreshes. Prefix match covers ["cs-goals", id, showDeleted] variants.
+    // Activity feed also picks up the new "created" entries.
+    await qc.invalidateQueries({ queryKey: ["cs-goals", accountId] });
+    await qc.invalidateQueries({ queryKey: ["activity", accountId] });
     setRunning(false);
   };
 
@@ -184,6 +189,20 @@ export function VpdGoalsExtractionReview({
             >
               Close
             </button>
+            {/* 08-Jun · Once anything got created, surface a one-click jump
+                to Success Management → Contract & Goals so users don't have
+                to hunt for where the goals landed. */}
+            {summary.done > 0 && (
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate(`/accounts/${accountId}/success-management/contract-goals`);
+                }}
+                className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold hover:bg-beroe-green/90"
+              >
+                View {summary.done} goal{summary.done === 1 ? "" : "s"} →
+              </button>
+            )}
             <button
               onClick={onCreateSelected}
               disabled={running || summary.sel === 0}
