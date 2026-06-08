@@ -15,6 +15,8 @@ Run:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from _core import execute, parse_date, parse_number, parse_int, parser, read_rows
 
 ALIASES = {
@@ -51,9 +53,9 @@ on conflict (company_name, report_period) do update set
 """
 
 
-def main() -> None:
-    args = parser(__doc__.splitlines()[0] if __doc__ else "cirtuo loader").parse_args()
-    rows = read_rows(args.file)
+def load(path: Path, *, dry_run: bool = False) -> int:
+    """Parse + upsert into intel_cirtuo_projects. Returns rows upserted."""
+    rows = read_rows(path)
     prepared = []
     for r in rows:
         company = pick(r, "company_name")
@@ -67,12 +69,16 @@ def main() -> None:
             parse_int(pick(r, "feedback_total")),
             parse_number(pick(r, "feedback_score_avg")),
         ))
-    print(f"parsed {len(prepared)} rows (of {len(rows)} total)")
-    if args.dry_run:
-        for r in prepared[:5]: print(" ", r)
-        return
-    n = execute(SQL, prepared)
-    print(f"upserted {n} rows into public.intel_cirtuo_projects")
+    if dry_run:
+        return len(prepared)
+    return execute(SQL, prepared)
+
+
+def main() -> None:
+    args = parser(__doc__.splitlines()[0] if __doc__ else "cirtuo loader").parse_args()
+    n = load(args.file, dry_run=args.dry_run)
+    verb = "would upsert" if args.dry_run else "upserted"
+    print(f"{verb} {n} rows into public.intel_cirtuo_projects")
 
 
 if __name__ == "__main__":

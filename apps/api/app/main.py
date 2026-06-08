@@ -32,6 +32,7 @@ from app.routes import brief_ai as brief_ai_routes
 from app.routes import leadership as leadership_routes
 from app.routes import platform_intel as platform_intel_routes
 from app.routes import intel as intel_routes
+from app.routes import intel_upload as intel_upload_routes
 from app.routes import plays as play_routes
 from app.routes import reports as report_routes
 from app.routes import signals as signal_routes
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(brief_ai_routes.router)
     app.include_router(platform_intel_routes.router)
     app.include_router(intel_routes.router)
+    app.include_router(intel_upload_routes.router)
     app.include_router(report_routes.router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)

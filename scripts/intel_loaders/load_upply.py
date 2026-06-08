@@ -19,6 +19,8 @@ Run:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from _core import execute, parse_date, parser, read_rows
 
 ALIASES = {
@@ -48,9 +50,9 @@ values (%s, %s, %s, %s, %s, %s);
 """
 
 
-def main() -> None:
-    args = parser(__doc__.splitlines()[0] if __doc__ else "upply loader").parse_args()
-    rows = read_rows(args.file)
+def load(path: Path, *, dry_run: bool = False) -> int:
+    """Parse + append into intel_upply_tracking. Returns rows inserted."""
+    rows = read_rows(path)
     prepared = []
     for r in rows:
         company = pick(r, "company_name")
@@ -64,12 +66,16 @@ def main() -> None:
             str(pick(r, "destination") or "").strip() or None,
             parse_date(pick(r, "request_date")),
         ))
-    print(f"parsed {len(prepared)} rows (of {len(rows)} total)")
-    if args.dry_run:
-        for r in prepared[:5]: print(" ", r)
-        return
-    n = execute(SQL, prepared)
-    print(f"inserted {n} rows into public.intel_upply_tracking")
+    if dry_run:
+        return len(prepared)
+    return execute(SQL, prepared)
+
+
+def main() -> None:
+    args = parser(__doc__.splitlines()[0] if __doc__ else "upply loader").parse_args()
+    n = load(args.file, dry_run=args.dry_run)
+    verb = "would insert" if args.dry_run else "inserted"
+    print(f"{verb} {n} rows into public.intel_upply_tracking")
 
 
 if __name__ == "__main__":

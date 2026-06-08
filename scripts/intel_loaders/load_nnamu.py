@@ -16,6 +16,8 @@ Run:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from _core import execute, parse_date, parse_number, parser, read_rows
 
 COMPANY_KEYS = ("company_name", "company", "customer", "Customer", "Company Name", "CompanyName")
@@ -51,12 +53,16 @@ on conflict (company_name, report_period) do update set
 """
 
 
-def main() -> None:
-    args = parser(__doc__.splitlines()[0] if __doc__ else "nnamu loader").parse_args()
-    rows = read_rows(args.file)
-    if not rows:
-        print("0 rows in file"); return
+def load(path: Path, *, dry_run: bool = False) -> int:
+    """Parse the file at *path* and upsert into intel_nnamu_savings.
 
+    Returns the number of rows upserted (or — when dry_run=True —
+    the number of rows that WOULD have been upserted). 0 means nothing
+    parseable was found.
+    """
+    rows = read_rows(path)
+    if not rows:
+        return 0
     prepared = []
     for r in rows:
         company = pick(r, COMPANY_KEYS)
@@ -73,12 +79,16 @@ def main() -> None:
             pct = abs_s / initial * 100
         prepared.append((str(company).strip(), period, initial, final, abs_s, pct))
 
-    print(f"parsed {len(prepared)} rows (of {len(rows)} total)")
-    if args.dry_run:
-        for r in prepared[:5]: print(" ", r)
-        return
-    n = execute(SQL, prepared)
-    print(f"upserted {n} rows into public.intel_nnamu_savings")
+    if dry_run:
+        return len(prepared)
+    return execute(SQL, prepared)
+
+
+def main() -> None:
+    args = parser(__doc__.splitlines()[0] if __doc__ else "nnamu loader").parse_args()
+    n = load(args.file, dry_run=args.dry_run)
+    verb = "would upsert" if args.dry_run else "upserted"
+    print(f"{verb} {n} rows into public.intel_nnamu_savings")
 
 
 if __name__ == "__main__":

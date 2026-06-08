@@ -14,6 +14,8 @@ Run:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from _core import execute, parse_date, parse_int, parser, read_rows
 
 ALIASES = {
@@ -46,9 +48,9 @@ on conflict (company_name, session_date, topic) do update set
 """
 
 
-def main() -> None:
-    args = parser(__doc__.splitlines()[0] if __doc__ else "training loader").parse_args()
-    rows = read_rows(args.file)
+def load(path: Path, *, dry_run: bool = False) -> int:
+    """Parse + upsert into intel_training_attendance. Returns rows upserted."""
+    rows = read_rows(path)
     prepared = []
     for r in rows:
         company = pick(r, "company_name")
@@ -61,12 +63,16 @@ def main() -> None:
             parse_int(pick(r, "users_attended")),
             parse_int(pick(r, "users_invited")),
         ))
-    print(f"parsed {len(prepared)} rows (of {len(rows)} total)")
-    if args.dry_run:
-        for r in prepared[:5]: print(" ", r)
-        return
-    n = execute(SQL, prepared)
-    print(f"upserted {n} rows into public.intel_training_attendance")
+    if dry_run:
+        return len(prepared)
+    return execute(SQL, prepared)
+
+
+def main() -> None:
+    args = parser(__doc__.splitlines()[0] if __doc__ else "training loader").parse_args()
+    n = load(args.file, dry_run=args.dry_run)
+    verb = "would upsert" if args.dry_run else "upserted"
+    print(f"{verb} {n} rows into public.intel_training_attendance")
 
 
 if __name__ == "__main__":

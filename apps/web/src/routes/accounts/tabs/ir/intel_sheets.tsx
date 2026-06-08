@@ -39,6 +39,7 @@ import {
   SimpleTable,
   SplitBar,
 } from "./charts";
+import { IntelUploadButton, type IntelUploadSource } from "@/components/IntelUploadButton";
 
 // AnalyticsTab passes mode="numbers" to render a compact parameter
 // list only (no KPI tiles, no charts). IntelligenceTab leaves it
@@ -633,10 +634,12 @@ export function IWSheet({ data: iw, mode }: { data: InflationWatch; mode?: Sheet
 
 function OfflineParamList({
   title,
+  source,
   data,
   params,
 }: {
   title: string;
+  source: IntelUploadSource;
   data: OfflineBundle;
   params: Array<{ key: string; label: string }>;
 }) {
@@ -644,8 +647,13 @@ function OfflineParamList({
     <Card>
       <CardTitle>{title}</CardTitle>
       <div className="text-[10px] text-text-muted mb-2">
-        Source: offline file (SharePoint / CSV) — Phase 3 ingestion will populate
-        these.
+        Source: offline file (CSV / XLSX). Upload below — dashboard
+        refreshes automatically.
+      </div>
+      {/* 08-Jun · in-app upload (Option C). admin / cs_director / vp_csm
+          gated server-side; backend 403s surface inline on the button. */}
+      <div className="mb-3">
+        <IntelUploadButton source={source} />
       </div>
       {params.map((p) => (
         <ParamRow
@@ -663,6 +671,7 @@ export function CirtuoSheet({ data: d, mode }: { data: OfflineBundle; mode?: She
   return (
     <OfflineParamList
       title="Cirtuo — 3 parameters from spec sheet"
+      source="cirtuo"
       data={d}
       params={[
         { key: "categories_supported", label: "# Categories Supported (Cirtuo projects)" },
@@ -678,6 +687,7 @@ export function NnamuSheet({ data: d, mode }: { data: OfflineBundle; mode?: Shee
   return (
     <OfflineParamList
       title="nnamu — 6 parameters from spec sheet"
+      source="nnamu"
       data={d}
       params={[
         { key: "total_spend_negotiated", label: "Total spend negotiated (USD)" },
@@ -696,6 +706,7 @@ export function UpplySheet({ data: d, mode }: { data: OfflineBundle; mode?: Shee
   return (
     <OfflineParamList
       title="Upply — 6 parameters from spec sheet"
+      source="upply"
       data={d}
       params={[
         { key: "routes_benchmarked", label: "# routes benchmarked" },
@@ -768,6 +779,7 @@ export function TrainingSheet({ data: d, mode }: { data: OfflineBundle; mode?: S
   return (
     <OfflineParamList
       title="Platform Training — 2 parameters from spec sheet"
+      source="training"
       data={d}
       params={[
         { key: "users_attended", label: "# users who attended trainings" },
@@ -782,6 +794,7 @@ export function NpsSheet({ data: d, mode }: { data: OfflineBundle; mode?: SheetM
   return (
     <OfflineParamList
       title="NPS — 1 parameter from spec sheet"
+      source="nps"
       data={d}
       params={[{ key: "average_feedback_nps", label: "Average feedback (NPS score)" }]}
     />
