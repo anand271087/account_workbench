@@ -185,7 +185,6 @@ export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; 
           accent={PALETTE.bumblebee}
         />
       </div>
-      {paramList}
     </div>
   );
 }
@@ -697,15 +696,15 @@ export function AbiSheet({ data: a, mode }: { data: Abi; mode?: SheetMode }) {
 
   if (mode === "numbers") return paramList;
 
-  return <AbiDashboard data={a} paramList={paramList} />;
+  return <AbiDashboard data={a} />;
 }
 
 // AbiDashboard — compact above-fold layout. Previous version sprawled
 // vertically (4 KPI tiles + 16-row param list + 8 chart cards + 50-row
 // user table). New layout: KPI strip → 3-up donut row → 2×2 bar grid
-// → top-10 users with show-all toggle. Param list + lower-priority
-// breakdowns hidden behind a <details> accordion.
-function AbiDashboard({ data: a, paramList }: { data: Abi; paramList: React.ReactNode }) {
+// → top-10 users with show-all toggle. Lower-priority breakdowns
+// behind a <details> accordion.
+function AbiDashboard({ data: a }: { data: Abi }) {
   const [showAllUsers, setShowAllUsers] = useState(false);
   const totalUsers = a.time_per_user_top50.length;
   const usersToShow = showAllUsers
@@ -786,7 +785,7 @@ function AbiDashboard({ data: a, paramList }: { data: Abi; paramList: React.Reac
 
       <details className="bg-white border border-beroe-card-border rounded-card">
         <summary className="cursor-pointer px-4 py-2 text-[12px] font-semibold text-text-secondary hover:bg-beroe-bg/60">
-          More breakdowns + all 16 spec parameters
+          More breakdowns
         </summary>
         <div className="px-4 pb-4 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
@@ -799,7 +798,6 @@ function AbiDashboard({ data: a, paramList }: { data: Abi; paramList: React.Reac
               <BarChart rows={barRows(a.research_referral_reasons)} />
             </Card>
           </div>
-          {paramList}
         </div>
       </details>
     </div>
@@ -1226,16 +1224,18 @@ export function TLSheet({ data: t, mode }: { data: ThoughtLeadership; mode?: She
   if (mode === "numbers") return paramList;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Webinar Views" value={fmtNum(t.webinar_views)} accent={PALETTE.indigo} />
-        <KpiTile label="Articles Opened" value={fmtNum(t.articles_opened)} accent={PALETTE.aqua} />
-        <KpiTile label="Beigebook Views" value={fmtNum(t.beigebook_views)} accent={PALETTE.fuscia} />
-        <KpiTile label="Beigebook Downloads" value={fmtNum(t.beigebook_downloads)} accent={PALETTE.bumblebee} />
-      </div>
-      {paramList}
       <Card>
-        <CardTitle>By type</CardTitle>
-        <BarChart rows={barRows(t.by_type)} />
+        <CardTitle>Thought Leadership</CardTitle>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+          <KpiTile label="Webinar Views" value={fmtNum(t.webinar_views)} accent={PALETTE.indigo} />
+          <KpiTile label="Articles Opened" value={fmtNum(t.articles_opened)} accent={PALETTE.aqua} />
+          <KpiTile label="Beigebook Views" value={fmtNum(t.beigebook_views)} accent={PALETTE.fuscia} />
+          <KpiTile label="Beigebook Downloads" value={fmtNum(t.beigebook_downloads)} accent={PALETTE.bumblebee} />
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold mb-1">By type</div>
+          <BarChart rows={barRows(t.by_type)} />
+        </div>
       </Card>
     </div>
   );
@@ -1599,18 +1599,16 @@ export function SuperUsersSheet({ data: su, mode }: { data: SuperUsersBundle; mo
       </Card>
   );
   if (mode === "numbers") return paramList;
-  return <SuperUsersDashboard data={su} paramList={paramList} />;
+  return <SuperUsersDashboard data={su} />;
 }
 
 // SuperUsersDashboard — compact view. 20-user table → top 10 by default
 // with show-all toggle. Login-distribution chart prominent at top so
-// users see the concentration at a glance. Param list accordion'd.
+// users see the concentration at a glance.
 function SuperUsersDashboard({
   data: su,
-  paramList,
 }: {
   data: SuperUsersBundle;
-  paramList: React.ReactNode;
 }) {
   const [showAll, setShowAll] = useState(false);
   const totalUsers = su.users.length;
@@ -1690,13 +1688,6 @@ function SuperUsersDashboard({
           }))}
         />
       </Card>
-
-      <details className="bg-white border border-beroe-card-border rounded-card">
-        <summary className="cursor-pointer px-4 py-2 text-[12px] font-semibold text-text-secondary hover:bg-beroe-bg/60">
-          All 12 spec parameters
-        </summary>
-        <div className="px-4 pb-4 pt-2">{paramList}</div>
-      </details>
     </div>
   );
 }
