@@ -113,9 +113,12 @@ export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; 
     </Card>
   );
   if (mode === "numbers") return paramList;
+  // 08-Jun · Chart mode now surfaces all 9 spec KPIs as tiles (was 4).
+  // Date-valued KPIs render as date strings; the dash from val()/fmtDate()
+  // shows when the value isn't set yet.
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
         <KpiTile label="Total Subscribers" value={fmtNum(a.total_subscribers)} accent={PALETTE.indigo} />
         <KpiTile
           label="Active Subscribers"
@@ -127,6 +130,31 @@ export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; 
         <KpiTile
           label="Total Time (mins)"
           value={fmtNum(Math.round(a.total_time_spent_mins))}
+          accent={PALETTE.bumblebee}
+        />
+        <KpiTile
+          label="Categories Unlocked"
+          value={fmtNum(a.categories_unlocked)}
+          accent={PALETTE.midnight}
+        />
+        <KpiTile
+          label="Suppliers Added"
+          value={fmtNum(((a.suppliers_added as Maybe<number>) as number) ?? 0)}
+          accent={PALETTE.indigo}
+        />
+        <KpiTile
+          label="Last Login"
+          value={val(fmtDate(a.company_last_login)) as string}
+          accent={PALETTE.aqua}
+        />
+        <KpiTile
+          label="Subscription Start"
+          value={val(fmtDate(a.subscription_start)) as string}
+          accent={PALETTE.fuscia}
+        />
+        <KpiTile
+          label="Subscription End"
+          value={val(fmtDate(a.subscription_end)) as string}
           accent={PALETTE.bumblebee}
         />
       </div>
