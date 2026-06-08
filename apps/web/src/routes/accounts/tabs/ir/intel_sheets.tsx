@@ -828,22 +828,72 @@ export function SDSheet({ data: s, mode }: { data: SupplierDiscovery; mode?: She
       </Card>
   );
   if (mode === "numbers") return paramList;
+  // 08-Jun · Charts mode per Analytics_DataPoints_v10.xlsx · Supplier Discovery.
+  // Spec → 7 KPI stats, 3 Bar charts (Top categories, Top regions, Categories %),
+  // 1 Gauge (Repeat users %).
+  const topRegionsList = Array.isArray(s.top_regions_scoped)
+    ? (s.top_regions_scoped as Array<{ label: string; count: number }>)
+    : [];
+  const categoriesPctList = Array.isArray(s.categories_pct_split)
+    ? (s.categories_pct_split as Array<{ label: string; count: number }>)
+    : [];
+  const sdDownloadsNum = typeof s.sd_downloads === "number"
+    ? (s.sd_downloads as number) : null;
+  const shortlistedNum = typeof s.suppliers_shortlisted_avg === "number"
+    ? (s.suppliers_shortlisted_avg as number) : null;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
-        <KpiTile label="Total Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
-        <KpiTile label="Total Visits" value={fmtNum(s.total_visits)} accent={PALETTE.fuscia} />
-        <KpiTile
-          label="Total Time (m)"
-          value={fmtNum(Math.round(s.total_time_mins))}
-          accent={PALETTE.bumblebee}
-        />
-      </div>
-      {paramList}
       <Card>
-        <CardTitle>Top categories searched</CardTitle>
-        <BarChart rows={barRows(s.top_categories_searched)} />
+        <CardTitle>Supplier Discovery</CardTitle>
+        {/* 7 KPI tiles per spec */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 mb-3">
+          <KpiTile label="Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
+          <KpiTile label="Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
+          <KpiTile label="Avg searches / user" value={s.avg_searches_per_user.toFixed(1)} accent={PALETTE.fuscia} />
+          <KpiTile label="Visits" value={fmtNum(s.total_visits)} accent={PALETTE.bumblebee} />
+          <KpiTile label="Time spent (m)" value={fmtNum(Math.round(s.total_time_mins))} accent={PALETTE.midnight} />
+          <KpiTile
+            label="Downloads"
+            value={sdDownloadsNum != null ? fmtNum(sdDownloadsNum) : "—"}
+            na={isUnavailable(s.sd_downloads) ? { reason: s.sd_downloads.reason } : undefined}
+            accent={PALETTE.indigo}
+          />
+          <KpiTile
+            label="Avg shortlisted"
+            value={shortlistedNum != null ? shortlistedNum.toFixed(1) : "—"}
+            na={isUnavailable(s.suppliers_shortlisted_avg) ? { reason: s.suppliers_shortlisted_avg.reason } : undefined}
+            accent={PALETTE.aqua}
+          />
+        </div>
+
+        {/* Repeat users % — Gauge */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <RadialGauge label="Repeat users %" pct={s.repeat_users_pct ?? 0} color={PALETTE.fuscia} />
+          <div className="md:col-span-2">
+            <div className="text-[11px] font-semibold mb-1">Top categories searched</div>
+            <BarChart rows={barRows(s.top_categories_searched)} />
+          </div>
+        </div>
+
+        {/* Top regions + categories % — Bar charts */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Top regions scoped</div>
+            {isUnavailable(s.top_regions_scoped) ? (
+              <NaPill reason={(s.top_regions_scoped as { reason: string }).reason} />
+            ) : (
+              <BarChart rows={barRows(topRegionsList)} />
+            )}
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Categories (direct / indirect %)</div>
+            {isUnavailable(s.categories_pct_split) ? (
+              <NaPill reason={(s.categories_pct_split as { reason: string }).reason} />
+            ) : (
+              <BarChart rows={barRows(categoriesPctList)} />
+            )}
+          </div>
+        </div>
       </Card>
     </div>
   );
@@ -854,27 +904,148 @@ export function SDSheet({ data: s, mode }: { data: SupplierDiscovery; mode?: She
 // ============================================================
 
 export function SMSheet({ data: s, mode }: { data: SupplierMonitoring; mode?: SheetMode }) {
-  void mode; // identical numbers/charts (entire sheet is a param list today)
+  const paramList = (
+    <Card>
+      <CardTitle>All 10 parameters from spec sheet</CardTitle>
+      <div className="text-[10px] text-text-muted mb-2">
+        Live from Redshift (stg_user_cat_sup_report). SM time computed
+        from session_log + module filter. Contract-side fields
+        (vs-contracted %, usage vs runway, data refreshes) stay NA —
+        offline / no source column.
+      </div>
+      <ParamRow label="# suppliers monitored" value={maybeVal(s.suppliers_monitored)} />
+      <ParamRow label="Suppliers by risk level" value={maybeVal(s.suppliers_by_risk_level as Maybe<number>)} />
+      <ParamRow label="# new suppliers added (period)" value={maybeVal(s.new_suppliers_in_period)} />
+      <ParamRow label="# users who added suppliers" value={maybeVal(s.users_adding_suppliers)} />
+      <ParamRow label="MOM trend of suppliers added" value={maybeVal(s.mom_trend_suppliers_added as Maybe<number>)} />
+      <ParamRow label="Data refreshes in last 30 days" value={maybeVal(s.data_refreshes_last_30d)} />
+      <ParamRow label="% suppliers added vs contracted" value={maybeVal(s.suppliers_added_vs_contracted_pct)} />
+      <ParamRow label="Usage against runway" value={maybeVal(s.usage_vs_runway as Maybe<number>)} />
+      <ParamRow label="Total time spent (mins)" value={val(Math.round(s.total_time_mins))} />
+      <ParamRow label="Suppliers added list" value={maybeVal(s.suppliers_added_list as Maybe<number>)} />
+    </Card>
+  );
+  if (mode === "numbers") return paramList;
+
+  // 08-Jun · Charts mode per Analytics_DataPoints_v10.xlsx · Supplier Monitoring.
+  // Spec → 5 KPI stats, 2 Stacked bars (risk + runway), 1 Line chart (MoM trend),
+  // 1 Gauge (vs contracted %), 1 Table (suppliers added list).
+  const riskLevels = !isUnavailable(s.suppliers_by_risk_level)
+    ? (s.suppliers_by_risk_level as Record<string, number>) : null;
+  const momTrend = Array.isArray(s.mom_trend_suppliers_added)
+    ? (s.mom_trend_suppliers_added as Array<{ month: string; suppliers_added: number }>)
+    : null;
+  const suppliersList = Array.isArray(s.suppliers_added_list)
+    ? (s.suppliers_added_list as Array<{ email: string; supplier_name: string; category: string; added_at: string | null }>)
+    : null;
+  const monitoredNum = typeof s.suppliers_monitored === "number" ? s.suppliers_monitored : null;
+  const newInPeriodNum = typeof s.new_suppliers_in_period === "number" ? s.new_suppliers_in_period : null;
+  const usersAddingNum = typeof s.users_adding_suppliers === "number" ? s.users_adding_suppliers : null;
+
+  // Risk-bucket colors (low → green / med → amber / high → red / unknown → grey)
+  const RISK_COLORS: Record<string, string> = {
+    low: "#10b981", medium: "#f59e0b", high: "#ef4444", unknown: "#94a3b8",
+  };
+
   return (
     <div className="space-y-3">
       <Card>
-        <CardTitle>All 10 parameters from spec sheet</CardTitle>
-        <div className="text-[10px] text-text-muted mb-2">
-          Live from Redshift (stg_user_cat_sup_report). SM time computed
-          from session_log + module filter. Contract-side fields
-          (vs-contracted %, usage vs runway, data refreshes) stay NA —
-          offline / no source column.
+        <CardTitle>Supplier Monitoring · Risk</CardTitle>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+          <KpiTile
+            label="Suppliers monitored"
+            value={monitoredNum != null ? fmtNum(monitoredNum) : "—"}
+            accent={PALETTE.indigo}
+          />
+          <KpiTile
+            label="New in period"
+            value={newInPeriodNum != null ? fmtNum(newInPeriodNum) : "—"}
+            accent={PALETTE.aqua}
+          />
+          <KpiTile
+            label="Users adding"
+            value={usersAddingNum != null ? fmtNum(usersAddingNum) : "—"}
+            accent={PALETTE.fuscia}
+          />
+          <KpiTile
+            label="Time spent (m)"
+            value={fmtNum(Math.round(s.total_time_mins))}
+            accent={PALETTE.bumblebee}
+          />
+          <KpiTile
+            label="Data refreshes (30d)"
+            value="—"
+            na={isUnavailable(s.data_refreshes_last_30d) ? { reason: s.data_refreshes_last_30d.reason } : undefined}
+            accent={PALETTE.midnight}
+          />
         </div>
-        <ParamRow label="# suppliers monitored" value={maybeVal(s.suppliers_monitored)} />
-        <ParamRow label="Suppliers by risk level" value={maybeVal(s.suppliers_by_risk_level as Maybe<number>)} />
-        <ParamRow label="# new suppliers added (period)" value={maybeVal(s.new_suppliers_in_period)} />
-        <ParamRow label="# users who added suppliers" value={maybeVal(s.users_adding_suppliers)} />
-        <ParamRow label="MOM trend of suppliers added" value={maybeVal(s.mom_trend_suppliers_added as Maybe<number>)} />
-        <ParamRow label="Data refreshes in last 30 days" value={maybeVal(s.data_refreshes_last_30d)} />
-        <ParamRow label="% suppliers added vs contracted" value={maybeVal(s.suppliers_added_vs_contracted_pct)} />
-        <ParamRow label="Usage against runway" value={maybeVal(s.usage_vs_runway as Maybe<number>)} />
-        <ParamRow label="Total time spent (mins)" value={val(Math.round(s.total_time_mins))} />
-        <ParamRow label="Suppliers added list" value={maybeVal(s.suppliers_added_list as Maybe<number>)} />
+
+        {/* Risk levels — Stacked bar */}
+        {riskLevels && (
+          <div className="mb-3">
+            <div className="text-[11px] font-semibold mb-1">Suppliers by risk level</div>
+            <SplitBar
+              slices={Object.entries(riskLevels).map(([k, v]) => ({
+                label: k,
+                value: v,
+                color: RISK_COLORS[k] ?? "#94a3b8",
+              }))}
+            />
+          </div>
+        )}
+
+        {/* MoM trend + vs-contracted gauge */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div className="md:col-span-2">
+            <div className="text-[11px] font-semibold mb-1">Suppliers added — month-over-month</div>
+            {!momTrend || momTrend.length === 0 ? (
+              <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
+            ) : (
+              <LineChart
+                labels={momTrend.map((m) => m.month)}
+                values={momTrend.map((m) => m.suppliers_added)}
+                color={PALETTE.indigo}
+                height={130}
+              />
+            )}
+          </div>
+          {isUnavailable(s.suppliers_added_vs_contracted_pct) ? (
+            <KpiTile
+              label="vs contracted"
+              value="—"
+              na={{ reason: s.suppliers_added_vs_contracted_pct.reason }}
+            />
+          ) : (
+            <RadialGauge
+              label="vs contracted %"
+              pct={s.suppliers_added_vs_contracted_pct as number}
+              color={PALETTE.fuscia}
+            />
+          )}
+        </div>
+
+        {/* Suppliers added list — Table */}
+        {suppliersList && suppliersList.length > 0 && (
+          <div>
+            <div className="text-[11px] font-semibold mb-1">
+              Suppliers added — recent {Math.min(suppliersList.length, 30)}
+            </div>
+            <SimpleTable
+              cols={[
+                { key: "supplier_name", label: "Supplier" },
+                { key: "category", label: "Category" },
+                { key: "email", label: "Added by" },
+                { key: "added_at", label: "When", numeric: true },
+              ]}
+              rows={suppliersList.slice(0, 30).map((r) => ({
+                supplier_name: r.supplier_name || "—",
+                category: r.category,
+                email: r.email,
+                added_at: r.added_at ?? "—",
+              }))}
+            />
+          </div>
+        )}
       </Card>
     </div>
   );
