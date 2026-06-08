@@ -625,6 +625,7 @@ function ContractAuditSection({
   const notify = useNotify();
   const confirm = useConfirm();
   const promptDlg = usePrompt();
+  const qc = useQueryClient();
   const locked = gate.gate_signed && !gate.gate_unlocked;
   const showCard = !!gate.sh_locked_at; // Section B unlocks once Sales locks.
   const audited_at = (gate.gate_contract_extras as { audited_at?: string } | undefined)?.audited_at
@@ -637,7 +638,11 @@ function ContractAuditSection({
   const patchExtras = useMutation({
     mutationFn: (extras: Record<string, unknown>) =>
       api.patch<SigningGate>(`/api/v1/accounts/${account.id}/contract-extras`, { extras }),
-    onSuccess: onMutate,
+    // 08-Jun · Cache-write the response instead of the broad invalidateAll
+    // (solutioning + contacts + documents + account aren't affected by
+    // an extras edit). Removes ~600ms of waterfall per blur.
+    onSuccess: (fresh) =>
+      qc.setQueryData(["signing-gate", account.id], fresh),
     onError: (e: ApiError) =>
       notify({ title: "Save failed", body: e.message, tone: "error" }),
   });
@@ -645,7 +650,14 @@ function ContractAuditSection({
     // PATCH /api/v1/accounts/:id — for the typed gate_* fields (acv, term, dates, modules, tier, segment).
     mutationFn: (body: Record<string, unknown>) =>
       api.patch(`/api/v1/accounts/${account.id}`, body),
-    onSuccess: onMutate,
+    // 08-Jun · Narrow the invalidate to just signing-gate. The account
+    // PATCH does touch the Account row (so ["account"] still matters
+    // if the header chip changed), but contacts/solutioning/documents
+    // don't depend on it. Skips 3 unnecessary refetches per click.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["signing-gate", account.id] });
+      qc.invalidateQueries({ queryKey: ["account", account.id] });
+    },
     onError: (e: ApiError) =>
       notify({ title: "Save failed", body: e.message, tone: "error" }),
   });
@@ -695,10 +707,18 @@ function ContractAuditSection({
     // account or lock state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.id, locked]);
+  // 08-Jun · Module toggles were laggy because every click fired
+  // patchSignMeta + patchModuleConfigs → each onSuccess called
+  // invalidateAll() → 5 queries refetched (signing-gate, solutioning,
+  // contacts, documents, account) twice over. Module config only
+  // affects the gate itself; we write the response straight into the
+  // cache and skip the broader invalidate. The chip flips instantly
+  // via the optimistic update in toggleModule below.
   const patchModuleConfigs = useMutation({
     mutationFn: (configs: Record<string, Record<string, unknown>>) =>
       api.patch<SigningGate>(`/api/v1/accounts/${account.id}/module-configs`, { configs }),
-    onSuccess: onMutate,
+    onSuccess: (fresh) =>
+      qc.setQueryData(["signing-gate", account.id], fresh),
     onError: (e: ApiError) =>
       notify({ title: "Save failed", body: e.message, tone: "error" }),
   });
@@ -806,6 +826,14 @@ function ContractAuditSection({
 
   function toggleModule(m: ModuleName) {
     const next = modules.includes(m) ? modules.filter((x) => x !== m) : [...modules, m];
+    // 08-Jun · Optimistic update — flip the chip in the signing-gate
+    // cache immediately so the UI responds in the same tick. Without
+    // this the chip waited ~600ms for two sequential PATCHes + their
+    // refetches before re-rendering. The mutations below still fire
+    // and the server response replaces the cache on success.
+    qc.setQueryData<SigningGate>(["signing-gate", account.id], (prev) =>
+      prev ? { ...prev, gate_contract_modules: next } : prev,
+    );
     patchSignMeta.mutate({ gate_contract_modules: next });
     if (modules.includes(m)) {
       // Clear that module's config too.
