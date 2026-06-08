@@ -25,6 +25,7 @@ import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeHandoffSlice,
+  saveExtractionDraft,
 } from "@/lib/extractionDraft";
 import type { HandoffExtractionResult } from "@/types/handoff_extraction";
 import type {
@@ -1918,7 +1919,54 @@ export default function SalesHandoffTab() {
     queryKey: ["documents", account.id, "contract"],
     queryFn: () => api.get(`/api/v1/accounts/${account.id}/documents?kind=contract`),
     staleTime: 15_000,
+    // 08-Jun · Poll while the worker is running extraction so the
+    // handoff_extracted_at column landing kicks the stash effect
+    // below without the user having to manually refresh.
+    refetchInterval: (q) => {
+      const items = (q.state.data?.items ?? []) as Document[];
+      const anyPending = items.some(
+        (d) => !d.deleted_at && !d.handoff_extracted_at && d.ai_status !== "complete",
+      );
+      return anyPending ? 2000 : false;
+    },
   });
+
+  // 08-Jun · Auto-apply Handoff extraction. SalesHandoffTab uploads
+  // contracts via its own form (not KindUploadCard), so the auto-stash
+  // logic that KindUploadCard runs for MoM / VPD never ran for
+  // contracts → handoff_extracted_fields landed in the DB but the
+  // localStorage draft was never written, so the drain() effect below
+  // had nothing to consume and the Contract Audit fields stayed blank.
+  // This mirrors KindUploadCard's contract auto-apply for the docs we
+  // fetch directly here.
+  useEffect(() => {
+    const items = docsQ.data?.items ?? [];
+    if (items.length === 0) return;
+    const pending = items.filter(
+      (d) =>
+        !d.deleted_at &&
+        d.handoff_extracted_fields &&
+        !sessionStorage.getItem(
+          `awb:extraction-applied:${d.id}:${d.handoff_extracted_at ?? ""}`,
+        ) &&
+        !localStorage.getItem(
+          `awb:extraction-applied:${d.id}:${d.handoff_extracted_at ?? ""}`,
+        ),
+    );
+    if (pending.length === 0) return;
+    pending.forEach((d) => {
+      const stamp = d.handoff_extracted_at ?? "";
+      const key = `awb:extraction-applied:${d.id}:${stamp}`;
+      sessionStorage.setItem(key, "1");
+      const h = d.handoff_extracted_fields as unknown as HandoffExtractionResult;
+      saveExtractionDraft(account.id, {
+        filename: d.filename,
+        appliedAt: new Date().toISOString(),
+        handoff: h,
+      });
+      localStorage.setItem(key, new Date().toISOString());
+    });
+  }, [docsQ.data?.items, account.id]);
 
   // Force auth header injection — same as KindUploadCard for postForm.
   useEffect(() => { void authProvider.getAccessToken().catch(() => null); }, []);
