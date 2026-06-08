@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from _core import execute, parse_date, parse_number, parser, read_rows
+from ._core import execute, parse_date, parse_number, parser, read_rows
 
 COMPANY_KEYS = ("company_name", "company", "customer", "Customer", "Company Name", "CompanyName")
 PERIOD_KEYS = ("report_period", "period", "month", "date", "Date", "Period")

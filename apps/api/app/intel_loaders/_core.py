@@ -1,12 +1,17 @@
 """Shared utilities for the offline-source loaders.
 
 Each loader reads a CSV/XLSX → normalises columns → upserts into the
-matching public.intel_* table. Loaders are run from the repo root:
+matching public.intel_* table. The loaders are used two ways:
 
-    uv run python scripts/intel_loaders/load_nnamu.py path/to/nnamu.xlsx
+1. Imported by app.routes.intel_upload to handle in-app uploads from
+   the Intelligence & Reports tab (Option C). DATABASE_URL comes from
+   the live process env (Render injects it).
+2. Run as CLIs from the host:
+       uv run python -m app.intel_loaders.load_nnamu path/to/file.xlsx
+   In that case load_env() pulls DATABASE_URL out of apps/api/.env.
 
-The DSN is read from apps/api/.env (DATABASE_URL). Loaders accept
---dry-run to validate parse + show row counts without writing.
+Loaders accept --dry-run to validate parse + show row counts without
+writing.
 """
 
 from __future__ import annotations
@@ -20,8 +25,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-API_ENV = REPO_ROOT / "apps" / "api" / ".env"
+# File lives at apps/api/app/intel_loaders/_core.py. parents[2] = apps/api,
+# where the .env file sits for the CLI case. Inside the container env vars
+# come from the process environment, so the .env file won't exist there
+# and load_env() early-returns harmlessly.
+API_ENV = Path(__file__).resolve().parents[2] / ".env"
 
 
 def load_env() -> None:

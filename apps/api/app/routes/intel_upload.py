@@ -27,11 +27,10 @@ from __future__ import annotations
 
 import logging
 import shutil
-import sys
 import tempfile
 from pathlib import Path
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID  # noqa: F401 — kept for future audit log payloads
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +38,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import CurrentUser
 from app.core.rbac import can_create_account
 from app.db.session import get_db
+from app.intel_loaders.load_cirtuo import load as load_cirtuo
+from app.intel_loaders.load_nnamu import load as load_nnamu
+from app.intel_loaders.load_nps import load as load_nps
+from app.intel_loaders.load_training import load as load_training
+from app.intel_loaders.load_upply import load as load_upply
 from app.services import redshift_queries as rq
 
 logger = logging.getLogger(__name__)
@@ -50,27 +54,6 @@ _ALLOWED_EXTS = {".csv", ".xlsx", ".xls"}
 
 # Max upload size — keep tight. These files are tens of kilobytes typically.
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-
-# Make scripts/intel_loaders/ importable. The loaders live outside the
-# `apps/api/app` package so the same scripts work as standalone CLIs +
-# imported modules.
-_SCRIPTS_DIR = Path(__file__).resolve().parents[4] / "scripts"
-_LOADERS_DIR = _SCRIPTS_DIR / "intel_loaders"
-# scripts/ on the path makes `intel_loaders.load_nnamu` resolve.
-# scripts/intel_loaders/ on the path makes the loaders' `from _core import …`
-# resolve (the loaders also run as CLIs from inside scripts/intel_loaders/
-# where _core is a sibling module, so we mirror that import shape).
-for p in (_SCRIPTS_DIR, _LOADERS_DIR):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
-
-# Import the loader functions. Lazy-imported inside the handler would
-# also work but module-level is simpler and the cost is one-time.
-from intel_loaders.load_cirtuo import load as load_cirtuo  # noqa: E402
-from intel_loaders.load_nnamu import load as load_nnamu  # noqa: E402
-from intel_loaders.load_nps import load as load_nps  # noqa: E402
-from intel_loaders.load_training import load as load_training  # noqa: E402
-from intel_loaders.load_upply import load as load_upply  # noqa: E402
 
 _LOADERS = {
     "nnamu": (load_nnamu, "intel_nnamu_savings"),

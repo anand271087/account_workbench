@@ -36,7 +36,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from _core import execute, parse_date, parse_int, parse_number, parser, read_rows
+from ._core import execute, parse_date, parse_int, parse_number, parser, read_rows
 
 ALIASES = {
     "company_name": (

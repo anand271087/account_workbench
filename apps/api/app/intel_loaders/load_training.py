@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from _core import execute, parse_date, parse_int, parser, read_rows
+from ._core import execute, parse_date, parse_int, parser, read_rows
 
 ALIASES = {
     "company_name": ("company_name", "company", "customer", "Customer"),
