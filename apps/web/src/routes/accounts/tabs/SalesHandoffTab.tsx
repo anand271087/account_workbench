@@ -707,18 +707,19 @@ function ContractAuditSection({
     // account or lock state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account.id, locked]);
-  // 08-Jun · Module toggles were laggy because every click fired
-  // patchSignMeta + patchModuleConfigs → each onSuccess called
-  // invalidateAll() → 5 queries refetched (signing-gate, solutioning,
-  // contacts, documents, account) twice over. Module config only
-  // affects the gate itself; we write the response straight into the
-  // cache and skip the broader invalidate. The chip flips instantly
-  // via the optimistic update in toggleModule below.
+  // 08-Jun · Module-configs PATCH is fired in parallel with patchSignMeta
+  // when toggleModule un-ticks a module. The module-configs handler
+  // returns SigningGate including the CURRENT server gate_contract_modules,
+  // which still has the un-ticked module if patchSignMeta hasn't been
+  // applied yet (races at the backend). Writing that stale response into
+  // cache via setQueryData re-added the un-ticked module. Invalidating
+  // instead defers truth to the authoritative refetch — slower by one
+  // round-trip but never reverts the optimistic un-tick.
   const patchModuleConfigs = useMutation({
     mutationFn: (configs: Record<string, Record<string, unknown>>) =>
       api.patch<SigningGate>(`/api/v1/accounts/${account.id}/module-configs`, { configs }),
-    onSuccess: (fresh) =>
-      qc.setQueryData(["signing-gate", account.id], fresh),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["signing-gate", account.id] }),
     onError: (e: ApiError) =>
       notify({ title: "Save failed", body: e.message, tone: "error" }),
   });
