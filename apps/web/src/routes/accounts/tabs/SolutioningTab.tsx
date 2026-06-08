@@ -128,9 +128,13 @@ export default function SolutioningTab() {
   const lockMutation = useMutation({
     mutationFn: () =>
       api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/lock`),
-    onSuccess: () => {
-      // The lock endpoint only returns lock metadata; refetch the whole row
-      // so `is_editable` flips and the form re-renders read-only.
+    onSuccess: (res) => {
+      // 08-Jun · The seed-once useEffect (line 50) leaves `form` stale
+      // after the post-lock refetch, so isLocked never flips. Patch the
+      // lock metadata onto form directly so the UI updates in one tick.
+      setForm((prev) =>
+        prev ? { ...prev, locked_at: res.locked_at, locked_by: res.locked_by } : prev,
+      );
       qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
       setLockError(null);
@@ -140,7 +144,13 @@ export default function SolutioningTab() {
   const unlockMutation = useMutation({
     mutationFn: () =>
       api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/unlock`),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      // Same fix as lockMutation — form was stuck at the previous
+      // locked_at, so unlock looked like a no-op even though the
+      // backend cleared it. Sync the lock metadata immediately.
+      setForm((prev) =>
+        prev ? { ...prev, locked_at: res.locked_at, locked_by: res.locked_by } : prev,
+      );
       qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
       setLockError(null);
