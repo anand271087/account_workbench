@@ -23,6 +23,7 @@ from sqlalchemy.orm import aliased
 from app.core.deps import CurrentUser
 from app.core.rbac import (
     can_create_account,
+    can_delete_account,
     can_edit_account,
     can_reassign_account_owner,
     can_view_account,
@@ -720,6 +721,97 @@ async def reassign_owner(
 
     # Reload + return as a list item shape for the UI to slot back into the table.
     return await _get_one_as_listitem(db, account_id, user)
+
+
+@router.delete("/{account_id}", status_code=status.HTTP_200_OK)
+async def delete_account(
+    account_id: Annotated[UUID, Path()],
+    confirm: Annotated[
+        str, Query(description="Must equal the account slug — guards against accidental clicks")
+    ],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Hard-delete an account and ALL related data.
+
+    Admin-only. The `confirm` query parameter must equal the account
+    slug so a stray DELETE call can't accidentally nuke a row. All
+    FK-cascading child rows (engagement, contacts, documents, goals,
+    checkpoints, plays, signals, …) are removed by the database via
+    ON DELETE CASCADE on accounts.id; storage objects (uploaded
+    documents in Supabase Storage) are removed by this handler before
+    the row delete commits.
+
+    Audit log entries that reference the account stay (the log is the
+    audit trail — it should outlive its referent). One DELETE entry
+    is written automatically by the SQLA event listener.
+    """
+    if not can_delete_account(user.role):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Only admins can hard-delete an account.",
+        )
+
+    acc = (
+        await db.execute(select(Account).where(Account.id == account_id))
+    ).scalar_one_or_none()
+    if acc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+
+    if confirm != acc.slug:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Confirm token does not match the account slug. Pass ?confirm={acc.slug} to proceed.",
+        )
+
+    # 1) Collect every document's storage path so we can scrub the bucket
+    #    AFTER the DB delete commits successfully.
+    from app.models.document import Document  # local import to keep top-of-file lean
+    docs = (
+        await db.execute(
+            select(Document.storage_path).where(Document.account_id == account_id)
+        )
+    ).scalars().all()
+
+    # 2) Snapshot the name/slug for the audit log (the row is about to vanish).
+    deleted_name = acc.name
+    deleted_slug = acc.slug
+
+    # 3) Hard-delete via ORM so the audit_writer event listener fires.
+    #    FK CASCADE in Postgres handles every child table (~30 of them).
+    await db.delete(acc)
+    await db.commit()
+
+    # 4) Scrub the Supabase Storage buckets. Best-effort — log failures
+    #    but don't 500 the request; the DB delete is already committed.
+    import logging
+    log = logging.getLogger(__name__)
+    from app.services.files import delete_object
+    for storage_path in docs:
+        if not storage_path:
+            continue
+        bucket, _, key = storage_path.partition("/")
+        if not bucket or not key:
+            continue
+        try:
+            delete_object(bucket, key)
+        except Exception:  # noqa: BLE001
+            log.exception("Storage scrub failed for %s/%s", bucket, key)
+
+    # 5) Clear the scope cache so any held references die immediately.
+    from app.core.scope import invalidate_account
+    invalidate_account(account_id)
+
+    log.info(
+        "Account hard-deleted: id=%s name=%s slug=%s by_user=%s docs_scrubbed=%d",
+        account_id, deleted_name, deleted_slug, user.id, len(docs),
+    )
+    return {
+        "id": str(account_id),
+        "name": deleted_name,
+        "slug": deleted_slug,
+        "documents_deleted": len(docs),
+    }
 
 
 @router.post("/bulk/reassign-owner")

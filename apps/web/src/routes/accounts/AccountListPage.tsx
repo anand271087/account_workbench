@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
@@ -53,8 +53,15 @@ export default function AccountListPage() {
     "vp_csm",
     "vp_sales",
   ].includes(me.user.role);
+  // 08-Jun · Hard-delete is strictly admin (matches backend
+  // can_delete_account predicate — even cs_director/vp_csm can't).
+  const canDelete = me?.user.role === "admin";
   const fav = useFavoriteAccounts(me?.user.id);
   const [reassignTarget, setReassignTarget] = useState<AccountListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AccountListItem | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const qc = useQueryClient();
 
   // Read filters from URL (so they're shareable/bookmarkable)
   const q = params.get("q") ?? "";
@@ -290,6 +297,7 @@ export default function AccountListPage() {
                       key={it.id}
                       item={it}
                       canReassign={canReassign}
+                      canDelete={canDelete}
                       selectable={canBulkReassign}
                       checked={selected.has(it.id)}
                       onToggleSelected={() =>
@@ -302,6 +310,10 @@ export default function AccountListPage() {
                       }
                       onOpen={() => navigate(`/accounts/${it.id}`)}
                       onReassign={() => setReassignTarget(it)}
+                      onDelete={() => {
+                        setDeleteTarget(it);
+                        setDeleteConfirm("");
+                      }}
                       pinned={fav.isFavorite(it.id)}
                       onTogglePinned={() =>
                         fav.toggle({ id: it.id, name: it.name, slug: it.slug })
@@ -361,6 +373,80 @@ export default function AccountListPage() {
             account={reassignTarget}
             onClose={() => setReassignTarget(null)}
           />
+        )}
+
+        {deleteTarget && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-[min(520px,95vw)] p-5">
+              <div className="text-[15px] font-bold text-beroe-red mb-2">
+                ⚠ Permanently delete this account?
+              </div>
+              <div className="text-[12px] text-text-secondary mb-3">
+                <b>{deleteTarget.name}</b> and every related row will be removed —
+                engagement, contacts, documents (with their storage objects),
+                goals, checkpoints, plays, signals, intel — all gone. This
+                action cannot be undone.
+              </div>
+              <div className="text-[12px] text-text-secondary mb-2">
+                Type the account slug{" "}
+                <code className="font-mono font-semibold text-text-primary bg-beroe-bg px-1.5 py-0.5 rounded">
+                  {deleteTarget.slug}
+                </code>{" "}
+                to confirm.
+              </div>
+              <input
+                type="text"
+                autoFocus
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder={deleteTarget.slug}
+                className="w-full px-3 py-2 border border-beroe-card-border rounded-md text-sm font-mono mb-3 focus:outline-none focus:border-beroe-red"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setDeleteConfirm("");
+                  }}
+                  disabled={deleting}
+                  className="px-3 py-1.5 rounded-md border border-beroe-card-border text-sm bg-white disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleteConfirm !== deleteTarget.slug || deleting}
+                  onClick={async () => {
+                    if (deleteConfirm !== deleteTarget.slug) return;
+                    setDeleting(true);
+                    try {
+                      await api.delete(
+                        `/api/v1/accounts/${deleteTarget.id}?confirm=${encodeURIComponent(deleteTarget.slug)}`,
+                      );
+                      notify({
+                        title: "Account deleted",
+                        body: `${deleteTarget.name} and all related data removed.`,
+                        tone: "success",
+                      });
+                      qc.invalidateQueries({ queryKey: ["accounts"] });
+                      setDeleteTarget(null);
+                      setDeleteConfirm("");
+                    } catch (e) {
+                      const msg =
+                        e instanceof Error ? e.message : "Delete failed.";
+                      notify({ title: "Delete failed", body: msg, tone: "error" });
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-md bg-beroe-red text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  {deleting ? "Deleting…" : "Delete forever"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {bulkOpen && canBulkReassign && (
@@ -425,21 +511,25 @@ function Th({
 function Row({
   item,
   canReassign,
+  canDelete,
   selectable,
   checked,
   onToggleSelected,
   onOpen,
   onReassign,
+  onDelete,
   pinned,
   onTogglePinned,
 }: {
   item: AccountListItem;
   canReassign: boolean;
+  canDelete: boolean;
   selectable: boolean;
   checked: boolean;
   onToggleSelected: () => void;
   onOpen: () => void;
   onReassign: () => void;
+  onDelete: () => void;
   pinned: boolean;
   onTogglePinned: () => void;
 }) {
@@ -482,6 +572,18 @@ function Row({
                   title="Reassign owner (admin / CS Director / VPs)"
                 >
                   Reassign
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  className="text-[10px] text-beroe-red hover:underline font-semibold"
+                  title="Hard-delete account (admin only) — removes the row + all related data + storage"
+                >
+                  Delete
                 </button>
               )}
             </div>

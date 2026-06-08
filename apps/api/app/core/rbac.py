@@ -88,6 +88,13 @@ def can_manage_users(role: str) -> bool:
     return role == "admin"
 
 
+def can_delete_account(role: str) -> bool:
+    """Hard-delete an account + every child row + every storage object.
+    Strictly admin-only — even global admins (cs_director / vp_csm) are
+    excluded because the action is non-recoverable."""
+    return role == "admin"
+
+
 def can_view_audit_log(role: str) -> bool:
     return role in AUDIT_VIEWER_ROLES
 
