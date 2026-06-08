@@ -677,6 +677,24 @@ def supplier_discovery_bundle(acct: str, window: str = "90d") -> dict:
         f"WHERE company_name = %s{w_search} GROUP BY email)", p_search, default=0.0,
     )
 
+    # 08-Jun · forestreet_usage_table grants landed — wire the regions
+    # + downloads slots from the real table in tableau_schema (we'd been
+    # subbing with supplierdiscoveryusersearch which doesn't carry
+    # countrydropdown or downloadshortlist).
+    top_regions = [
+        {"label": str(r[0] or "(blank)"), "count": int(r[1] or 0)} for r in _rows(
+            "SELECT countrydropdown, COUNT(*) FROM tableau_schema.forestreet_usage_table "
+            "WHERE companyname = %s AND countrydropdown IS NOT NULL AND countrydropdown <> '' "
+            "GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+            (acct,),
+        )
+    ]
+    sd_downloads = _scalar(
+        "SELECT SUM(downloadshortlist) FROM tableau_schema.forestreet_usage_table "
+        "WHERE companyname = %s",
+        (acct,), default=0,
+    )
+
     return _cache_put_and_return(key, {
         "window": window,
         "users": int(users or 0),
@@ -686,10 +704,10 @@ def supplier_discovery_bundle(acct: str, window: str = "90d") -> dict:
         "total_time_mins": round(float(time_mins or 0), 1),
         "top_categories_searched": top_categories,
         "repeat_users_pct": round(float(repeat_pct or 0) * 100, 1),
-        "top_regions_scoped": _na("forestreet_usage_table.countrydropdown not in substitute"),
-        "categories_pct_split": _na("forestreet_usage_table.inside_outside_flag not in substitute"),
+        "top_regions_scoped": top_regions,
+        "categories_pct_split": _na("inside_outside_flag column not present in any Forestreet table"),
         "suppliers_shortlisted_avg": _na("result-count per search not captured anywhere"),
-        "sd_downloads": _na("forestreet_usage_table.downloadshortlist not in substitute"),
+        "sd_downloads": int(sd_downloads or 0),
         "source": "redshift",
     })
 
@@ -705,6 +723,9 @@ def supplier_monitoring_bundle(acct: str, window: str = "90d") -> dict:
     key = ("sm", acct, window)
     if (c := _cache_get(key)) is not None:
         return c
+    start, _ = _window_range(window)
+    w = " AND supplier_added_date >= %s" if start else ""
+    base = (acct, start) if start else (acct,)
 
     time_mins = _scalar(
         "SELECT SUM(s.totaltimespent_sec)/60.0 FROM tableau_schema.stg_user_session_log s "
@@ -713,18 +734,80 @@ def supplier_monitoring_bundle(acct: str, window: str = "90d") -> dict:
         (acct,),
     )
 
+    # 08-Jun · stg_user_cat_sup_report grants landed. supplier_id IS NOT NULL
+    # marks a real supplier-add event (the table also stores bare category
+    # opens with supplier_id NULL — those are excluded everywhere here).
+    suppliers_monitored = _scalar(
+        "SELECT COUNT(DISTINCT supplier_id) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL",
+        (acct,), default=0,
+    )
+    new_in_period = _scalar(
+        "SELECT COUNT(DISTINCT supplier_id) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL" + w,
+        base, default=0,
+    )
+    users_adding = _scalar(
+        "SELECT COUNT(DISTINCT email) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL" + w,
+        base, default=0,
+    )
+
+    # DNB rating 1-9 → low/medium/high buckets. NULL ratings tracked
+    # separately so the UI can show "no data" honestly instead of
+    # silently collapsing them into a tier.
+    risk_rows = _rows(
+        "SELECT CASE "
+        "  WHEN supplier_dnb_rating BETWEEN 1 AND 3 THEN 'low' "
+        "  WHEN supplier_dnb_rating BETWEEN 4 AND 6 THEN 'medium' "
+        "  WHEN supplier_dnb_rating BETWEEN 7 AND 9 THEN 'high' "
+        "  ELSE 'unknown' END AS tier, "
+        "COUNT(DISTINCT supplier_id) "
+        "FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL "
+        "GROUP BY 1 ORDER BY 1",
+        (acct,),
+    )
+    suppliers_by_risk = {r[0]: int(r[1] or 0) for r in risk_rows}
+
+    mom_trend = [
+        {"month": r[0], "suppliers_added": int(r[1] or 0)} for r in _rows(
+            "SELECT TO_CHAR(DATE_TRUNC('month', supplier_added_date), 'YYYY-MM') AS m, "
+            "COUNT(DISTINCT supplier_id) "
+            "FROM tableau_schema.stg_user_cat_sup_report "
+            "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL "
+            "AND supplier_added_date IS NOT NULL "
+            "GROUP BY 1 ORDER BY 1",
+            (acct,),
+        )
+    ]
+
+    added_list = [
+        {
+            "email": r[0], "supplier_name": r[1], "category": r[2],
+            "added_at": _date_iso(r[3]),
+        }
+        for r in _rows(
+            "SELECT email, supplier_name, category_name, supplier_added_date "
+            "FROM tableau_schema.stg_user_cat_sup_report "
+            "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL"
+            + w + " ORDER BY supplier_added_date DESC NULLS LAST LIMIT 50",
+            base,
+        )
+    ]
+
     return _cache_put_and_return(key, {
         "window": window,
         "total_time_mins": round(float(time_mins or 0), 1),
-        "suppliers_monitored": _na("stg_user_cat_sup_report permission denied"),
-        "suppliers_by_risk_level": _na("stg_user_cat_sup_report permission denied"),
-        "new_suppliers_in_period": _na("stg_user_cat_sup_report permission denied"),
-        "users_adding_suppliers": _na("stg_user_cat_sup_report permission denied"),
-        "mom_trend_suppliers_added": _na("stg_user_cat_sup_report permission denied"),
-        "data_refreshes_last_30d": _na("stg_user_cat_sup_report permission denied"),
+        "suppliers_monitored": int(suppliers_monitored or 0),
+        "suppliers_by_risk_level": suppliers_by_risk,
+        "new_suppliers_in_period": int(new_in_period or 0),
+        "users_adding_suppliers": int(users_adding or 0),
+        "mom_trend_suppliers_added": mom_trend,
+        "data_refreshes_last_30d": _na("no refresh-event column in stg_user_cat_sup_report"),
         "suppliers_added_vs_contracted_pct": _na("offline — contracted slots not in Redshift"),
         "usage_vs_runway": _na("offline — contract runway not in Redshift"),
-        "suppliers_added_list": _na("stg_user_cat_sup_report permission denied"),
+        "suppliers_added_list": added_list,
         "source": "redshift",
     })
 
