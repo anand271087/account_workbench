@@ -144,11 +144,24 @@ async def upload_intel_file(
 
     # Bust the in-process bundle cache for this source so the next
     # /intel/<source> GET returns fresh data instead of the 5-min cached
-    # NA pills. The cache key is built in services/redshift_queries.py
-    # — we clear the whole _CACHE because per-key keys aren't exposed,
-    # which is fine here: re-warming costs one Redshift round-trip.
+    # NA pills.
     try:
         rq._CACHE.clear()  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    # 08-Jun · After-load summary so the frontend can warn when the
+    # uploaded file's companies don't match the account being viewed.
+    # Query the staging table for the distinct companies seen so far —
+    # cheap, single round-trip via the existing pg helper.
+    distinct_companies: list[str] = []
+    try:
+        rows = rq._pg_rows(  # type: ignore[attr-defined]
+            f"SELECT DISTINCT company_name FROM public.{table_name} "
+            f"WHERE company_name IS NOT NULL ORDER BY 1 LIMIT 50",
+            (),
+        )
+        distinct_companies = [r[0] for r in rows]
     except Exception:  # noqa: BLE001, S110
         pass
 
@@ -161,6 +174,7 @@ async def upload_intel_file(
         "table": table_name,
         "rows_upserted": rows_upserted,
         "filename": fname,
+        "distinct_companies": distinct_companies,
     }
 
 

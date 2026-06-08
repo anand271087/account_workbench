@@ -40,6 +40,7 @@ import {
   SplitBar,
 } from "./charts";
 import { IntelUploadButton, type IntelUploadSource } from "@/components/IntelUploadButton";
+import { useAccountFromLayout } from "../../AccountProfileLayout";
 
 // AnalyticsTab passes mode="numbers" to render a compact parameter
 // list only (no KPI tiles, no charts). IntelligenceTab leaves it
@@ -643,17 +644,26 @@ function OfflineParamList({
   data: OfflineBundle;
   params: Array<{ key: string; label: string }>;
 }) {
+  // 08-Jun · The upload button needs the current account's canonical
+  // company name so it can warn the CSM when a portfolio-wide file
+  // they just uploaded doesn't contain THIS account — explains why
+  // the dashboard didn't change. Pull from the outlet context here
+  // so the 5 callers (Cirtuo/Nnamu/Upply/Training/NPS sheets) don't
+  // each need to thread it through.
+  const account = useAccountFromLayout();
+  const currentCompanyName = account.redshift_company_name ?? account.name;
   return (
     <Card>
       <CardTitle>{title}</CardTitle>
       <div className="text-[10px] text-text-muted mb-2">
         Source: offline file (CSV / XLSX). Upload below — dashboard
-        refreshes automatically.
+        refreshes automatically when the file contains data for{" "}
+        <span className="font-semibold">{currentCompanyName ?? "this account"}</span>.
       </div>
       {/* 08-Jun · in-app upload (Option C). admin / cs_director / vp_csm
           gated server-side; backend 403s surface inline on the button. */}
       <div className="mb-3">
-        <IntelUploadButton source={source} />
+        <IntelUploadButton source={source} currentCompanyName={currentCompanyName} />
       </div>
       {params.map((p) => (
         <ParamRow

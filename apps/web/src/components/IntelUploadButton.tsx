@@ -25,23 +25,34 @@ interface UploadResponse {
   table: string;
   rows_upserted: number;
   filename: string;
+  distinct_companies?: string[];
 }
 
 interface Props {
   source: IntelUploadSource;
   label?: string;
+  /** Canonical company name used in the staging tables for the account
+   *  currently being viewed (= account.redshift_company_name ?? account.name).
+   *  When provided, we warn after upload if no row in the loaded file
+   *  matches this account — explains why the dashboard didn't change. */
+  currentCompanyName?: string | null;
 }
 
 /** Small inline upload affordance. Sits at the top of each offline
  *  Intelligence sub-tab so the CSM can drop a fresh CSV / XLSX and
  *  watch the dashboard light up within ~1 second. */
-export function IntelUploadButton({ source, label }: Props) {
+export function IntelUploadButton({ source, label, currentCompanyName }: Props) {
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<
-    { filename: string; rows: number } | null
+    {
+      filename: string;
+      rows: number;
+      currentInFile: boolean;
+      companies: string[];
+    } | null
   >(null);
 
   async function handleFile(file: File) {
@@ -55,10 +66,19 @@ export function IntelUploadButton({ source, label }: Props) {
         `/api/v1/intel/upload?source=${source}`,
         fd,
       );
-      setSuccess({ filename: res.filename, rows: res.rows_upserted });
-      // Bust EVERY intel-bundle cache entry so this account's view picks
-      // up the fresh data on next render — and any sibling account that
-      // appears in the same upload (these files are portfolio-wide).
+      const companies = res.distinct_companies ?? [];
+      // Case-insensitive trimmed match — same normalization used by the
+      // bundles when filtering by company_name.
+      const normCurrent = (currentCompanyName ?? "").trim().toLowerCase();
+      const currentInFile = !!normCurrent && companies.some(
+        (c) => c.trim().toLowerCase() === normCurrent,
+      );
+      setSuccess({
+        filename: res.filename,
+        rows: res.rows_upserted,
+        currentInFile,
+        companies,
+      });
       qc.invalidateQueries({ queryKey: ["intel-bundle"] });
       qc.invalidateQueries({ queryKey: ["intel-all"] });
     } catch (e) {
@@ -113,11 +133,39 @@ export function IntelUploadButton({ source, label }: Props) {
         </button>
         <span className="text-[10px] text-text-muted">.csv or .xlsx · max 10 MB</span>
       </div>
-      {success && (
+      {success && success.currentInFile && (
         <div className="text-[11px] text-beroe-green bg-beroe-green/10 border border-beroe-green/30 rounded-md px-2.5 py-1">
           ✓ Loaded <span className="font-semibold">{success.filename}</span> —
           {" "}{success.rows} row{success.rows === 1 ? "" : "s"}. Dashboard
           refreshing…
+        </div>
+      )}
+      {success && !success.currentInFile && currentCompanyName && (
+        <div className="text-[11px] text-beroe-amber bg-beroe-amber/10 border border-beroe-amber/40 rounded-md px-2.5 py-1.5">
+          ⚠ Loaded <span className="font-semibold">{success.filename}</span>
+          {" "}({success.rows} row{success.rows === 1 ? "" : "s"}), but{" "}
+          <span className="font-semibold">{currentCompanyName}</span> isn't in
+          the file — so this account's dashboard won't change.
+          {success.companies.length > 0 && (
+            <>
+              {" "}File contains:{" "}
+              <span className="font-medium">
+                {success.companies.slice(0, 8).join(", ")}
+                {success.companies.length > 8
+                  ? `, +${success.companies.length - 8} more`
+                  : ""}
+              </span>
+              .
+            </>
+          )}
+        </div>
+      )}
+      {success && !success.currentInFile && !currentCompanyName && (
+        <div className="text-[11px] text-beroe-green bg-beroe-green/10 border border-beroe-green/30 rounded-md px-2.5 py-1">
+          ✓ Loaded <span className="font-semibold">{success.filename}</span> —
+          {" "}{success.rows} row{success.rows === 1 ? "" : "s"} across
+          {" "}{success.companies.length} compan
+          {success.companies.length === 1 ? "y" : "ies"}.
         </div>
       )}
       {error && (
