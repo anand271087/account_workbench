@@ -384,6 +384,103 @@ def category_watch_bundle(acct: str, window: str = "90d") -> dict:
         cat_params,
     )
 
+    # 08-Jun · The stg_category*_reporttype tables DO exist + are
+    # readable — the prior NA stubs were stale from before the grants
+    # landed. Wiring them live below; account-scoping via the email
+    # join to activity_per_user.
+    view_w = " AND v.accessed_date >= %s" if start else ""
+    view_p: tuple = (acct, start) if start else (acct,)
+    dn_w = " AND d.downloadtime >= %s" if start else ""
+    dn_p: tuple = (acct, start) if start else (acct,)
+
+    report_views_total = _scalar(
+        "SELECT COUNT(*) FROM tableau_schema.stg_categoryview_reporttype v "
+        "JOIN tableau_schema.activity_per_user a ON a.email = v.email "
+        "WHERE a.companyname = %s" + view_w,
+        view_p, default=0,
+    )
+    category_visits = _scalar(
+        "SELECT COUNT(DISTINCT v.email || '|' || v.categoryname || '|' || v.accessed_date::varchar) "
+        "FROM tableau_schema.stg_categoryview_reporttype v "
+        "JOIN tableau_schema.activity_per_user a ON a.email = v.email "
+        "WHERE a.companyname = %s" + view_w,
+        view_p, default=0,
+    )
+    revisit_pct = _scalar(
+        "SELECT COUNT(CASE WHEN c > 1 THEN 1 END)::float / NULLIF(COUNT(*), 0) FROM ("
+        "  SELECT v.email, v.categoryname, COUNT(*) c "
+        "  FROM tableau_schema.stg_categoryview_reporttype v "
+        "  JOIN tableau_schema.activity_per_user a ON a.email = v.email "
+        "  WHERE a.companyname = %s" + view_w +
+        "  GROUP BY v.email, v.categoryname"
+        ") t",
+        view_p, default=0.0,
+    )
+    top_views_rows = _rows(
+        "SELECT v.reportname, COUNT(*) c "
+        "FROM tableau_schema.stg_categoryview_reporttype v "
+        "JOIN tableau_schema.activity_per_user a ON a.email = v.email "
+        "WHERE a.companyname = %s AND v.reportname IS NOT NULL AND v.reportname <> ''"
+        + view_w +
+        " GROUP BY 1 ORDER BY c DESC LIMIT 10",
+        view_p,
+    )
+    spend_pool_rows = _rows(
+        "SELECT v.spendpool, COUNT(*) c "
+        "FROM tableau_schema.stg_categoryview_reporttype v "
+        "JOIN tableau_schema.activity_per_user a ON a.email = v.email "
+        "WHERE a.companyname = %s AND v.spendpool IS NOT NULL AND v.spendpool <> ''"
+        + view_w +
+        " GROUP BY 1 ORDER BY c DESC LIMIT 10",
+        view_p,
+    )
+    reporttype_rows = _rows(
+        "SELECT v.reporttype, COUNT(DISTINCT v.categoryname) c "
+        "FROM tableau_schema.stg_categoryview_reporttype v "
+        "JOIN tableau_schema.activity_per_user a ON a.email = v.email "
+        "WHERE a.companyname = %s AND v.reporttype IS NOT NULL AND v.reporttype <> ''"
+        + view_w +
+        " GROUP BY 1 ORDER BY c DESC",
+        view_p,
+    )
+
+    report_downloads_total = _scalar(
+        "SELECT COUNT(*) FROM tableau_schema.stg_categorydownloaded_reporttype d "
+        "JOIN tableau_schema.activity_per_user a ON a.email = d.email "
+        "WHERE a.companyname = %s" + dn_w,
+        dn_p, default=0,
+    )
+    top_downloads_rows = _rows(
+        "SELECT d.reportname, COUNT(*) c "
+        "FROM tableau_schema.stg_categorydownloaded_reporttype d "
+        "JOIN tableau_schema.activity_per_user a ON a.email = d.email "
+        "WHERE a.companyname = %s AND d.reportname IS NOT NULL AND d.reportname <> ''"
+        + dn_w +
+        " GROUP BY 1 ORDER BY c DESC LIMIT 10",
+        dn_p,
+    )
+    downloads_monthly_rows = _rows(
+        "SELECT TO_CHAR(DATE_TRUNC('month', d.downloadtime), 'YYYY-MM') AS m, "
+        "COUNT(*) "
+        "FROM tableau_schema.stg_categorydownloaded_reporttype d "
+        "JOIN tableau_schema.activity_per_user a ON a.email = d.email "
+        "WHERE a.companyname = %s AND d.downloadtime IS NOT NULL "
+        "GROUP BY 1 ORDER BY 1",
+        (acct,),
+    )
+
+    added_detail_rows = _rows(
+        "SELECT email, category_name, supplier_name, "
+        "  COALESCE(category_added_date, supplier_added_date) "
+        "FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s"
+        + cat_window +
+        " AND category_name IS NOT NULL AND category_name <> '' "
+        "ORDER BY COALESCE(category_added_date, supplier_added_date) DESC NULLS LAST "
+        "LIMIT 50",
+        cat_params,
+    )
+
     cat_intel: dict[str, Any] = {
         "categories_unlocked": int(distinct_cats or 0),
         "avg_categories_per_user": avg_cats,
@@ -391,16 +488,34 @@ def category_watch_bundle(acct: str, window: str = "90d") -> dict:
             {"month": r[0], "categories": int(r[1] or 0)} for r in monthly_trend_rows
         ],
         "categories_newly_added_period": [r[0] for r in new_cats_period_rows],
-        "category_type_breakdown": _na("category→type mapping not in source"),
-        "category_visits": _na("stg_categoryview_reporttype does not exist"),
-        "category_revisit_pct": _na("stg_categoryview_reporttype does not exist"),
-        "report_downloads_total": _na("stg_categorydownloaded_reporttype does not exist"),
-        "report_views_total": _na("stg_categoryview_reporttype does not exist"),
-        "top_report_views": _na("stg_categoryview_reporttype does not exist"),
-        "top_report_downloads": _na("stg_categorydownloaded_reporttype does not exist"),
-        "reports_downloaded_monthly_trend": _na("stg_categorydownloaded_reporttype does not exist"),
-        "added_categories_detail": _na("stg_user_cat_sup_report permission denied"),
-        "spend_pool_top_n": _na("stg_categoryview_reporttype does not exist"),
+        "category_type_breakdown": [
+            {"label": str(r[0] or "Other"), "count": int(r[1] or 0)} for r in reporttype_rows
+        ],
+        "category_visits": int(category_visits or 0),
+        "category_revisit_pct": round(float(revisit_pct or 0) * 100, 1),
+        "report_downloads_total": int(report_downloads_total or 0),
+        "report_views_total": int(report_views_total or 0),
+        "top_report_views": [
+            {"label": str(r[0] or "(blank)"), "count": int(r[1] or 0)} for r in top_views_rows
+        ],
+        "top_report_downloads": [
+            {"label": str(r[0] or "(blank)"), "count": int(r[1] or 0)} for r in top_downloads_rows
+        ],
+        "reports_downloaded_monthly_trend": [
+            {"month": r[0], "downloads": int(r[1] or 0)} for r in downloads_monthly_rows
+        ],
+        "added_categories_detail": [
+            {
+                "email": r[0],
+                "category": r[1],
+                "supplier": r[2] or None,
+                "added_at": _date_iso(r[3]),
+            }
+            for r in added_detail_rows
+        ],
+        "spend_pool_top_n": [
+            {"label": str(r[0] or "(blank)"), "count": int(r[1] or 0)} for r in spend_pool_rows
+        ],
         "industry_relevant_pct": _na("offline — SharePoint Industry Mapping file"),
     }
     avg_time = _scalar(
