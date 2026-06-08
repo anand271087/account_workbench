@@ -256,52 +256,313 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
     return <div className="space-y-3">{ciCard}{mmdCard}{bmCard}</div>;
   }
 
+  // 08-Jun · Charts mode rebuilt to match Analytics_DataPoints_v10.xlsx
+  // Representation column. Each KPI rendered with its spec-prescribed
+  // viz: KPI stat → KpiTile, Line chart → LineChart, Bar chart → BarChart,
+  // Stacked bar → SplitBar, Gauge → small radial badge, Table → SimpleTable.
+  // KPI tiles row groups every "KPI stat" line into a tight 5-up grid.
+
+  // ---- Category Intelligence helpers ----
+  const catTrend = Array.isArray(ci.categories_added_monthly_trend)
+    ? (ci.categories_added_monthly_trend as Array<{ month: string; categories: number }>)
+    : [];
+  const newlyAdded = Array.isArray(ci.categories_newly_added_period)
+    ? (ci.categories_newly_added_period as string[])
+    : [];
+  const catTypeBreakdown = Array.isArray(ci.category_type_breakdown)
+    ? (ci.category_type_breakdown as Array<{ label: string; count: number }>)
+    : [];
+  const topViews = Array.isArray(ci.top_report_views)
+    ? (ci.top_report_views as Array<{ label: string; count: number }>)
+    : [];
+  const topDownloads = Array.isArray(ci.top_report_downloads)
+    ? (ci.top_report_downloads as Array<{ label: string; count: number }>)
+    : [];
+  const spendPool = Array.isArray(ci.spend_pool_top_n)
+    ? (ci.spend_pool_top_n as Array<{ label: string; count: number }>)
+    : [];
+  const dlTrend = Array.isArray(ci.reports_downloaded_monthly_trend)
+    ? (ci.reports_downloaded_monthly_trend as Array<{ month: string; downloads: number }>)
+    : [];
+  const addedDetail = Array.isArray(ci.added_categories_detail)
+    ? (ci.added_categories_detail as Array<{
+        email: string; category: string; supplier: string | null; added_at: string | null;
+      }>)
+    : [];
+  const revisitPct = typeof ci.category_revisit_pct === "number"
+    ? (ci.category_revisit_pct as number) : 0;
+
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-        <KpiTile label="MMD Subscribers" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
-        <KpiTile
-          label="Total Time (m)"
-          value={fmtNum(Math.round(mmd.total_time_mins))}
-          accent={PALETTE.aqua}
-        />
-        <KpiTile
-          label="Avg Time / User"
-          value={mmd.avg_time_per_user_mins.toFixed(1)}
-          accent={PALETTE.fuscia}
-        />
-        <KpiTile
-          label="Unique Categories"
-          value={fmtNum(mmd.unique_categories_viewed)}
-          accent={PALETTE.bumblebee}
-        />
-        <KpiTile label="Avg Cats / User" value={mmd.avg_categories_per_user.toFixed(1)} />
-      </div>
-      {ciCard}
-      {mmdCard}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Card>
-          <CardTitle>Grades viewed (top 10)</CardTitle>
-          <BarChart rows={barRows(mmd.grades_viewed)} />
-        </Card>
-        <Card>
-          <CardTitle>Regions viewed (top 10)</CardTitle>
-          <BarChart rows={barRows(mmd.regions_viewed)} />
-        </Card>
-      </div>
+      {/* Category Intelligence — section header */}
       <Card>
-        <CardTitle>MMD activity — monthly</CardTitle>
-        {mmd.monthly_trend.length === 0 ? (
-          <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
-        ) : (
-          <LineChart
-            labels={mmd.monthly_trend.map((m) => m.month)}
-            values={mmd.monthly_trend.map((m) => m.visits)}
-            color={PALETTE.indigo}
-          />
+        <CardTitle>Category Intelligence</CardTitle>
+        <div className="text-[10px] text-text-muted mb-2.5">
+          Live from Redshift (stg_user_cat_sup_report + stg_category*_reporttype).
+        </div>
+
+        {/* KPI-stat row (spec: rows 6, 7, 9, 13, 16, 17 + revisit-as-KPI) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-3">
+          <KpiTile label="Categories unlocked" value={fmtNum(ci.categories_unlocked as number)} accent={PALETTE.indigo} />
+          <KpiTile label="Avg cats / user" value={(ci.avg_categories_per_user as number).toFixed(2)} accent={PALETTE.aqua} />
+          <KpiTile label="Newly added (period)" value={fmtNum(newlyAdded.length)} accent={PALETTE.fuscia} />
+          <KpiTile label="Avg time / subscriber (m)" value={(ci.avg_time_per_subscriber_mins as number).toFixed(1)} accent={PALETTE.bumblebee} />
+          <KpiTile label="Report views" value={fmtNum(ci.report_views_total as number)} accent={PALETTE.midnight} />
+          <KpiTile label="Report downloads" value={fmtNum(ci.report_downloads_total as number)} accent={PALETTE.indigo} />
+        </div>
+
+        {/* Visits gauge + revisit gauge — spec calls Category visits "Bar
+            chart" but it's a single scalar; pair it with revisit_pct as
+            two side-by-side tiles to give visual weight. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <KpiTile label="# Category visits" value={fmtNum(ci.category_visits as number)} accent={PALETTE.aqua} />
+          <RadialGauge label="Category revisit %" pct={revisitPct} color={PALETTE.fuscia} />
+          {isUnavailable(ci.industry_relevant_pct) ? (
+            <KpiTile
+              label="Industry-relevant %"
+              value="—"
+              na={{ reason: ci.industry_relevant_pct.reason }}
+            />
+          ) : (
+            <KpiTile
+              label="Industry-relevant %"
+              value={(ci.industry_relevant_pct as number).toFixed(0) + "%"}
+              accent={PALETTE.indigo}
+            />
+          )}
+        </div>
+
+        {/* Categories added trend — Line chart (row 8) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Categories added — monthly trend</div>
+            {catTrend.length === 0 ? (
+              <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
+            ) : (
+              <LineChart
+                labels={catTrend.map((m) => m.month)}
+                values={catTrend.map((m) => m.categories)}
+                color={PALETTE.indigo}
+                height={140}
+              />
+            )}
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Reports downloaded — monthly trend</div>
+            {dlTrend.length === 0 ? (
+              <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
+            ) : (
+              <LineChart
+                labels={dlTrend.map((m) => m.month)}
+                values={dlTrend.map((m) => m.downloads)}
+                color={PALETTE.fuscia}
+                height={140}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Category type breakdown — Stacked bar (row 10) */}
+        {catTypeBreakdown.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[11px] font-semibold mb-1">Category type breakdown</div>
+            <SplitBar
+              slices={catTypeBreakdown.map((r, i) => ({
+                label: r.label,
+                value: r.count,
+                color: SERIES_COLORS[i % SERIES_COLORS.length],
+              }))}
+            />
+          </div>
+        )}
+
+        {/* Spend pool + Top report views — Bar charts (rows 15, 18, 19) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Spend pool (top 10)</div>
+            <BarChart rows={barRows(spendPool)} />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Top 10 report views</div>
+            <BarChart rows={barRows(topViews)} />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Top 10 report downloads</div>
+            <BarChart rows={barRows(topDownloads)} />
+          </div>
+        </div>
+
+        {/* Categories newly added — Table / chips (rows 9, 14) */}
+        {newlyAdded.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[11px] font-semibold mb-1">Categories newly added (period)</div>
+            <div className="flex flex-wrap gap-1">
+              {newlyAdded.slice(0, 30).map((c, i) => (
+                <span
+                  key={i}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-beroe-blue/10 border border-beroe-blue/30 text-beroe-blue"
+                >
+                  {c}
+                </span>
+              ))}
+              {newlyAdded.length > 30 && (
+                <span className="text-[10px] text-text-muted self-center">
+                  +{newlyAdded.length - 30} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Added categories detail — Table (row 21) */}
+        {addedDetail.length > 0 && (
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Added categories detail</div>
+            <SimpleTable
+              cols={[
+                { key: "email", label: "User" },
+                { key: "category", label: "Category" },
+                { key: "supplier", label: "Supplier" },
+                { key: "added_at", label: "Added", numeric: true },
+              ]}
+              rows={addedDetail.slice(0, 50).map((r) => ({
+                email: r.email,
+                category: r.category,
+                supplier: r.supplier ?? "—",
+                added_at: r.added_at ?? "—",
+              }))}
+            />
+          </div>
         )}
       </Card>
-      {bmCard}
+
+      {/* MMD — section header */}
+      <Card>
+        <CardTitle>Market Movement Dashboard (MMD)</CardTitle>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+          <KpiTile label="MMD Subscribers" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
+          <KpiTile label="Total time (m)" value={fmtNum(Math.round(mmd.total_time_mins))} accent={PALETTE.aqua} />
+          <KpiTile label="Avg time / user (m)" value={mmd.avg_time_per_user_mins.toFixed(1)} accent={PALETTE.fuscia} />
+          <KpiTile label="Unique categories" value={fmtNum(mmd.unique_categories_viewed)} accent={PALETTE.bumblebee} />
+          <KpiTile label="Avg cats / user" value={mmd.avg_categories_per_user.toFixed(1)} accent={PALETTE.midnight} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Grades viewed (top 10)</div>
+            <BarChart rows={barRows(mmd.grades_viewed)} />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Regions viewed (top 10)</div>
+            <BarChart rows={barRows(mmd.regions_viewed)} />
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold mb-1">MMD module visits — monthly</div>
+          {mmd.monthly_trend.length === 0 ? (
+            <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
+          ) : (
+            <LineChart
+              labels={mmd.monthly_trend.map((m) => m.month)}
+              values={mmd.monthly_trend.map((m) => m.visits)}
+              color={PALETTE.indigo}
+              height={150}
+            />
+          )}
+        </div>
+      </Card>
+
+      {/* Category Benchmarks */}
+      <Card>
+        <CardTitle>Category Benchmarks</CardTitle>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+          <KpiTile
+            label="Total responses"
+            value={isUnavailable(bm.total_benchmark_responses) ? "—" : fmtNum(bm.total_benchmark_responses as number)}
+            na={isUnavailable(bm.total_benchmark_responses) ? { reason: bm.total_benchmark_responses.reason } : undefined}
+            accent={PALETTE.indigo}
+          />
+          <KpiTile
+            label="Subscribers responded"
+            value={isUnavailable(bm.total_subscribers_responded) ? "—" : fmtNum(bm.total_subscribers_responded as number)}
+            na={isUnavailable(bm.total_subscribers_responded) ? { reason: bm.total_subscribers_responded.reason } : undefined}
+            accent={PALETTE.aqua}
+          />
+          <KpiTile
+            label="Time spent (m)"
+            value={(bm.benchmark_time_mins as number)?.toFixed?.(1) ?? "—"}
+            accent={PALETTE.fuscia}
+          />
+          <KpiTile
+            label="RFx downloads"
+            value="—"
+            na={isUnavailable(bm.rfx_template_downloads) ? { reason: bm.rfx_template_downloads.reason } : undefined}
+            accent={PALETTE.bumblebee}
+          />
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold mb-1">Benchmark question categories</div>
+          {isUnavailable(bm.benchmark_question_categories) ? (
+            <NaPill reason={(bm.benchmark_question_categories as { reason: string }).reason} />
+          ) : (
+            <BarChart
+              rows={barRows(
+                bm.benchmark_question_categories as Array<{ label: string; count: number }>,
+              )}
+            />
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// 08-Jun · Compact radial gauge for the spec's "Gauge / KPI" representations
+// (Category revisit %, future similar). 0..100 input, renders a partial
+// arc + the % in the center.
+function RadialGauge({
+  label, pct, color = PALETTE.indigo,
+}: {
+  label: string;
+  pct: number;
+  color?: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const R = 38;
+  const C = 2 * Math.PI * R;
+  const arc = (clamped / 100) * C;
+  return (
+    <div className="rounded-lg border border-beroe-card-border bg-white p-3 flex items-center gap-3">
+      <svg width={92} height={92} viewBox="0 0 92 92" className="flex-none">
+        <circle cx={46} cy={46} r={R} stroke="#e5e7eb" strokeWidth={9} fill="none" />
+        <circle
+          cx={46}
+          cy={46}
+          r={R}
+          stroke={color}
+          strokeWidth={9}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={`${arc} ${C - arc}`}
+          transform="rotate(-90 46 46)"
+        />
+        <text
+          x={46}
+          y={50}
+          textAnchor="middle"
+          className="font-bold"
+          style={{ fill: color, fontSize: 17 }}
+        >
+          {clamped.toFixed(0)}%
+        </text>
+      </svg>
+      <div>
+        <div className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted mb-0.5">
+          {label}
+        </div>
+        <div className="text-[11px] text-text-secondary">
+          % of categories viewed more than once
+        </div>
+      </div>
     </div>
   );
 }
