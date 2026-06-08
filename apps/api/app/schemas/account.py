@@ -88,18 +88,40 @@ class AccountCreate(BaseModel):
 
 
 class AccountHeaderUpdate(BaseModel):
-    """M16.1 — PATCH /accounts/:id body for the 5 header chips that MoM
-    extraction surfaces. All fields optional; only the keys present in the
-    request body are applied (None is treated as a clear)."""
+    """PATCH /accounts/:id body. All fields optional; only the keys present
+    in the request body are applied (None is treated as a clear).
+
+    Covers two distinct slices:
+      • M16.1 header chips populated by MoM extraction
+      • Contract Audit gate_* fields edited from the Sales Hand-off tab
+        after the initial /sign event. These don't go through /sign
+        because that endpoint is for the signing event itself (409s
+        on re-call). Inline edits like fixing a wrong ACV or extending
+        the modules list need a forgiving PATCH path.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    # M16.1 header chips
     industry: str | None = Field(None, max_length=120)
     country: str | None = Field(None, max_length=120)
     headquarters: str | None = Field(None, max_length=200)
     annual_revenue_text: str | None = Field(None, max_length=80)
     tier: str | None = Field(None, max_length=40)
     sf_link: str | None = Field(None, max_length=2000)
+
+    # Contract Audit gate_* fields. Edited inline from SalesHandoffTab.
+    gate_signed_date: date | None = None
+    gate_contract_term: str | None = Field(None, max_length=40)
+    gate_renewal_date: date | None = None
+    gate_bvd_due_date: date | None = None
+    gate_contract_acv: Decimal | None = Field(
+        None, ge=0, le=Decimal("100000000")
+    )
+    gate_contract_modules: list[str] | None = None
+    gate_platform_tier: str | None = Field(None, max_length=80)
+    gate_account_segment: str | None = Field(None, max_length=80)
+    gate_subscribers: str | None = Field(None, max_length=200)
 
 
 class AccountListFilters(BaseModel):
