@@ -6,7 +6,7 @@
 // from its spec sheet — live values for what we can fetch, NaPill for
 // what's pending DBA grants or offline.
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 import type {
   Abi,
@@ -414,25 +414,12 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           </div>
         )}
 
-        {/* Added categories detail — Table (row 21) */}
+        {/* Added categories detail — grouped-by-user (row 21).
+            08-Jun · Was a 50-row table; reads as one giant block. Group
+            by user, show their categories as small chips, with a
+            "Show all" toggle for users beyond the first 8. */}
         {addedDetail.length > 0 && (
-          <div>
-            <div className="text-[11px] font-semibold mb-1">Added categories detail</div>
-            <SimpleTable
-              cols={[
-                { key: "email", label: "User" },
-                { key: "category", label: "Category" },
-                { key: "supplier", label: "Supplier" },
-                { key: "added_at", label: "Added", numeric: true },
-              ]}
-              rows={addedDetail.slice(0, 50).map((r) => ({
-                email: r.email,
-                category: r.category,
-                supplier: r.supplier ?? "—",
-                added_at: r.added_at ?? "—",
-              }))}
-            />
-          </div>
+          <AddedCategoriesDetailGrouped rows={addedDetail} />
         )}
       </Card>
 
@@ -512,6 +499,113 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+// 08-Jun · Grouped-by-user view for the spec's "Added categories detail"
+// table (row 21). The flat 50-row SimpleTable read as a wall of text;
+// grouping by email turns it into one card per user with their
+// categories as chips + the latest add date. Collapses past 8 users
+// with a "Show all" toggle.
+function AddedCategoriesDetailGrouped({
+  rows,
+}: {
+  rows: Array<{
+    email: string;
+    category: string;
+    supplier: string | null;
+    added_at: string | null;
+  }>;
+}) {
+  // Group rows by email; preserve first-seen order so the most-recent
+  // adder (rows come back date-desc) stays on top.
+  const grouped = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        email: string;
+        categories: Set<string>;
+        suppliers: Set<string>;
+        latest: string | null;
+      }
+    >();
+    rows.forEach((r) => {
+      const cur = map.get(r.email) ?? {
+        email: r.email,
+        categories: new Set<string>(),
+        suppliers: new Set<string>(),
+        latest: null,
+      };
+      if (r.category) cur.categories.add(r.category);
+      if (r.supplier) cur.suppliers.add(r.supplier);
+      if (r.added_at && (!cur.latest || r.added_at > cur.latest)) {
+        cur.latest = r.added_at;
+      }
+      map.set(r.email, cur);
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      (b.latest ?? "").localeCompare(a.latest ?? ""),
+    );
+  }, [rows]);
+
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? grouped : grouped.slice(0, 8);
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <div className="text-[11px] font-semibold">Added categories detail</div>
+        <div className="text-[10px] text-text-muted">
+          {grouped.length} user{grouped.length === 1 ? "" : "s"} ·{" "}
+          {rows.length} add{rows.length === 1 ? "" : "s"}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {visible.map((u) => {
+          const cats = Array.from(u.categories);
+          return (
+            <div
+              key={u.email}
+              className="rounded-md border border-beroe-card-border bg-white px-2.5 py-1.5"
+            >
+              <div className="flex items-baseline justify-between gap-2 mb-1">
+                <div className="text-[11.5px] font-semibold text-text-primary truncate">
+                  {u.email}
+                </div>
+                <div className="text-[10px] text-text-muted whitespace-nowrap">
+                  {cats.length} cat{cats.length === 1 ? "" : "s"}
+                  {u.latest ? ` · last ${u.latest.slice(0, 10)}` : ""}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {cats.slice(0, 12).map((c, i) => (
+                  <span
+                    key={i}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/20"
+                  >
+                    {c}
+                  </span>
+                ))}
+                {cats.length > 12 && (
+                  <span className="text-[10px] text-text-muted self-center">
+                    +{cats.length - 12} more
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {grouped.length > 8 && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-2 text-[10.5px] font-semibold text-beroe-blue hover:underline"
+        >
+          {showAll ? "Show top 8" : `Show all ${grouped.length} users →`}
+        </button>
+      )}
     </div>
   );
 }
