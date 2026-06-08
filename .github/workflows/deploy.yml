@@ -1,0 +1,208 @@
+name: Deploy Beroe AWB
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment for deployment'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+jobs:
+  # ── Build: runs on every branch push, never on manual dispatch ────────────
+  build:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine Build Config
+        id: config
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          VERSION=${{ secrets.IMAGE_VERSION }}
+          ECR_REGISTRY=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          ECR_REPO_API=${{ secrets.ECR_REPO_API }}
+          ECR_REPO_WEB=${{ secrets.ECR_REPO_WEB }}
+          if [[ "$BRANCH" == "release" ]]; then
+            IMAGE_TAG="prod-${VERSION}"
+            VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL_PROD }}"
+          elif [[ "$BRANCH" == "main" ]]; then
+            IMAGE_TAG="qa-${VERSION}"
+            VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL_STAGING }}"
+          else
+            IMAGE_TAG="dev-${VERSION}"
+            VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL_DEV }}"
+          fi
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "api_image_uri=$ECR_REGISTRY/$ECR_REPO_API:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "web_image_uri=$ECR_REGISTRY/$ECR_REPO_WEB:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "vite_api_base_url=$VITE_API_BASE_URL" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS & Login to ECR
+        uses: Beroe-Inc/common-actions/actions/ecr-login@main
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+
+      - name: Build and Push API Image
+        run: |
+          echo "Building API: ${{ steps.config.outputs.api_image_uri }}"
+          docker build -f apps/api/Dockerfile -t ${{ steps.config.outputs.api_image_uri }} apps/api
+          docker push ${{ steps.config.outputs.api_image_uri }}
+          echo "Pushed API: ${{ steps.config.outputs.api_image_uri }}"
+
+      - name: Build and Push Web Image
+        run: |
+          echo "Building Web: ${{ steps.config.outputs.web_image_uri }}"
+          docker build \
+            -f apps/web/Dockerfile \
+            --build-arg VITE_API_BASE_URL=${{ steps.config.outputs.vite_api_base_url }} \
+            --build-arg VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }} \
+            --build-arg VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }} \
+            -t ${{ steps.config.outputs.web_image_uri }} \
+            .
+          docker push ${{ steps.config.outputs.web_image_uri }}
+          echo "Pushed Web: ${{ steps.config.outputs.web_image_uri }}"
+
+  # ── Validate: team access gate (manual dispatch only) ─────────────────────
+  # staging    → qa-team allowed
+  # production → prod-team allowed
+  # development → skipped (no gate)
+  validate:
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.environment != 'development'
+    uses: Beroe-Inc/common-actions/.github/workflows/branch-access-control.yml@main
+    with:
+      allowed_teams: ${{ github.event.inputs.environment == 'production' && 'prod-team' || 'qa-team' }}
+    secrets:
+      ORG_READ_TOKEN: ${{ secrets.ORG_READ_TOKEN }}
+
+  # ── Deploy: manual dispatch only, after validate ──────────────────────────
+  deploy:
+    needs: [validate]
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      (needs.validate.result == 'success' || needs.validate.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine Deploy Config
+        id: config
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          VERSION=${{ secrets.IMAGE_VERSION }}
+          ECR_REGISTRY=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          if [[ "$ENV" == "production" ]]; then
+            echo "name=PROD" >> $GITHUB_OUTPUT
+            echo "image_tag=prod-${VERSION}" >> $GITHUB_OUTPUT
+            echo "compose_file_1=docker-compose-csm-workbench-prod.yml" >> $GITHUB_OUTPUT
+            echo "compose_file_2=docker-compose-csm-workbench-prod.ha.yml" >> $GITHUB_OUTPUT
+            echo "deploy_path=/opt/beroe-awb/Production/docker-compose" >> $GITHUB_OUTPUT
+          elif [[ "$ENV" == "staging" ]]; then
+            echo "name=STAGING" >> $GITHUB_OUTPUT
+            echo "image_tag=qa-${VERSION}" >> $GITHUB_OUTPUT
+            echo "compose_file_1=docker-compose-csm-workbench-staging.yml" >> $GITHUB_OUTPUT
+            echo "compose_file_2=docker-compose-csm-workbench-staging.ha.yml" >> $GITHUB_OUTPUT
+            echo "deploy_path=/opt/beroe-awb/Staging/docker-compose" >> $GITHUB_OUTPUT
+          else
+            echo "name=DEV" >> $GITHUB_OUTPUT
+            echo "image_tag=dev-${VERSION}" >> $GITHUB_OUTPUT
+            echo "compose_file_1=docker-compose-csm-workbench-dev.yml" >> $GITHUB_OUTPUT
+            echo "compose_file_2=" >> $GITHUB_OUTPUT
+            echo "deploy_path=/opt/beroe-awb/Dev/docker-compose" >> $GITHUB_OUTPUT
+          fi
+          echo "ecr_registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Echo Deploy Target
+        run: echo "Deploying to ${{ steps.config.outputs.name }} from branch ${{ github.ref_name }}"
+
+      - name: Configure AWS & Login to ECR
+        uses: Beroe-Inc/common-actions/actions/ecr-login@main
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+
+      - name: Prepare Docker Compose
+        run: |
+          cat ${{ steps.config.outputs.compose_file_1 }} | base64 -w 0 > /tmp/compose_base64_1.txt
+          echo "COMPOSE_BASE64_1=$(cat /tmp/compose_base64_1.txt)" >> $GITHUB_ENV
+          COMPOSE_FILE_2="${{ steps.config.outputs.compose_file_2 }}"
+          if [[ -n "$COMPOSE_FILE_2" ]]; then
+            cat $COMPOSE_FILE_2 | base64 -w 0 > /tmp/compose_base64_2.txt
+            echo "COMPOSE_BASE64_2=$(cat /tmp/compose_base64_2.txt)" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy to EC2 via SSM
+        run: |
+          ENV_NAME="${{ steps.config.outputs.name }}"
+          REGION=${{ secrets.AWS_REGION }}
+          ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
+          DEPLOY_PATH=${{ steps.config.outputs.deploy_path }}
+          ECR_REGISTRY=${{ steps.config.outputs.ecr_registry }}
+          IMAGE_TAG=${{ steps.config.outputs.image_tag }}
+          if [[ "$ENV_NAME" == "DEV" ]]; then
+            INSTANCES=("${{ secrets.EC2_INSTANCE_ID_DEV }}")
+            COMPOSE_FILES=("${{ steps.config.outputs.compose_file_1 }}")
+            COMPOSE_BASE64_LIST=("$COMPOSE_BASE64_1")
+          elif [[ "$ENV_NAME" == "STAGING" ]]; then
+            INSTANCES=("${{ secrets.EC2_INSTANCE_ID_STAGING_1 }}" "${{ secrets.EC2_INSTANCE_ID_STAGING_2 }}")
+            COMPOSE_FILES=("${{ steps.config.outputs.compose_file_1 }}" "${{ steps.config.outputs.compose_file_2 }}")
+            COMPOSE_BASE64_LIST=("$COMPOSE_BASE64_1" "$COMPOSE_BASE64_2")
+          else
+            INSTANCES=("${{ secrets.EC2_INSTANCE_ID_PROD_1 }}" "${{ secrets.EC2_INSTANCE_ID_PROD_2 }}")
+            COMPOSE_FILES=("${{ steps.config.outputs.compose_file_1 }}" "${{ steps.config.outputs.compose_file_2 }}")
+            COMPOSE_BASE64_LIST=("$COMPOSE_BASE64_1" "$COMPOSE_BASE64_2")
+          fi
+          for i in "${!INSTANCES[@]}"; do
+            INSTANCE_ID="${INSTANCES[$i]}"
+            COMPOSE_FILE="${COMPOSE_FILES[$i]}"
+            COMPOSE_BASE64="${COMPOSE_BASE64_LIST[$i]}"
+            echo "--------------------------------------------"
+            echo "Deploying to instance: $INSTANCE_ID ($ENV_NAME) with $COMPOSE_FILE"
+            echo "Deploy path: $DEPLOY_PATH"
+            echo "--------------------------------------------"
+            COMMAND_ID=$(aws ssm send-command \
+              --region $REGION \
+              --instance-ids $INSTANCE_ID \
+              --document-name "AWS-RunShellScript" \
+              --parameters commands="[
+                \"echo $COMPOSE_BASE64 | base64 -d > $DEPLOY_PATH/$COMPOSE_FILE || exit 1\",
+                \"cd $DEPLOY_PATH\",
+                \"aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY || exit 1\",
+                \"IMAGE_TAG=$IMAGE_TAG ECR_REGISTRY=$ECR_REGISTRY docker-compose -f $COMPOSE_FILE pull || exit 1\",
+                \"IMAGE_TAG=$IMAGE_TAG ECR_REGISTRY=$ECR_REGISTRY docker-compose -f $COMPOSE_FILE up -d || { echo Deployment failed, old container still running; exit 1; }\",
+                \"sleep 5\",
+                \"docker ps --filter name=beroe-awb-api --filter status=running | grep beroe-awb-api || { echo Container not running; exit 1; }\",
+                \"echo Deployment successful\",
+                \"docker ps --filter name=beroe-awb-api\"
+              ]" \
+              --query "Command.CommandId" \
+              --output text)
+            echo "SSM Command ID: $COMMAND_ID"
+            aws ssm wait command-executed --command-id $COMMAND_ID --instance-id $INSTANCE_ID --region $REGION
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id $COMMAND_ID --instance-id $INSTANCE_ID --region $REGION \
+              --query "Status" --output text)
+            echo "Deployment status for $INSTANCE_ID: $STATUS"
+            if [ "$STATUS" != "Success" ]; then
+              echo "Deployment failed on $INSTANCE_ID — stopping pipeline"
+              exit 1
+            fi
+            echo "Successfully deployed to $INSTANCE_ID"
+          done
+          echo "All instances deployed successfully"
