@@ -1593,14 +1593,39 @@ function Q1Box({
     );
   }
   if (!isOpen) {
+    // 08-Jun · Surface saved-but-not-completed drafts inline so the
+    // closed card doesn't hide user work after a "Save draft" click.
+    const hasDraft =
+      q1.means.length > 0 || !!q1.otherText || !!q1.confirmation;
     return (
       <QBoxFrame state="pending" onClick={() => setOpenQ(1)}>
         <QBoxHead
           state="pending"
           num={1}
           title="1 · What does this goal mean?"
-          tag="Click to start"
+          tag={hasDraft ? "Draft" : "Click to start"}
         />
+        {hasDraft && (
+          <div className="px-3 pb-3 pl-11">
+            <div
+              className="text-[11.5px]"
+              style={{ color: BRAND.t2, lineHeight: 1.6 }}
+            >
+              {q1.means.length > 0 && (
+                <>
+                  <b>Means:</b> {q1.means.join(" · ")}
+                  {q1.otherText ? " · " + q1.otherText : ""}
+                </>
+              )}
+              {q1.confirmation && (
+                <>
+                  <br />
+                  <b>Client confirmed:</b> {q1.confirmation}
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </QBoxFrame>
     );
   }
@@ -1679,6 +1704,17 @@ function Q2Box({
   }
   if (!isOpen) {
     const locked = !c1;
+    // 08-Jun · "Save draft" clears phase_b_completed_at server-side, so
+    // the done summary above doesn't render after a draft save. Without
+    // this branch the user sees a bare "Pending" header and thinks
+    // their input vanished. Surface the saved draft inline so the work
+    // is visible at-a-glance even before they re-open the editor.
+    const hasDraft =
+      !!q2.hasBackground ||
+      q2.doneBy.length > 0 ||
+      q2.beroeOffer.length > 0 ||
+      !!q2.cadence ||
+      !!q2.backgroundNotes;
     return (
       <QBoxFrame
         state="pending"
@@ -1688,8 +1724,45 @@ function Q2Box({
           state="pending"
           num={2}
           title="2 · What background work has informed this?"
-          tag={locked ? "Locked" : "Pending"}
+          tag={locked ? "Locked" : hasDraft ? "Draft" : "Pending"}
         />
+        {hasDraft && (
+          <div
+            className="px-3 pb-3 pl-11 text-[11.5px]"
+            style={{ color: BRAND.t2, lineHeight: 1.6 }}
+          >
+            {q2.hasBackground && (
+              <>
+                <b>Done already?</b> {q2.hasBackground}
+              </>
+            )}
+            {q2.doneBy.length > 0 && (
+              <>
+                {" · "}
+                <b>by</b> {q2.doneBy.join(", ")}
+                {q2.doneByOther ? ` (${q2.doneByOther})` : ""}
+              </>
+            )}
+            {q2.beroeOffer.length > 0 && (
+              <>
+                <br />
+                <b>Beroe to fill gap with:</b> {q2.beroeOffer.join(" · ")}
+              </>
+            )}
+            {q2.cadence && (
+              <>
+                <br />
+                <b>Cadence:</b> {q2.cadence}
+              </>
+            )}
+            {q2.backgroundNotes && (
+              <>
+                <br />
+                <b>Notes:</b> {q2.backgroundNotes}
+              </>
+            )}
+          </div>
+        )}
       </QBoxFrame>
     );
   }
@@ -1753,6 +1826,13 @@ function Q3Box({
   }
   if (!isOpen) {
     const locked = !c2;
+    // 08-Jun · Surface saved-but-not-completed drafts inline.
+    const hasDraft =
+      !!q3.categoryFocus ||
+      !!q3.baseline ||
+      !!q3.agreedTarget ||
+      !!q3.measureMethod ||
+      !!q3.timeline;
     return (
       <QBoxFrame
         state="pending"
@@ -1762,8 +1842,34 @@ function Q3Box({
           state="pending"
           num={3}
           title="3 · Agreed target — the number, not the aspiration"
-          tag={locked ? "Locked" : "Pending"}
+          tag={locked ? "Locked" : hasDraft ? "Draft" : "Pending"}
         />
+        {hasDraft && (
+          <div
+            className="px-3 pb-3 pl-11 text-[11.5px]"
+            style={{ color: BRAND.t2, lineHeight: 1.6 }}
+          >
+            {q3.categoryFocus && (
+              <>
+                <b>Categories:</b> {q3.categoryFocus}
+                <br />
+              </>
+            )}
+            {(q3.baseline || q3.agreedTarget) && (
+              <>
+                <b>Baseline:</b> {q3.baseline || "—"} → <b>Target:</b>{" "}
+                {q3.agreedTarget || "—"}
+                <br />
+              </>
+            )}
+            {(q3.measureMethod || q3.timeline) && (
+              <>
+                <b>Measured by:</b> {q3.measureMethod || "—"} · <b>By:</b>{" "}
+                {fd(q3.timeline)}
+              </>
+            )}
+          </div>
+        )}
       </QBoxFrame>
     );
   }
