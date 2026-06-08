@@ -723,10 +723,41 @@ const ContractAuditSection = memo(function ContractAuditSection({
   const patchModuleConfigs = useMutation({
     mutationFn: (configs: Record<string, Record<string, unknown>>) =>
       api.patch<SigningGate>(`/api/v1/accounts/${account.id}/module-configs`, { configs }),
-    onSuccess: () =>
+    // 08-Jun · Optimistic update — checkbox / radio / select selections
+    // were waiting ~3s for the network round-trip before reflecting in
+    // the UI. onMutate writes the merged configs into the cache before
+    // the request goes out so the chip ticks immediately. Rollback on
+    // error so a failed save reverts the UI.
+    onMutate: async (configs) => {
+      await qc.cancelQueries({ queryKey: ["signing-gate", account.id] });
+      const prev = qc.getQueryData<SigningGate>(["signing-gate", account.id]);
+      qc.setQueryData<SigningGate>(["signing-gate", account.id], (g) =>
+        g
+          ? {
+              ...g,
+              gate_module_configs: {
+                ...(g.gate_module_configs ?? {}),
+                ...Object.fromEntries(
+                  Object.entries(configs).map(([k, v]) => [
+                    k,
+                    { ...((g.gate_module_configs ?? {})[k] ?? {}), ...v },
+                  ]),
+                ),
+              },
+            }
+          : g,
+      );
+      return { prev };
+    },
+    onError: (e: ApiError, _vars, ctx) => {
+      // Roll the cache back so the UI matches the actual server state.
+      if (ctx && (ctx as { prev?: SigningGate }).prev) {
+        qc.setQueryData(["signing-gate", account.id], (ctx as { prev: SigningGate }).prev);
+      }
+      notify({ title: "Save failed", body: e.message, tone: "error" });
+    },
+    onSettled: () =>
       qc.invalidateQueries({ queryKey: ["signing-gate", account.id] }),
-    onError: (e: ApiError) =>
-      notify({ title: "Save failed", body: e.message, tone: "error" }),
   });
 
   const signMutation = useMutation({
