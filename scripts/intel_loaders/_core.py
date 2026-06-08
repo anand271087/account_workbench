@@ -52,9 +52,9 @@ def read_rows(path: Path) -> list[dict]:
     if suffix == ".csv":
         with path.open(newline="", encoding="utf-8-sig") as f:
             return list(csv.DictReader(f))
-    if suffix in (".xlsx", ".xls"):
+    if suffix == ".xlsx":
         try:
-            import openpyxl  # local to keep core lean
+            import openpyxl
         except ImportError:
             sys.exit("ERR: install openpyxl (uv add openpyxl) for xlsx loaders")
         wb = openpyxl.load_workbook(path, data_only=True)
@@ -70,7 +70,37 @@ def read_rows(path: Path) -> list[dict]:
             out.append({str(header[i]).strip() if header[i] else f"col{i}": row[i]
                         for i in range(len(header))})
         return out
-    sys.exit(f"ERR: unsupported file type {suffix}; use .csv or .xlsx")
+    if suffix == ".xls":
+        # Legacy binary .xls — openpyxl can't read it; use xlrd (which since
+        # 2.0 supports ONLY .xls, having dropped .xlsx). Cirtuo + a few other
+        # vendor exports still arrive in this format.
+        try:
+            import xlrd
+        except ImportError:
+            sys.exit("ERR: install xlrd (uv add xlrd) for .xls loaders")
+        book = xlrd.open_workbook(str(path))
+        sheet = book.sheet_by_index(0)
+        if sheet.nrows == 0:
+            return []
+        header = [str(sheet.cell_value(0, c)).strip() or f"col{c}"
+                  for c in range(sheet.ncols)]
+        out2: list[dict] = []
+        for r in range(1, sheet.nrows):
+            row_vals = [sheet.cell_value(r, c) for c in range(sheet.ncols)]
+            # Excel dates come back as floats; convert via xlrd's date helper
+            # so downstream parse_date() sees an actual datetime.
+            for c in range(sheet.ncols):
+                if sheet.cell_type(r, c) == xlrd.XL_CELL_DATE:
+                    try:
+                        tup = xlrd.xldate_as_tuple(row_vals[c], book.datemode)
+                        row_vals[c] = datetime(*tup)
+                    except Exception:  # noqa: BLE001
+                        pass
+            if all(v in (None, "") for v in row_vals):
+                continue
+            out2.append({header[c]: row_vals[c] for c in range(sheet.ncols)})
+        return out2
+    sys.exit(f"ERR: unsupported file type {suffix}; use .csv, .xlsx, or .xls")
 
 
 def parse_date(v: Any) -> date | None:

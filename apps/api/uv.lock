@@ -235,6 +235,7 @@ dependencies = [
     { name = "structlog" },
     { name = "supabase" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "xlrd" },
 ]
 
 [package.optional-dependencies]
@@ -280,6 +281,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.4.0" },
     { name = "supabase", specifier = ">=2.10.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
+    { name = "xlrd", specifier = ">=2.0.2" },
 ]
 provides-extras = ["dev"]
 

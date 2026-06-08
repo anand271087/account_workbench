@@ -30,6 +30,7 @@ dependencies = [
     # Phase 3 — sync Supabase Postgres reads from bundle layer (offline
     # source staging tables). asyncpg drives the async ORM elsewhere.
     "psycopg[binary]>=3.2.0",
+    "xlrd>=2.0.2",
 ]
 
 [project.optional-dependencies]
