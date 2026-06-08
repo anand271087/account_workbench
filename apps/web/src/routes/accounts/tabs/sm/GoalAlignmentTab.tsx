@@ -2163,6 +2163,21 @@ function EditorActions({
   onComplete: () => void;
   onClose: () => void;
 }) {
+  // 08-Jun · Save Draft was silently working but users couldn't tell —
+  // editor stays open, no toast, draft state already equals what got
+  // saved. Surface a 2-second "Saved ✓" pip + a brief "Saving…" label
+  // so the click visibly registers.
+  const [phase, setPhase] = useState<"idle" | "saving" | "saved">("idle");
+  const handleSave = () => {
+    setPhase("saving");
+    onSaveDraft();
+    // The mutation is fire-and-forget at this layer; flash "Saved ✓"
+    // shortly after click so the user gets a confirmation. The backend
+    // PATCH is already in flight and the query refetch fans out on
+    // success — this is purely a visual nudge.
+    window.setTimeout(() => setPhase("saved"), 250);
+    window.setTimeout(() => setPhase("idle"), 2000);
+  };
   return (
     <div className="flex items-center gap-2 pt-1">
       <button
@@ -2179,21 +2194,30 @@ function EditorActions({
       </button>
       <button
         type="button"
-        onClick={onSaveDraft}
-        className="text-[11px] font-semibold px-2.5 py-1.5 rounded-card border"
+        onClick={handleSave}
+        disabled={phase === "saving"}
+        className="text-[11px] font-semibold px-2.5 py-1.5 rounded-card border disabled:opacity-60"
         style={{
           borderColor: BRAND.cardBorder,
           color: BRAND.t2,
           background: "#fff",
         }}
       >
-        Save draft
+        {phase === "saving" ? "Saving…" : "Save draft"}
       </button>
+      {phase === "saved" && (
+        <span
+          className="text-[11px] font-semibold"
+          style={{ color: BRAND.green }}
+        >
+          Saved ✓
+        </span>
+      )}
       <button
         type="button"
         disabled={!ready}
         onClick={onComplete}
-        className="text-[11.5px] font-semibold px-3 py-1.5 rounded-card text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        className="ml-auto text-[11.5px] font-semibold px-3 py-1.5 rounded-card text-white disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: BRAND.indigo }}
       >
         {nextLabel}
