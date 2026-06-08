@@ -45,13 +45,18 @@ jobs:
           echo "web_image_uri=$ECR_REGISTRY/$ECR_REPO:beroe-awb-web-$IMAGE_TAG" >> $GITHUB_OUTPUT
           echo "vite_api_base_url=$VITE_API_BASE_URL" >> $GITHUB_OUTPUT
 
-      - name: Configure AWS & Login to ECR
-        uses: Beroe-Inc/common-actions/actions/ecr-login@main
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+            docker login --username AWS --password-stdin \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
       - name: Build and Push API Image
         run: |
@@ -129,13 +134,18 @@ jobs:
       - name: Echo Deploy Target
         run: echo "Deploying to ${{ steps.config.outputs.name }} from branch ${{ github.ref_name }}"
 
-      - name: Configure AWS & Login to ECR
-        uses: Beroe-Inc/common-actions/actions/ecr-login@main
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+            docker login --username AWS --password-stdin \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
       - name: Prepare Docker Compose
         run: |
