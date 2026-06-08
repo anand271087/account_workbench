@@ -14,7 +14,7 @@
 //
 // Demo state toggle (fixed top-right) mirrors the prototype's mock-toggle.
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
@@ -612,8 +612,13 @@ function PowerUserRow({
 
 // ─────────────────────────────────────────────────────────────
 // Section B — Contract Audit (amber card)
+// 08-Jun · React.memo'd so it doesn't re-render every time the
+// parent SalesHandoffTab refetches a sibling query (in particular
+// the document-polling that KindUploadCard fires every 1.5s while
+// an upload is processing — that was forcing ~20 inputs to re-render
+// per tick and caused typing lag).
 // ─────────────────────────────────────────────────────────────
-function ContractAuditSection({
+const ContractAuditSection = memo(function ContractAuditSection({
   account,
   gate,
   onMutate,
@@ -1128,7 +1133,7 @@ function ContractAuditSection({
       )}
     </Card>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────
 // Module picker (20 chips) + per-module config card
