@@ -96,7 +96,7 @@ export function IntelUploadButton({ source, label }: Props) {
             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition",
             busy
               ? "bg-beroe-bg text-text-muted cursor-wait"
-              : "bg-beroe-indigo text-white hover:opacity-90",
+              : "bg-beroe-blue text-white hover:bg-beroe-blue/90",
           )}
         >
           {busy ? (
