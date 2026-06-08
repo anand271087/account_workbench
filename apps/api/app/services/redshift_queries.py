@@ -307,6 +307,15 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         "WHERE companyname = %s",
         (acct,), default=0,
     )
+    # 08-Jun · stg_user_cat_sup_report grants landed — one row per
+    # (email, category_added, supplier_added). supplier_id IS NOT NULL
+    # marks an actual supplier-add event; nulls are bare category opens.
+    suppliers_added = _scalar(
+        "SELECT COUNT(*) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL"
+        + (" AND supplier_added_date >= %s" if start else ""),
+        (acct, start) if start else (acct,), default=0,
+    )
 
     return _cache_put_and_return(key, {
         "window": window,
@@ -318,7 +327,7 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         "total_logins": int(total_logins or 0),
         "total_time_spent_mins": round(float(total_time_mins or 0), 1),
         "categories_unlocked": int(categories_unlocked or 0),
-        "suppliers_added": _na("stg_user_cat_sup_report permission denied"),
+        "suppliers_added": int(suppliers_added or 0),
         "source": "redshift",
     })
 
@@ -338,11 +347,50 @@ def category_watch_bundle(acct: str, window: str = "90d") -> dict:
     w_mmd = " AND actiontime >= %s" if start else ""
     p_mmd: tuple = (acct, start) if start else (acct,)
 
+    # 08-Jun · stg_user_cat_sup_report grants landed — live queries below.
+    # Window applied via category_added_date when a window is set.
+    cat_window = " AND category_added_date >= %s" if start else ""
+    cat_params: tuple = (acct, start) if start else (acct,)
+
+    distinct_cats = _scalar(
+        "SELECT COUNT(DISTINCT category_name) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s" + cat_window,
+        cat_params, default=0,
+    )
+    distinct_users_with_cats = _scalar(
+        "SELECT COUNT(DISTINCT email) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s" + cat_window,
+        cat_params, default=0,
+    )
+    avg_cats = (
+        round(float(distinct_cats) / float(distinct_users_with_cats), 2)
+        if distinct_users_with_cats else 0.0
+    )
+    monthly_trend_rows = _rows(
+        "SELECT TO_CHAR(DATE_TRUNC('month', category_added_date), 'YYYY-MM') AS m, "
+        "COUNT(DISTINCT category_name) "
+        "FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s AND category_added_date IS NOT NULL"
+        + cat_window
+        + " GROUP BY 1 ORDER BY 1",
+        cat_params,
+    )
+    new_cats_period_rows = _rows(
+        "SELECT DISTINCT category_name "
+        "FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s" + cat_window
+        + " AND category_name IS NOT NULL AND category_name <> '' "
+        "ORDER BY 1 LIMIT 40",
+        cat_params,
+    )
+
     cat_intel: dict[str, Any] = {
-        "categories_unlocked": _na("stg_user_cat_sup_report permission denied"),
-        "avg_categories_per_user": _na("stg_user_cat_sup_report permission denied"),
-        "categories_added_monthly_trend": _na("stg_user_cat_sup_report permission denied"),
-        "categories_newly_added_period": _na("stg_user_cat_sup_report permission denied"),
+        "categories_unlocked": int(distinct_cats or 0),
+        "avg_categories_per_user": avg_cats,
+        "categories_added_monthly_trend": [
+            {"month": r[0], "categories": int(r[1] or 0)} for r in monthly_trend_rows
+        ],
+        "categories_newly_added_period": [r[0] for r in new_cats_period_rows],
         "category_type_breakdown": _na("category→type mapping not in source"),
         "category_visits": _na("stg_categoryview_reporttype does not exist"),
         "category_revisit_pct": _na("stg_categoryview_reporttype does not exist"),
