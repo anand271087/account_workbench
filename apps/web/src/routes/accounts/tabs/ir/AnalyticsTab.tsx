@@ -8,14 +8,11 @@
 // Both modes delegate to the same intel_sheets.tsx components — they
 // honor the `mode` prop.
 
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAccountFromLayout, useAccountPeriod } from "../../AccountProfileLayout";
-import { useIntelBundle, type IntelSection } from "@/hooks/useIntelAll";
-import { periodToWindow } from "@/types/intel";
+import { useIntelAll, type IntelSection } from "@/hooks/useIntelAll";
 import type {
   Abi,
   AccountSubscribers,
@@ -82,41 +79,16 @@ export default function AnalyticsTab() {
   const { period } = useAccountPeriod();
   const [sub, setSub] = useState<IntelSection>("account-subscribers");
   const [mode, setMode] = useState<SheetMode>("charts");
-  const qc = useQueryClient();
 
-  // 08-Jun · Background prefetch — the active sub-tab fires its query
-  // via useIntelBundle below; the other 15 sections used to wait until
-  // the user clicked them, each one costing another 5-25s Redshift
-  // round-trip. Now we kick all 15 off in parallel on mount so that
-  // switching between sub-tabs reads from the TanStack cache (instant).
-  // Sequenced via setTimeout so the active query gets the first slot
-  // and doesn't compete with the background ones for the Redshift
-  // tunnel's first connection.
-  useEffect(() => {
-    if (!account?.id) return;
-    const window = periodToWindow(period);
-    const ALL_SECTIONS: IntelSection[] = [
-      "account-subscribers", "category-watch", "abi",
-      "supplier-discovery", "supplier-monitoring", "custom-usage",
-      "thought-leadership", "datahub", "inflation-watch",
-      "cirtuo", "nnamu", "upply", "alerts", "training", "nps",
-      "super-users",
-    ];
-    // Give the active section a head-start before prefetching the rest.
-    const handle = setTimeout(() => {
-      ALL_SECTIONS.forEach((s) => {
-        if (s === sub) return; // already firing via useIntelBundle
-        const qs = s === "super-users" ? "?top_n=20" : `?window=${window}`;
-        qc.prefetchQuery({
-          queryKey: ["intel-bundle", account.id, s, window, s === "super-users" ? 20 : undefined],
-          queryFn: () =>
-            api.get(`/api/v1/accounts/${account.id}/intel/${s}${qs}`),
-          staleTime: 5 * 60_000,
-        });
-      });
-    }, 1200);
-    return () => clearTimeout(handle);
-  }, [account?.id, period, qc, sub]);
+  // 08-Jun · Single batched fetch instead of 16 per-section calls.
+  // Backend `/intel/all` parallelizes the 16 bundles via asyncio.gather
+  // + a 10-connection Redshift pool, so wall-clock ≈ slowest single
+  // bundle. The earlier per-section prefetch was a stopgap when the
+  // backend was sequential; with /intel/all parallelized server-side
+  // it's both faster (one HTTP round-trip) and simpler (no client
+  // orchestration needed). Each sub-tab below reads its slice from
+  // `all.data` directly — instant sub-tab switching, no per-tab fetch.
+  const all = useIntelAll(account.id, period);
 
   const active = SUB_TABS.find((t) => t.id === sub)!;
 
@@ -195,110 +167,105 @@ export default function AnalyticsTab() {
         </span>
       </div>
 
-      <SubLoader accountId={account.id} period={period} section={sub} mode={mode} />
+      {/* 08-Jun · Single-fetch flow. The 16 bundles arrive together
+          (server parallelizes), so loading state is global and
+          sub-tab switches are instant cache reads. */}
+      {all.isLoading ? (
+        <SectionSkeleton />
+      ) : all.isError ? (
+        <ErrorCard error={all.error} />
+      ) : all.data ? (
+        <AnalyticsBody data={all.data} section={sub} mode={mode} />
+      ) : null}
     </div>
   );
 }
 
-// ---------------- lazy fetch + dispatch ----------------
+// ---------------- read from rollup + dispatch to sheet ----------------
 
-function SubLoader({
-  accountId,
-  period,
+function AnalyticsBody({
+  data,
   section,
   mode,
 }: {
-  accountId: string;
-  period: ReturnType<typeof useAccountPeriod>["period"];
+  data: import("@/types/intel").IntelAll;
+  section: IntelSection;
+  mode: SheetMode;
+}) {
+  // The /intel/all response carries an optional _infra block (Redshift
+  // tunnel recovery) that's not on the IntelAll type. Read via cast.
+  const infra = (data as unknown as { _infra?: InfraHealth })._infra;
+  return (
+    <>
+      {infra?.tunnel_recovering && (
+        <InfraBanner
+          message={infra.message}
+          secondsAgo={Math.round(infra.seconds_since_error)}
+        />
+      )}
+      <SubRender data={data} section={section} mode={mode} />
+    </>
+  );
+}
+
+function SubRender({
+  data,
+  section,
+  mode,
+}: {
+  data: import("@/types/intel").IntelAll;
   section: IntelSection;
   mode: SheetMode;
 }) {
   switch (section) {
     case "account-subscribers":
-      return <FetchAndRender<AccountSubscribers> accountId={accountId} period={period} section={section}
-        render={(d) => <SubscribersSheet data={d} mode={mode} />} />;
+      return <SubscribersSheet data={data.account_subscribers as AccountSubscribers} mode={mode} />;
     case "category-watch":
-      return <FetchAndRender<CategoryWatch> accountId={accountId} period={period} section={section}
-        render={(d) => <CategoryWatchSheet data={d} mode={mode} />} />;
+      return <CategoryWatchSheet data={data.category_watch as CategoryWatch} mode={mode} />;
     case "abi":
-      return <FetchAndRender<Abi> accountId={accountId} period={period} section={section}
-        render={(d) => <AbiSheet data={d} mode={mode} />} />;
+      return <AbiSheet data={data.abi as Abi} mode={mode} />;
     case "supplier-discovery":
-      return <FetchAndRender<SupplierDiscovery> accountId={accountId} period={period} section={section}
-        render={(d) => <SDSheet data={d} mode={mode} />} />;
+      return <SDSheet data={data.supplier_discovery as SupplierDiscovery} mode={mode} />;
     case "supplier-monitoring":
-      return <FetchAndRender<SupplierMonitoring> accountId={accountId} period={period} section={section}
-        render={(d) => <SMSheet data={d} mode={mode} />} />;
+      return <SMSheet data={data.supplier_monitoring as SupplierMonitoring} mode={mode} />;
     case "custom-usage":
-      return <FetchAndRender<CustomUsage> accountId={accountId} period={period} section={section}
-        render={(d) => <CustomUsageSheet data={d} mode={mode} />} />;
+      return <CustomUsageSheet data={data.custom_usage as CustomUsage} mode={mode} />;
     case "thought-leadership":
-      return <FetchAndRender<ThoughtLeadership> accountId={accountId} period={period} section={section}
-        render={(d) => <TLSheet data={d} mode={mode} />} />;
+      return <TLSheet data={data.thought_leadership as ThoughtLeadership} mode={mode} />;
     case "datahub":
-      return <FetchAndRender<DataHubBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <DataHubSheet data={d} mode={mode} />} />;
+      return <DataHubSheet data={data.datahub as DataHubBundle} mode={mode} />;
     case "inflation-watch":
-      return <FetchAndRender<InflationWatch> accountId={accountId} period={period} section={section}
-        render={(d) => <IWSheet data={d} mode={mode} />} />;
+      return <IWSheet data={data.inflation_watch as InflationWatch} mode={mode} />;
     case "cirtuo":
-      return <FetchAndRender<OfflineBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <CirtuoSheet data={d} mode={mode} />} />;
+      return <CirtuoSheet data={data.cirtuo as OfflineBundle} mode={mode} />;
     case "nnamu":
-      return <FetchAndRender<OfflineBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <NnamuSheet data={d} mode={mode} />} />;
+      return <NnamuSheet data={data.nnamu as OfflineBundle} mode={mode} />;
     case "upply":
-      return <FetchAndRender<OfflineBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <UpplySheet data={d} mode={mode} />} />;
+      return <UpplySheet data={data.upply as OfflineBundle} mode={mode} />;
     case "alerts":
-      return <FetchAndRender<AlertsBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <AlertsSheet data={d} mode={mode} />} />;
+      return <AlertsSheet data={data.alerts as AlertsBundle} mode={mode} />;
     case "training":
-      return <FetchAndRender<OfflineBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <TrainingSheet data={d} mode={mode} />} />;
+      return <TrainingSheet data={data.training as OfflineBundle} mode={mode} />;
     case "nps":
-      return <FetchAndRender<OfflineBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <NpsSheet data={d} mode={mode} />} />;
+      return <NpsSheet data={data.nps as OfflineBundle} mode={mode} />;
     case "super-users":
-      return <FetchAndRender<SuperUsersBundle> accountId={accountId} period={period} section={section}
-        render={(d) => <SuperUsersSheet data={d} mode={mode} />} />;
+      return <SuperUsersSheet data={data.super_users as SuperUsersBundle} mode={mode} />;
   }
 }
 
-function FetchAndRender<T>({
-  accountId, period, section, render,
-}: {
-  accountId: string;
-  period: ReturnType<typeof useAccountPeriod>["period"];
-  section: IntelSection;
-  render: (d: T) => React.ReactNode;
-}) {
-  const { data, isLoading, isError, error } = useIntelBundle<T>(accountId, period, section);
-  if (isLoading) {
-    return <SectionSkeleton />;
-  }
-  if (isError) {
-    const status = (error as { status?: number } | null)?.status;
-    return (
-      <Card>
-        <div className="text-[13px] font-semibold mb-1 text-risk-red">Couldn't load this sheet</div>
-        <div className="text-[11px] text-text-secondary">
-          {status === 409
-            ? "Account not mapped to redshift_company_name yet."
-            : (error as { message?: string })?.message ?? "Unknown error"}
-        </div>
-      </Card>
-    );
-  }
-  if (!data) return null;
-  const infra = (data as { _infra?: InfraHealth })._infra;
+function ErrorCard({ error }: { error: unknown }) {
+  const status = (error as { status?: number } | null)?.status;
   return (
-    <>
-      {infra?.tunnel_recovering && (
-        <InfraBanner message={infra.message} secondsAgo={Math.round(infra.seconds_since_error)} />
-      )}
-      {render(data)}
-    </>
+    <Card>
+      <div className="text-[13px] font-semibold mb-1 text-risk-red">
+        Couldn't load Intelligence & Reports
+      </div>
+      <div className="text-[11px] text-text-secondary">
+        {status === 409
+          ? "Account not mapped to redshift_company_name yet."
+          : (error as { message?: string } | null)?.message ?? "Unknown error"}
+      </div>
+    </Card>
   );
 }
 
