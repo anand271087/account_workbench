@@ -1279,19 +1279,23 @@ function ConfigField({
   const full = field.full ? "sm:col-span-2" : "";
   const inputStyle = "w-full px-2.5 py-1.5 border rounded-[7px] text-[12px] focus:outline-none focus:border-beroe-blue disabled:bg-beroe-bg/40 disabled:cursor-not-allowed";
 
+  // 08-Jun · Text/number fields use local state + onBlur save. Without
+  // this, every keystroke fired patchModuleConfigs → invalidate →
+  // refetch → input value snapped back to the in-flight server value,
+  // dropping characters. Typing "12" landed as "2". Now typing is
+  // purely local; the save fires only when the field loses focus.
   if (field.type === "number") {
     return (
       <div className={full}>
         <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{field.label}</div>
         <div className="flex items-center gap-1.5">
-          <input
+          <DeferredInput
             type="number"
-            placeholder={field.ph}
-            value={(value as string | number | undefined) ?? ""}
+            placeholder={field.ph ?? ""}
+            value={String((value as string | number | undefined) ?? "")}
             disabled={locked}
-            onChange={(e) => onUpdate(e.target.value)}
+            onCommit={(v) => onUpdate(v)}
             className={inputStyle}
-            style={{ borderColor: C.CB }}
           />
           {field.suffix && (
             <span className="text-[11px] text-text-muted font-semibold whitespace-nowrap">{field.suffix}</span>
@@ -1304,14 +1308,13 @@ function ConfigField({
     return (
       <div className={full}>
         <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{field.label}</div>
-        <input
+        <DeferredInput
           type="text"
-          placeholder={field.ph}
+          placeholder={field.ph ?? ""}
           value={(value as string | undefined) ?? ""}
           disabled={locked}
-          onChange={(e) => onUpdate(e.target.value)}
+          onCommit={(v) => onUpdate(v)}
           className={inputStyle}
-          style={{ borderColor: C.CB }}
         />
       </div>
     );
@@ -1939,4 +1942,42 @@ function applyHandoffSlice(args: {
   if (Object.keys(extrasBody).length > 0) patchExtras(extrasBody);
 
   onApplied(applied);
+}
+
+// 08-Jun · Local-state input that defers commit to onBlur. Used by
+// the module-config fields where the prior onChange-per-keystroke
+// pattern dropped characters because each keystroke fired a PATCH +
+// invalidate + refetch — typing "12" landed as "2".
+function DeferredInput({
+  type = "text", value, placeholder, disabled, onCommit, className,
+}: {
+  type?: string;
+  value: string;
+  placeholder?: string;
+  disabled?: boolean;
+  onCommit: (v: string) => void;
+  className?: string;
+}) {
+  const [v, setV] = useState(value);
+  // Resync from parent when the server-known value changes AND the
+  // local draft is no longer dirty (i.e. equals the previous value).
+  // Without this, the input would clobber the user's mid-edit value
+  // every time a refetch landed.
+  useEffect(() => {
+    setV((prev) => (prev === "" || prev === value ? value : prev));
+  }, [value]);
+  return (
+    <input
+      type={type}
+      value={v}
+      placeholder={placeholder}
+      disabled={disabled}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => {
+        if (v !== value) onCommit(v);
+      }}
+      className={className}
+      style={{ borderColor: C.CB }}
+    />
+  );
 }
