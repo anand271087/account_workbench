@@ -30,6 +30,16 @@ CSGoalAlignment = ENUM(
     create_type=False,
 )
 
+# 08-Jun · validation_status column is a Postgres ENUM
+# (cs_goal_validation_status) but was mapped as plain String. asyncpg
+# sends VARCHAR for str-typed columns, which PG rejects on UPDATE
+# (DatatypeMismatchError). Wiring the real enum type silences that.
+CSGoalValidationStatus = ENUM(
+    "pending", "accepted", "flagged", "removed",
+    name="cs_goal_validation_status",
+    create_type=False,
+)
+
 
 class CSGoal(Base):
     __tablename__ = "cs_goals"
@@ -61,7 +71,7 @@ class CSGoal(Base):
     # progress). The phase_*_completed_at timestamps drive the prototype's
     # per-phase "Done" badge.
     validation_status: Mapped[str] = mapped_column(
-        String, nullable=False, server_default=text("'pending'")
+        CSGoalValidationStatus, nullable=False, server_default=text("'pending'")
     )
     flag_note: Mapped[str | None] = mapped_column(String, nullable=True)
     phase_a_completed_at: Mapped[datetime | None] = mapped_column(
