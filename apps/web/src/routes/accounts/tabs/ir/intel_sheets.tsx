@@ -204,8 +204,9 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
     <Card>
         <CardTitle>Category Intelligence (16 params)</CardTitle>
         <div className="text-[10px] text-text-muted mb-2">
-          Most pending DBA grants on stg_user_cat_sup_report +
-          stg_category*_reporttype.
+          Live from Redshift (stg_user_cat_sup_report +
+          stg_category*_reporttype). Only "Industry-relevant %" remains
+          NA — sourced from a SharePoint Industry Mapping file.
         </div>
         <ParamRow label="# Categories Unlocked" value={maybeVal(ci.categories_unlocked as Maybe<number>)} />
         <ParamRow label="Avg categories unlocked / user" value={maybeVal(ci.avg_categories_per_user as Maybe<number>)} />
@@ -504,8 +505,10 @@ export function SMSheet({ data: s, mode }: { data: SupplierMonitoring; mode?: Sh
       <Card>
         <CardTitle>All 10 parameters from spec sheet</CardTitle>
         <div className="text-[10px] text-text-muted mb-2">
-          Most pending DBA grant on stg_user_cat_sup_report; SM time computed
-          from session_log + module filter.
+          Live from Redshift (stg_user_cat_sup_report). SM time computed
+          from session_log + module filter. Contract-side fields
+          (vs-contracted %, usage vs runway, data refreshes) stay NA —
+          offline / no source column.
         </div>
         <ParamRow label="# suppliers monitored" value={maybeVal(s.suppliers_monitored)} />
         <ParamRow label="Suppliers by risk level" value={maybeVal(s.suppliers_by_risk_level as Maybe<number>)} />
