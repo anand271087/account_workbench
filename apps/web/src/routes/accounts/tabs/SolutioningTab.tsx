@@ -131,9 +131,17 @@ export default function SolutioningTab() {
     onSuccess: (res) => {
       // 08-Jun · The seed-once useEffect (line 50) leaves `form` stale
       // after the post-lock refetch, so isLocked never flips. Patch the
-      // lock metadata onto form directly so the UI updates in one tick.
+      // lock metadata + is_editable onto form directly so the UI
+      // (banner, disabled inputs, save bar) updates in one tick.
       setForm((prev) =>
-        prev ? { ...prev, locked_at: res.locked_at, locked_by: res.locked_by } : prev,
+        prev
+          ? {
+              ...prev,
+              locked_at: res.locked_at,
+              locked_by: res.locked_by,
+              is_editable: false,
+            }
+          : prev,
       );
       qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
@@ -145,11 +153,18 @@ export default function SolutioningTab() {
     mutationFn: () =>
       api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/unlock`),
     onSuccess: (res) => {
-      // Same fix as lockMutation — form was stuck at the previous
-      // locked_at, so unlock looked like a no-op even though the
-      // backend cleared it. Sync the lock metadata immediately.
+      // Same fix — also flip is_editable=true so the inputs un-disable
+      // and the sticky save bar reappears. Backend will refetch with
+      // the authoritative value on the next tick.
       setForm((prev) =>
-        prev ? { ...prev, locked_at: res.locked_at, locked_by: res.locked_by } : prev,
+        prev
+          ? {
+              ...prev,
+              locked_at: res.locked_at,
+              locked_by: res.locked_by,
+              is_editable: true,
+            }
+          : prev,
       );
       qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
