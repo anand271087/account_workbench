@@ -8,11 +8,14 @@
 // Both modes delegate to the same intel_sheets.tsx components — they
 // honor the `mode` prop.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAccountFromLayout, useAccountPeriod } from "../../AccountProfileLayout";
 import { useIntelBundle, type IntelSection } from "@/hooks/useIntelAll";
+import { periodToWindow } from "@/types/intel";
 import type {
   Abi,
   AccountSubscribers,
@@ -79,6 +82,41 @@ export default function AnalyticsTab() {
   const { period } = useAccountPeriod();
   const [sub, setSub] = useState<IntelSection>("account-subscribers");
   const [mode, setMode] = useState<SheetMode>("charts");
+  const qc = useQueryClient();
+
+  // 08-Jun · Background prefetch — the active sub-tab fires its query
+  // via useIntelBundle below; the other 15 sections used to wait until
+  // the user clicked them, each one costing another 5-25s Redshift
+  // round-trip. Now we kick all 15 off in parallel on mount so that
+  // switching between sub-tabs reads from the TanStack cache (instant).
+  // Sequenced via setTimeout so the active query gets the first slot
+  // and doesn't compete with the background ones for the Redshift
+  // tunnel's first connection.
+  useEffect(() => {
+    if (!account?.id) return;
+    const window = periodToWindow(period);
+    const ALL_SECTIONS: IntelSection[] = [
+      "account-subscribers", "category-watch", "abi",
+      "supplier-discovery", "supplier-monitoring", "custom-usage",
+      "thought-leadership", "datahub", "inflation-watch",
+      "cirtuo", "nnamu", "upply", "alerts", "training", "nps",
+      "super-users",
+    ];
+    // Give the active section a head-start before prefetching the rest.
+    const handle = setTimeout(() => {
+      ALL_SECTIONS.forEach((s) => {
+        if (s === sub) return; // already firing via useIntelBundle
+        const qs = s === "super-users" ? "?top_n=20" : `?window=${window}`;
+        qc.prefetchQuery({
+          queryKey: ["intel-bundle", account.id, s, window, s === "super-users" ? 20 : undefined],
+          queryFn: () =>
+            api.get(`/api/v1/accounts/${account.id}/intel/${s}${qs}`),
+          staleTime: 5 * 60_000,
+        });
+      });
+    }, 1200);
+    return () => clearTimeout(handle);
+  }, [account?.id, period, qc, sub]);
 
   const active = SUB_TABS.find((t) => t.id === sub)!;
 
@@ -237,17 +275,7 @@ function FetchAndRender<T>({
 }) {
   const { data, isLoading, isError, error } = useIntelBundle<T>(accountId, period, section);
   if (isLoading) {
-    return (
-      <Card>
-        <div className="flex items-center gap-2 text-[12px] text-text-muted py-8 justify-center">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
-          </span>
-          Querying Redshift… (cold queries take 5–25s)
-        </div>
-      </Card>
-    );
+    return <SectionSkeleton />;
   }
   if (isError) {
     const status = (error as { status?: number } | null)?.status;
@@ -271,5 +299,41 @@ function FetchAndRender<T>({
       )}
       {render(data)}
     </>
+  );
+}
+
+// 08-Jun · Skeleton shown while a section's bundle is in flight. Mirrors
+// the typical KPI-tile + chart layout so the page doesn't visually
+// collapse during the 5-25s cold Redshift query. Background prefetch
+// (see AnalyticsTab useEffect) means subsequent sub-tab switches will
+// usually hit the cache and never see this.
+function SectionSkeleton() {
+  return (
+    <Card>
+      <div className="flex items-center gap-2 text-[11px] font-semibold text-beroe-teal mb-3">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
+        </span>
+        Loading from Redshift… first load takes 5-25s, then it's cached
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-[68px] rounded-md bg-beroe-bg animate-pulse"
+          />
+        ))}
+      </div>
+      <div className="space-y-2">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="h-3 rounded bg-beroe-bg animate-pulse"
+            style={{ width: `${85 - i * 8}%` }}
+          />
+        ))}
+      </div>
+    </Card>
   );
 }
