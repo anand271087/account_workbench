@@ -233,7 +233,14 @@ async def patch_cs_goal(
             "Goal is soft-deleted — restore it before editing.",
         )
 
-    payload = body.model_dump(exclude_unset=True, mode="json")
+    # 08-Jun · Two views of the body. `payload` keeps native Python
+    # types (datetime, date) so setattr() can write them straight to
+    # the TIMESTAMP / DATE columns — asyncpg refuses ISO strings on
+    # those types. `payload_json` is the JSON-mode view used as the
+    # captured `new_value` in the history append (since the history
+    # column is JSONB and datetimes need to be stringified there).
+    payload = body.model_dump(exclude_unset=True)
+    payload_json = body.model_dump(exclude_unset=True, mode="json")
 
     # Track which phase transitioned from incomplete → complete so the
     # history entry is informative.
@@ -300,7 +307,7 @@ async def patch_cs_goal(
         _push_history(goal, by=str(user.id), action=f"{phase}_completed")
     non_phase_changes = {
         k: v
-        for k, v in payload.items()
+        for k, v in payload_json.items()
         if k not in ("phase_a", "phase_b", "phase_c")
     }
     if non_phase_changes:
