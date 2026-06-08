@@ -19,7 +19,7 @@ READABLE TABLES
   tableau_schema.live_ai_mmd_report
   live_ai_incremental.freshservice_abi        (Abi + Custom Usage — spec said tableau_schema.live_ai_freshservice_abi which does not exist)
   live_ai_incremental.supplierdiscoveryusersearch / timespent  (forestreet_usage_table substitute)
-  live_ai_incremental.thoughtleadershipreportview  (stg_thoughtleadership substitute)
+  tableau_schema.stg_thoughtleadership  (stg_thoughtleadership substitute)
   live_ai_incremental.git_home_report / git_addition_report / git_custom_cd
   live_ai_incremental.ads_historical_dump     (account scoping not possible — no email/company col)
 
@@ -459,10 +459,37 @@ def category_watch_bundle(acct: str, window: str = "90d") -> dict:
         ],
     }
 
+    # 08-Jun · stg_benchmark grants landed. The table only carries email
+    # (no companyname) — join to activity_per_user to filter by account.
+    # answerdate carries the time-bucket key for the optional window.
+    bench_w = " AND b.answerdate >= %s" if start else ""
+    bench_p: tuple = (acct, start) if start else (acct,)
+    bench_total = _scalar(
+        "SELECT COUNT(*) FROM tableau_schema.stg_benchmark b "
+        "JOIN tableau_schema.activity_per_user a ON a.email = b.email "
+        "WHERE a.companyname = %s" + bench_w,
+        bench_p, default=0,
+    )
+    bench_responders = _scalar(
+        "SELECT COUNT(DISTINCT b.email) FROM tableau_schema.stg_benchmark b "
+        "JOIN tableau_schema.activity_per_user a ON a.email = b.email "
+        "WHERE a.companyname = %s" + bench_w,
+        bench_p, default=0,
+    )
+    bench_cats = [
+        {"label": str(r[0] or "(blank)"), "count": int(r[1] or 0)} for r in _rows(
+            "SELECT b.questioncategoryname, COUNT(*) "
+            "FROM tableau_schema.stg_benchmark b "
+            "JOIN tableau_schema.activity_per_user a ON a.email = b.email "
+            "WHERE a.companyname = %s" + bench_w
+            + " GROUP BY 1 ORDER BY 2 DESC LIMIT 15",
+            bench_p,
+        )
+    ]
     benchmarks: dict[str, Any] = {
-        "total_benchmark_responses": _na("stg_benchmark permission denied"),
-        "total_subscribers_responded": _na("stg_benchmark permission denied"),
-        "benchmark_question_categories": _na("stg_benchmark permission denied"),
+        "total_benchmark_responses": int(bench_total or 0),
+        "total_subscribers_responded": int(bench_responders or 0),
+        "benchmark_question_categories": bench_cats,
         "rfx_template_downloads": _na("offline — no Redshift pipeline"),
     }
     bench_time = _scalar(
@@ -910,9 +937,9 @@ def custom_usage_bundle(acct: str, window: str = "fy") -> dict:
 
 # ============================================================
 # SHEET 7 — Thought Leadership (4 KPIs)
-# Spec: stg_thoughtleadership (permission denied). Substitute:
-# live_ai_incremental.thoughtleadershipreportview (joined via
-# activity_per_user for account scoping).
+# 08-Jun · stg_thoughtleadership grants landed — querying the real
+# table directly (was substituted with the incremental view earlier).
+# Same column shape: email + reportname + tltype + viewtime.
 # ============================================================
 
 
@@ -926,7 +953,7 @@ def thought_leadership_bundle(acct: str, window: str = "90d") -> dict:
 
     def count_where(extra: str):
         return _scalar(
-            f"SELECT COUNT(*) FROM live_ai_incremental.thoughtleadershipreportview t "
+            f"SELECT COUNT(*) FROM tableau_schema.stg_thoughtleadership t "
             f"JOIN tableau_schema.activity_per_user a ON a.email = t.email "
             f"WHERE a.companyname = %s{where} AND {extra}",
             p, default=0,
@@ -940,7 +967,7 @@ def thought_leadership_bundle(acct: str, window: str = "90d") -> dict:
     )
     by_type = [
         {"label": str(r[0] or "Other"), "count": int(r[1] or 0)} for r in _rows(
-            f"SELECT t.tltype, COUNT(*) FROM live_ai_incremental.thoughtleadershipreportview t "
+            f"SELECT t.tltype, COUNT(*) FROM tableau_schema.stg_thoughtleadership t "
             f"JOIN tableau_schema.activity_per_user a ON a.email = t.email "
             f"WHERE a.companyname = %s{where} GROUP BY t.tltype ORDER BY 2 DESC", p,
         )
@@ -963,11 +990,26 @@ def thought_leadership_bundle(acct: str, window: str = "90d") -> dict:
 
 
 def datahub_bundle(acct: str, window: str = "90d") -> dict:
-    return {
+    # 08-Jun · datahub_category_merged grants landed. `companyname` is on
+    # the row directly so no join needed; `date` is the bucket column for
+    # the optional window.
+    key = ("datahub", acct, window)
+    if (c := _cache_get(key)) is not None:
+        return c
+    start, _ = _window_range(window)
+    where = " AND date >= %s" if start else ""
+    p: tuple = (acct, start) if start else (acct,)
+    data_pulls = _scalar(
+        "SELECT COALESCE(SUM(frequency), 0) "
+        "FROM tableau_schema.datahub_category_merged "
+        "WHERE companyname = %s" + where,
+        p, default=0,
+    )
+    return _cache_put_and_return(key, {
         "window": window,
-        "data_pulls": _na("datahub_category_merged permission denied (live_ai schema)"),
+        "data_pulls": int(data_pulls or 0),
         "source": "redshift",
-    }
+    })
 
 
 # ============================================================
@@ -1054,7 +1096,16 @@ def inflation_watch_bundle(acct: str, window: str = "90d") -> dict:
         "avg_time_per_visitor_mins": round(avg_time_per_visitor, 1),
         "top_features": top_features,
         "scenario_modelling": scenario_modelling,
-        "top_pages": _na("stg_piwik_cirtuoreport permission denied"),
+        "top_pages": [
+            {"page": str(r[0] or "(blank)"), "views": int(r[1] or 0)} for r in _rows(
+                "SELECT url, COUNT(*) "
+                "FROM tableau_schema.stg_piwik_cirtuoreport "
+                "WHERE company_name = %s AND url IS NOT NULL AND url <> '' "
+                + (" AND time_accessed >= %s" if start else "")
+                + " GROUP BY 1 ORDER BY 2 DESC LIMIT 15",
+                (acct, start) if start else (acct,),
+            )
+        ],
         "source": "redshift",
     })
 
