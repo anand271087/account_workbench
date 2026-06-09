@@ -263,17 +263,21 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         return c
     start, _ = _window_range(window)
 
+    # 10-Jun · Analytics Error Tracker row 1 — total + active + status
+    # now all read from existing_user_sub_start_rev_v2 so the page math
+    # reconciles (Active% = active/total, status split sums to total).
+    # The tracker SQL specified status='Logged-in' but the actual values
+    # in the column are 'Active'/'Inactive' (verified against
+    # information_schema + a GROUP BY probe on 2026-06-10). Using
+    # 'Active' to honour the tracker's intent.
     total_subs = _scalar(
-        "SELECT COUNT(DISTINCT email) FROM tableau_schema.activity_per_user "
+        "SELECT COUNT(DISTINCT email) FROM tableau_schema.existing_user_sub_start_rev_v2 "
         "WHERE companyname = %s",
         (acct,), default=0,
     )
-    # 10-Jun · Analytics Error Tracker row 1 — active subscribers now
-    # means subscribers with status = 'Logged-in' (not just `logins > 0`
-    # in activity_per_user, which over-counts inactive accounts).
     active_subs = _scalar(
         "SELECT COUNT(DISTINCT email) FROM tableau_schema.existing_user_sub_start_rev_v2 "
-        "WHERE companyname = %s AND status = 'Logged-in'",
+        "WHERE companyname = %s AND status = 'Active'",
         (acct,), default=0,
     )
     # 10-Jun · Analytics Error Tracker rows 8, 9 — subscription dates
@@ -322,19 +326,26 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         (acct,), default=0,
     )
     # 10-Jun · Analytics Error Tracker rows 6, 7 — # Categories/Suppliers
-    # contracted (commercial entitlement, not usage). Source:
-    # stg_subplantypes.{category_count, supplier_count}. MAX in case of
-    # multiple plan rows per account.
-    categories_contracted = _scalar(
-        "SELECT MAX(category_count) FROM tableau_schema.stg_subplantypes "
-        "WHERE companyname = %s",
-        (acct,), default=0,
+    # contracted (commercial entitlement, not usage). stg_subplantypes
+    # is a lookup keyed by (type_of_plan, type_of_sub_plan) — it has
+    # no per-account column. Join via existing_user_sub_start_rev_v2's
+    # plan + sub_plan on the latest subscription row. MAX collapses any
+    # accidental duplicates in the lookup.
+    contracted_rows = _rows(
+        "SELECT MAX(s.category_count), MAX(s.supplier_count) "
+        "FROM tableau_schema.existing_user_sub_start_rev_v2 e "
+        "JOIN tableau_schema.stg_subplantypes s "
+        "  ON s.type_of_plan = e.type_of_plan "
+        " AND s.type_of_sub_plan = e.type_of_sub_plan "
+        "WHERE e.companyname = %s",
+        (acct,),
     )
-    suppliers_contracted = _scalar(
-        "SELECT MAX(supplier_count) FROM tableau_schema.stg_subplantypes "
-        "WHERE companyname = %s",
-        (acct,), default=0,
-    )
+    if contracted_rows and contracted_rows[0]:
+        categories_contracted = contracted_rows[0][0] or 0
+        suppliers_contracted = contracted_rows[0][1] or 0
+    else:
+        categories_contracted = 0
+        suppliers_contracted = 0
     # 10-Jun · Analytics Error Tracker row 10 — Type of Contract joins
     # type_of_plan + type_of_sub_plan from the latest subscription row.
     contract_type_rows = _rows(
@@ -430,7 +441,7 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         "FROM tableau_schema.stg_user_session_log s "
         "JOIN tableau_schema.existing_user_sub_start_rev_v2 e ON e.email = s.email "
         "WHERE e.companyname = %s "
-        "  AND e.status = 'Logged-in' "
+        "  AND e.status = 'Active' "
         "  AND s.sessionlogin >= CURRENT_DATE - INTERVAL '12 months' "
         "GROUP BY 1 "
         "ORDER BY 1",
@@ -1005,13 +1016,15 @@ def abi_bundle(acct: str, window: str = "90d") -> dict:
         )
     ]
     # 10-Jun · Analytics Error Tracker row 27 — Top geographies from
-    # `geographical_region_scope` (a richer region column). Synonym
-    # sprawl dedupes common variants ('USA' ≈ 'US' ≈ 'United States',
-    # 'UK' ≈ 'United Kingdom', etc.) so the chart isn't split by spelling.
+    # `geographic_region_scope` (column verified against
+    # information_schema on 2026-06-10; the tracker's name dropped the
+    # 'al' suffix). Synonym sprawl dedupes common variants
+    # ('USA' ≈ 'US' ≈ 'United States', 'UK' ≈ 'United Kingdom', etc.)
+    # so the chart isn't split by spelling.
     raw_geos = _rows(
-        f'SELECT geographical_region_scope, COUNT(*) '
+        f'SELECT geographic_region_scope, COUNT(*) '
         f'FROM live_ai_incremental.freshservice_abi '
-        f'WHERE "company name" = %s{where} GROUP BY geographical_region_scope '
+        f'WHERE "company name" = %s{where} GROUP BY geographic_region_scope '
         f'ORDER BY 2 DESC', p,
     )
     top_geos = _dedupe_geos(raw_geos)[:10]
