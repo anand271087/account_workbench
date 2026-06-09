@@ -32,7 +32,11 @@ import type { ExtractedContact, MomExtractionResult } from "@/types/mom_extracti
 import type { ExtractedVpd } from "@/types/vpd_extraction";
 import type { HandoffExtractionResult } from "@/types/handoff_extraction";
 import type { CsGoalsExtractionResult, ExtractedGoal } from "@/types/cs_goals_extraction";
-import { VpdGoalsExtractionReview } from "@/components/VpdGoalsExtractionReview";
+import type {
+  VpdMetricsExtractionResult,
+  ExtractedMetric,
+} from "@/types/vpd_metrics_extraction";
+import { VpdExtractionReview } from "@/components/VpdExtractionReview";
 
 // Bug 6 — added .csv / .md / .markdown so MoM and VPD zones accept the
 // formats listed in the sprint-1 bug tracker.
@@ -623,9 +627,19 @@ function DocumentRow({
               impossible to overlook. */}
           {doc.kind === "vpd" &&
             (() => {
-              const extracted = doc.cs_goals_extracted as unknown as CsGoalsExtractionResult | null;
-              const goalCount = extracted?.goals?.length ?? 0;
-              if (goalCount === 0) return null;
+              // 09-Jun · Unified VPD review — single pill carries both
+              // candidate Goals and candidate Success Metrics counts
+              // (replaces two separate CTAs). One modal with tabs.
+              const goalsExtracted = doc.cs_goals_extracted as unknown as CsGoalsExtractionResult | null;
+              const metricsExtracted = doc.metrics_extracted as unknown as VpdMetricsExtractionResult | null;
+              const goalCount = goalsExtracted?.goals?.length ?? 0;
+              const metricCount = metricsExtracted?.metrics?.length ?? 0;
+              if (goalCount === 0 && metricCount === 0) return null;
+              const parts: string[] = [];
+              if (goalCount > 0)
+                parts.push(`${goalCount} goal${goalCount === 1 ? "" : "s"}`);
+              if (metricCount > 0)
+                parts.push(`${metricCount} metric${metricCount === 1 ? "" : "s"}`);
               return (
                 <button
                   onClick={() => setGoalsModalOpen(true)}
@@ -635,7 +649,7 @@ function DocumentRow({
                     borderColor: "#C344C7",
                     color: "#7a1a90",
                   }}
-                  title="AI extracted candidate goals from this VPD — review and create"
+                  title="AI extracted candidate goals and success metrics from this VPD — review and create"
                 >
                   <span className="relative flex h-2 w-2 flex-shrink-0">
                     <span
@@ -648,7 +662,7 @@ function DocumentRow({
                     />
                   </span>
                   <span className="text-[12px] font-bold">
-                    🎯 {goalCount} candidate goal{goalCount === 1 ? "" : "s"} extracted
+                    🎯 {parts.join(" + ")} extracted
                   </span>
                   <span className="text-[11px] opacity-80 hidden sm:inline">
                     — review and create
@@ -697,16 +711,27 @@ function DocumentRow({
           </button>
         </div>
       </div>
-      {goalsModalOpen && doc.cs_goals_extracted && (
-        <VpdGoalsExtractionReview
+      {goalsModalOpen && (doc.cs_goals_extracted || doc.metrics_extracted) && (
+        <VpdExtractionReview
           accountId={accountId}
           documentName={doc.filename}
-          result={
-            {
-              ...(doc.cs_goals_extracted as unknown as CsGoalsExtractionResult),
-              goals: ((doc.cs_goals_extracted as unknown as CsGoalsExtractionResult).goals ??
-                []) as ExtractedGoal[],
-            } satisfies CsGoalsExtractionResult
+          goals={
+            doc.cs_goals_extracted
+              ? ({
+                  ...(doc.cs_goals_extracted as unknown as CsGoalsExtractionResult),
+                  goals: ((doc.cs_goals_extracted as unknown as CsGoalsExtractionResult).goals ??
+                    []) as ExtractedGoal[],
+                } satisfies CsGoalsExtractionResult)
+              : null
+          }
+          metrics={
+            doc.metrics_extracted
+              ? ({
+                  ...(doc.metrics_extracted as unknown as VpdMetricsExtractionResult),
+                  metrics: ((doc.metrics_extracted as unknown as VpdMetricsExtractionResult)
+                    .metrics ?? []) as ExtractedMetric[],
+                } satisfies VpdMetricsExtractionResult)
+              : null
           }
           onClose={() => setGoalsModalOpen(false)}
         />

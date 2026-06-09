@@ -144,6 +144,19 @@ async def _process(job_id: UUID) -> dict:
             except Exception:
                 logger.exception("VPD candidate-goals extraction failed (non-fatal)")
 
+            # 09-Jun · Unified VPD review — pull candidate Success Metrics
+            # in the same worker run so the single review modal can show
+            # goals + metrics side-by-side. Was on-demand only via
+            # POST /documents/:id/extract-metrics; that route still works.
+            try:
+                from app.services.claude import extract_metrics_from_vpd
+                metrics_extracted = extract_metrics_from_vpd(text)
+                doc.metrics_extracted = metrics_extracted
+                doc.metrics_extracted_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                logger.exception("VPD candidate-metrics extraction failed (non-fatal)")
+
         # MoM-only: extract structured fields (engagement / brief / contacts)
         # and persist on the document row. The frontend polling loop picks
         # this up and one-shot applies it as a dirty draft on Pre-Sales +

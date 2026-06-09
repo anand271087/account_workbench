@@ -33,6 +33,8 @@ interface Props {
   documentName?: string;
   result: VpdMetricsExtractionResult;
   onClose: () => void;
+  // 09-Jun · Unified VPD review — see VpdGoalsExtractionReview for shape.
+  embedded?: boolean;
 }
 
 const CONFIDENCE_TONES: Record<string, string> = {
@@ -46,6 +48,7 @@ export function VpdMetricsExtractionReview({
   documentName,
   result,
   onClose,
+  embedded = false,
 }: Props) {
   const qc = useQueryClient();
   const [rows, setRows] = useState<RowState[]>(() =>
@@ -104,9 +107,8 @@ export function VpdMetricsExtractionReview({
     setRunning(false);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-card w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+  const inner = (
+    <>
         <div className="px-5 py-3 border-b border-beroe-card-border flex items-start justify-between gap-3">
           <div>
             <div className="text-[14px] font-bold text-text-primary">
@@ -298,6 +300,16 @@ export function VpdMetricsExtractionReview({
             </button>
           </div>
         </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col min-h-0 flex-1">{inner}</div>;
+  }
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-card w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        {inner}
       </div>
     </div>
   );

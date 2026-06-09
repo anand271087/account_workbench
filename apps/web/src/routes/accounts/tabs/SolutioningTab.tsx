@@ -8,12 +8,10 @@ import { HelpTooltip } from "@/components/HelpTooltip";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
-import { VpdMetricsExtractionReview } from "@/components/VpdMetricsExtractionReview";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeSolutioningSlice,
 } from "@/lib/extractionDraft";
-import type { VpdMetricsExtractionResult } from "@/types/vpd_metrics_extraction";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import {
   type Solutioning,
@@ -237,10 +235,15 @@ export default function SolutioningTab() {
       />
 
       {/* 27-May Row 81 — Autofill Success Metrics from VPD.
-          Calls POST /documents/:id/extract-metrics on demand against the
-          MOST RECENT VPD upload, then opens the review modal to let the
-          user pick which metrics to create on Value Tracking. */}
-      <VpdMetricsAutofillButton accountId={account.id} />
+          09-Jun · Unified VPD review — retired. The candidate metrics
+          now extract automatically in the worker step (same time as
+          candidate goals) and surface on the VPD document row pill
+          "🎯 N goals + M metrics extracted — review and create". This
+          standalone button was a duplicate trigger for the same flow.
+          The VpdMetricsAutofillButton component is kept below as
+          dead-code reference for the on-demand re-extract path; if
+          a re-extract is needed, re-run the document AI from the
+          Documents tab — the worker re-runs the metrics step too. */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
@@ -894,88 +897,9 @@ function mergeSolutioningDraft(base: Solutioning, draft: ExtractedVpd): Solution
   };
 }
 
-// ============================================================
-// 27-May Row 81 — Autofill Success Metrics from VPD
-// ============================================================
-//
-// One-button flow:
-//   1. Fetch the account's most recent VPD doc.
-//   2. POST /api/v1/documents/:id/extract-metrics → candidate metrics.
-//   3. Open the review modal — user picks rows + edits inline.
-//   4. Modal fans out POST /api/v1/accounts/:id/metrics × selected and
-//      invalidates the Value Tracking cache.
-
-function VpdMetricsAutofillButton({ accountId }: { accountId: string }) {
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [result, setResult] = useState<VpdMetricsExtractionResult | null>(null);
-  const [vpdName, setVpdName] = useState<string | undefined>();
-
-  const onClick = async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      // Find the latest VPD doc for this account.
-      const docs = await api.get<{
-        items: { id: string; kind: string; filename: string; uploaded_at: string }[];
-      }>(`/api/v1/accounts/${accountId}/documents?kind=vpd`);
-      const latest = docs.items?.[0];
-      if (!latest) {
-        setErr(
-          "Upload a VPD first — autofill needs at least one VPD on this account.",
-        );
-        return;
-      }
-      const extracted = await api.post<VpdMetricsExtractionResult>(
-        `/api/v1/documents/${latest.id}/extract-metrics`,
-        {},
-      );
-      setVpdName(latest.filename);
-      setResult(extracted);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Extraction failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-card border border-beroe-card-border px-4 py-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <div className="text-[13px] font-bold text-text-primary">
-            ✨ Autofill Success Metrics from VPD
-          </div>
-          <div className="text-[11px] text-text-muted mt-0.5">
-            Claude reads the latest VPD and proposes Success Metrics — review,
-            edit, and one-click create them on Value Tracking.
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClick}
-          disabled={loading}
-          className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-purple/40 bg-beroe-purple/10 text-beroe-purple font-semibold hover:bg-beroe-purple/15 disabled:opacity-50"
-        >
-          {loading ? "Extracting…" : "Autofill Success Metrics →"}
-        </button>
-      </div>
-      {err && (
-        <div className="mt-2 text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded px-2 py-1">
-          {err}
-        </div>
-      )}
-      {result && (
-        <VpdMetricsExtractionReview
-          accountId={accountId}
-          documentName={vpdName}
-          result={result}
-          onClose={() => setResult(null)}
-        />
-      )}
-    </div>
-  );
-}
+// 09-Jun · VpdMetricsAutofillButton retired. Candidate metrics are now
+// surfaced on the VPD document row pill (Documents tab → KindUploadCard)
+// together with candidate goals, under one unified review modal.
 
 // 04-Jun bug — free-text "Other" capture for the Trial Summary's What-was-Tested
 // chip group. Click "+ Add other" → small input appears → Enter or click Add

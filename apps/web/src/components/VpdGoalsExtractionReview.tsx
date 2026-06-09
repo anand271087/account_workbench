@@ -37,6 +37,10 @@ interface Props {
   documentName?: string;
   result: CsGoalsExtractionResult;
   onClose: () => void;
+  // 09-Jun · Unified VPD review — when embedded, skip the fullscreen
+  // backdrop + outer card. Parent (VpdExtractionReview) provides one
+  // shared backdrop + tab strip.
+  embedded?: boolean;
 }
 
 export function VpdGoalsExtractionReview({
@@ -44,6 +48,7 @@ export function VpdGoalsExtractionReview({
   documentName,
   result,
   onClose,
+  embedded = false,
 }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -121,9 +126,8 @@ export function VpdGoalsExtractionReview({
     setRunning(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-10 pb-10 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl w-[min(900px,95vw)] flex flex-col max-h-[calc(100vh-80px)]">
+  const inner = (
+    <>
         {/* Header */}
         <div className="px-5 py-4 border-b border-beroe-card-border flex items-center justify-between">
           <div>
@@ -212,6 +216,16 @@ export function VpdGoalsExtractionReview({
             </button>
           </div>
         </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col min-h-0 flex-1">{inner}</div>;
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-10 pb-10 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-[min(900px,95vw)] flex flex-col max-h-[calc(100vh-80px)]">
+        {inner}
       </div>
     </div>
   );

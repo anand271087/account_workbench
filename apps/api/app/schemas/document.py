@@ -40,6 +40,8 @@ class DocumentOut(BaseModel):
     handoff_extracted_at: datetime | None = None
     cs_goals_extracted: dict[str, Any] | None = None
     cs_goals_extracted_at: datetime | None = None
+    metrics_extracted: dict[str, Any] | None = None
+    metrics_extracted_at: datetime | None = None
     notes: str | None = None
     deleted_at: datetime | None
 

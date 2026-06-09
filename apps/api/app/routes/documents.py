@@ -630,6 +630,13 @@ async def extract_metrics(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
 
     extracted = extract_metrics_from_vpd(text)
+    # 09-Jun · Unified VPD review persists the result so the doc-row pill
+    # CTA can drop its loading state once either column lands. Worker
+    # also writes this; route is idempotent (overwrite).
+    from datetime import datetime, timezone
+    doc.metrics_extracted = extracted
+    doc.metrics_extracted_at = datetime.now(timezone.utc)
+    await db.commit()
     return VpdMetricsExtractionResult(document_id=doc.id, **extracted)
 
 

@@ -73,6 +73,13 @@ class Document(Base):
     # subset → fan-out POST /accounts/:id/cs-goals.
     cs_goals_extracted: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     cs_goals_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 09-Jun · Unified VPD review — metrics now extracted in the same
+    # worker step as goals so the unified modal reads both candidates
+    # in one shot. Backed by the on-demand POST /documents/:id/extract-metrics
+    # route too; that route still works (idempotent — overwrites this
+    # column) but the worker fires it by default.
+    metrics_extracted: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    metrics_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Bug 3 — free-text notes attached to the uploaded document.
     notes: Mapped[str | None] = mapped_column(nullable=True)
