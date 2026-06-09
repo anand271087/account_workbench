@@ -611,6 +611,16 @@ function DocumentRow({
           {/* Bug 3 — per-document notes (prototype parity) */}
           <NotesEditor docId={doc.id} initial={doc.notes} accountId={accountId} />
           {/* M15.1 — VPD candidate-goals review CTA */}
+          {/* M15.1 + 09-Jun G3 — VPD candidate-goals CTA.
+              The auto-extract runs server-side on every VPD upload
+              (workers/tasks.py · extract_cs_goals_from_vpd) and
+              persists candidates to cs_goals_extracted. Spec gap-pill
+              "Auto-extraction confirmVDDGoals() exists in v21 but
+              proto skips the step" was diagnosed as a visibility
+              problem — the previous CTA was a 12px purple text link
+              tucked under the row, easy to miss. Promoted to a
+              full-width pulsing pill so the candidate-goals queue is
+              impossible to overlook. */}
           {doc.kind === "vpd" &&
             (() => {
               const extracted = doc.cs_goals_extracted as unknown as CsGoalsExtractionResult | null;
@@ -619,10 +629,31 @@ function DocumentRow({
               return (
                 <button
                   onClick={() => setGoalsModalOpen(true)}
-                  className="mt-1.5 text-xs text-beroe-purple font-semibold hover:underline"
+                  className="mt-2 w-full flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left hover:brightness-105 transition"
+                  style={{
+                    background: "#fdf0fd",
+                    borderColor: "#C344C7",
+                    color: "#7a1a90",
+                  }}
                   title="AI extracted candidate goals from this VPD — review and create"
                 >
-                  Review {goalCount} candidate goal{goalCount === 1 ? "" : "s"} →
+                  <span className="relative flex h-2 w-2 flex-shrink-0">
+                    <span
+                      className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+                      style={{ background: "#C344C7" }}
+                    />
+                    <span
+                      className="relative inline-flex rounded-full h-2 w-2"
+                      style={{ background: "#C344C7" }}
+                    />
+                  </span>
+                  <span className="text-[12px] font-bold">
+                    🎯 {goalCount} candidate goal{goalCount === 1 ? "" : "s"} extracted
+                  </span>
+                  <span className="text-[11px] opacity-80 hidden sm:inline">
+                    — review and create
+                  </span>
+                  <span className="ml-auto text-[12px] font-bold">→</span>
                 </button>
               );
             })()}

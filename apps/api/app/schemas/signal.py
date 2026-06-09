@@ -96,6 +96,12 @@ class ActivityOut(BaseModel):
     items: str | None
     attendees: str | None
     linked_metrics: list[UUID]
+    # 09-Jun · G7 — activities can link to the initiatives + goals
+    # they advanced. linked_initiatives is text[] because Initiative
+    # IDs live inside the cs_goals.initiatives jsonb as prototype
+    # strings ("i_0", "i_<ms>"); linked_goals is uuid[] (cs_goals PK).
+    linked_initiatives: list[str] = Field(default_factory=list)
+    linked_goals: list[UUID] = Field(default_factory=list)
     file_name: str | None
     occurred_at: date | None
     added_by: UUID | None
@@ -117,6 +123,8 @@ class ActivityCreate(BaseModel):
     items: str | None = Field(None, max_length=4000)
     attendees: str | None = Field(None, max_length=600)
     linked_metrics: list[UUID] = Field(default_factory=list)
+    linked_initiatives: list[str] = Field(default_factory=list)
+    linked_goals: list[UUID] = Field(default_factory=list)
     file_name: str | None = Field(None, max_length=240)
     occurred_at: date | None = None
 
@@ -128,6 +136,8 @@ class ActivityUpdate(BaseModel):
     items: str | None = Field(None, max_length=4000)
     attendees: str | None = Field(None, max_length=600)
     linked_metrics: list[UUID] | None = None
+    linked_initiatives: list[str] | None = None
+    linked_goals: list[UUID] | None = None
     file_name: str | None = Field(None, max_length=240)
     occurred_at: date | None = None
     hidden: bool | None = None

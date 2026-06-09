@@ -66,6 +66,11 @@ export interface Activity {
   items: string | null;
   attendees: string | null;
   linked_metrics: string[];
+  // 09-Jun · G7 — touchpoint linkage. Initiative IDs are prototype
+  // strings ("i_0", "i_<ms>") that live inside cs_goals.initiatives
+  // jsonb; goal IDs are real UUIDs.
+  linked_initiatives: string[];
+  linked_goals: string[];
   file_name: string | null;
   occurred_at: string | null;
   added_by: string | null;
@@ -87,6 +92,8 @@ export interface ActivityCreate {
   items?: string | null;
   attendees?: string | null;
   linked_metrics?: string[];
+  linked_initiatives?: string[];
+  linked_goals?: string[];
   file_name?: string | null;
   occurred_at?: string | null;
 }

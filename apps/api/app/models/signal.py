@@ -119,6 +119,21 @@ class AccountActivity(Base):
     linked_metrics: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(UUID(as_uuid=True)), nullable=False, server_default=text("'{}'")
     )
+    # 09-Jun · G7 — value_flow_map Stage 10. Activities link to the
+    # initiatives + goals they advanced so the per-initiative touchpoint
+    # counter ("5 touchpoints · last on 22 Mar") renders on initiative
+    # cards.
+    #
+    # linked_initiatives is text[] — Initiative.id lives inside
+    # cs_goals.initiatives jsonb as a prototype string ("i_0",
+    # "i_<ms>"), not a UUID. linked_goals stays uuid[] since goals
+    # have a real UUID PK.
+    linked_initiatives: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+    linked_goals: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), nullable=False, server_default=text("'{}'")
+    )
     file_name: Mapped[str | None] = mapped_column(String, nullable=True)
     # R29 — date the activity actually happened (vs. created_at = log time).
     occurred_at: Mapped[date | None] = mapped_column(Date, nullable=True)

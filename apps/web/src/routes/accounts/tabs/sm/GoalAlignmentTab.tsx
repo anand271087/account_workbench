@@ -50,6 +50,9 @@ import {
 } from "@/types/cs_goal";
 import type { CSOnboarding, Stakeholder } from "@/types/cs_onboarding";
 import type { Contact, ContactListResponse } from "@/types/contact";
+// 09-Jun · G7 — touchpoint counts per initiative come from
+// account_activities.linked_initiatives.
+import type { Activity } from "@/types/signal";
 
 // ---------------------------------------------------------------------------
 // Brand palette (locked)
@@ -2448,6 +2451,31 @@ function GoalFrozenBody({
 
   const inits = goal.initiatives.map((it, idx) => readInit(it, idx));
 
+  // 09-Jun · G7 — Per-initiative touchpoint counter (value_flow_map
+  // Stage 10). Activities tagged with linked_initiatives[<protoId>]
+  // get tallied client-side: count + most-recent date. Same query key
+  // the activity-log card uses → no duplicate fetch.
+  const activitiesQ = useQuery<{ items: Activity[] }>({
+    queryKey: ["activities", goal.account_id],
+    queryFn: () =>
+      api.get<{ items: Activity[] }>(`/api/v1/accounts/${goal.account_id}/activities`),
+    staleTime: 60_000,
+  });
+  const touchpointsByInit = useMemo(() => {
+    const map = new Map<string, { count: number; lastAt: string | null }>();
+    for (const a of activitiesQ.data?.items ?? []) {
+      if (a.hidden) continue;
+      const when = a.occurred_at ?? a.created_at ?? null;
+      for (const initId of a.linked_initiatives ?? []) {
+        const cur = map.get(initId) ?? { count: 0, lastAt: null as string | null };
+        cur.count += 1;
+        if (when && (!cur.lastAt || when > cur.lastAt)) cur.lastAt = when;
+        map.set(initId, cur);
+      }
+    }
+    return map;
+  }, [activitiesQ.data]);
+
   return (
     <div
       className="px-4 pt-3 pb-3.5 border-t"
@@ -2559,6 +2587,7 @@ function GoalFrozenBody({
             key={it.id}
             init={it}
             cat={goal.category}
+            touchpoints={touchpointsByInit.get(it.id) ?? null}
             onSave={(next) => {
               saveInits(inits.map((x) => (x.id === it.id ? next : x)));
             }}
@@ -2634,11 +2663,14 @@ function EmptyInitiatives({ cat }: { cat: CSGoalCategory }) {
 function InitiativeRow({
   init,
   cat,
+  touchpoints,
   onSave,
   onDelete,
 }: {
   init: ProtoInit;
   cat: CSGoalCategory;
+  // 09-Jun · G7 — null when no activities reference this init yet.
+  touchpoints: { count: number; lastAt: string | null } | null;
   onSave: (next: ProtoInit) => void;
   onDelete: () => void;
 }) {
@@ -2686,6 +2718,27 @@ function InitiativeRow({
           {init.module ? ` · ${init.module}` : ""}
           {init.owner ? ` · ${init.owner}` : ""}
         </div>
+        {/* 09-Jun · G7 — touchpoint counter. Hidden when no activities
+            link to this initiative; surfaces as a compact pill once
+            CSMs start tagging activities with the init id. */}
+        {touchpoints && touchpoints.count > 0 && (
+          <div className="mt-1 inline-flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-wider"
+            style={{ color: BRAND.t2 }}
+          >
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full"
+              style={{ background: "#f3f0ff", color: BRAND.indigo }}
+              title={touchpoints.lastAt ? `Last touchpoint ${touchpoints.lastAt.slice(0, 10)}` : ""}
+            >
+              💬 {touchpoints.count} touchpoint{touchpoints.count === 1 ? "" : "s"}
+            </span>
+            {touchpoints.lastAt && (
+              <span style={{ color: BRAND.t3, textTransform: "none" }}>
+                · last {touchpoints.lastAt.slice(0, 10)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <span
         className="text-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"

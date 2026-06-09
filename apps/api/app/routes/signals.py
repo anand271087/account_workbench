@@ -276,6 +276,11 @@ async def create_activity(
         items=body.items,
         attendees=body.attendees,
         linked_metrics=body.linked_metrics,
+        # 09-Jun · G7 — initiative + goal linkage. Empty default when
+        # the caller doesn't supply them (existing call sites continue
+        # to work unchanged).
+        linked_initiatives=body.linked_initiatives,
+        linked_goals=body.linked_goals,
         file_name=body.file_name,
         added_by=user.id,
     )
