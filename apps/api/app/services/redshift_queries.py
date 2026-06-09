@@ -1284,6 +1284,16 @@ def custom_usage_bundle(acct: str, window: str = "fy") -> dict:
         )
     ]
 
+    # 09-Jun · DevSpec row 9 — % feedback ratings given. Same SQL
+    # pattern as abi_bundle's feedback_given_pct (same table).
+    feedback_given_pct = _scalar(
+        f"SELECT SUM(CASE WHEN feedback IS NOT NULL AND TRIM(feedback) <> '' "
+        f"           THEN 1 ELSE 0 END)::float "
+        f"/ NULLIF(COUNT(*), 0) "
+        f'FROM live_ai_incremental.freshservice_abi '
+        f'WHERE "company name" = %s{where}', p, default=0.0,
+    )
+
     return _cache_put_and_return(key, {
         "window": window,
         # NB: spec uses SUM(credits) but freshservice_abi has no credits
@@ -1297,6 +1307,7 @@ def custom_usage_bundle(acct: str, window: str = "fy") -> dict:
         "commodity_dashboards": int(commodity_dash or 0),
         "country_reports": int(country_reports or 0),
         "client_feedback_score": round(float(feedback_score), 2) if feedback_score else None,
+        "feedback_given_pct": round(float(feedback_given_pct or 0) * 100, 1),
         "ai_swat_vs_basics": swat_vs_basics,
         "top_categories": top_cats,
         "top_spendpools": spendpools,

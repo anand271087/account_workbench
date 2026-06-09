@@ -1429,11 +1429,8 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
   ) : null;
   const paramList = (
       <Card>
-        <CardTitle>All 14 parameters from spec sheet</CardTitle>
-        <ParamRow label="Credits used — L1" value={val(cbc.L1)} />
-        <ParamRow label="Credits used — L2" value={val(cbc.L2)} />
-        <ParamRow label="Credits used — L3" value={val(cbc.L3)} />
-        <ParamRow label="Credits used — L4" value={val(cbc.L4)} />
+        <CardTitle>All 13 parameters from spec sheet</CardTitle>
+        <ParamRow label="Credits used by complexity (L1-L4)" value={`L1 ${cbc.L1} · L2 ${cbc.L2} · L3 ${cbc.L3} · L4 ${cbc.L4}`} />
         <ParamRow label="Total credits used" value={val(c.total_credits_used)} />
         <ParamRow label="Credits estimated (active projects)" value={maybeVal(c.credits_estimated_active)} />
         <ParamRow label="Credits available / allocated (tier)" value={maybeVal(c.credits_allocated_tier)} />
@@ -1444,6 +1441,8 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
           label="Client feedback score"
           value={val(c.client_feedback_score == null ? "—" : c.client_feedback_score.toFixed(2))}
         />
+        {/* 09-Jun · DevSpec row 9 */}
+        <ParamRow label="% feedback ratings given" value={`${c.feedback_given_pct ?? 0}%`} />
         <ParamRow label="AI SWAT vs BASICS split" value={val(c.ai_swat_vs_basics.length)} />
         <ParamRow label="Top categories" value={val(c.top_categories.length)} />
         <ParamRow label="Top spendpools" value={val(c.top_spendpools.length)} />
@@ -1465,8 +1464,9 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
       <Card>
         <CardTitle>Custom Credits</CardTitle>
 
-        {/* KPI tiles — totals + per-tier counts */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-3">
+        {/* KPI tiles — totals + per-tier counts (09-Jun added
+            % feedback given to fill out spec row 9). */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2 mb-3">
           <KpiTile label="Total credits used" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
           <KpiTile
             label="Estimated (active)"
@@ -1485,7 +1485,13 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
           <KpiTile
             label="Feedback score"
             value={c.client_feedback_score == null ? "—" : c.client_feedback_score.toFixed(2)}
+            sub="1-5 scale"
             accent={PALETTE.indigo}
+          />
+          <KpiTile
+            label="% Feedback Ratings Given"
+            value={`${c.feedback_given_pct ?? 0}%`}
+            accent={PALETTE.aqua}
           />
         </div>
 

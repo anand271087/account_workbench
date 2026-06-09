@@ -65,7 +65,7 @@ const SUB_TABS: SubMeta[] = [
   { id: "abi",                 label: "Abi",                   count: 19 },
   { id: "supplier-discovery",  label: "Supplier Discovery",    count: 11 },
   { id: "supplier-monitoring", label: "Supplier Monitoring",   count: 10 },
-  { id: "custom-usage",        label: "Custom Usage",          count: 14 },
+  { id: "custom-usage",        label: "Custom Usage",          count: 13 },
   { id: "thought-leadership",  label: "Thought Leadership",    count: 4 },
   { id: "datahub",             label: "DataHub",               count: 1 },
   { id: "inflation-watch",     label: "Inflation Watch GIT",   count: 8 },

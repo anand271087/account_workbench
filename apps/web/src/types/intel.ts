@@ -187,6 +187,8 @@ export interface CustomUsage {
   commodity_dashboards: number;
   country_reports: number;
   client_feedback_score: number | null;
+  // 09-Jun · DevSpec row 9 — % feedback ratings given.
+  feedback_given_pct: number;
   ai_swat_vs_basics: LabelCount[];
   top_categories: LabelCount[];
   top_spendpools: LabelCount[];
