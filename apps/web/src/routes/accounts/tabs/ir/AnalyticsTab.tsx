@@ -12,7 +12,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { useAccountFromLayout, useAccountPeriod } from "../../AccountProfileLayout";
-import { useIntelAll, type IntelSection } from "@/hooks/useIntelAll";
+import { useIntelBundle, type IntelSection } from "@/hooks/useIntelAll";
 import type {
   Abi,
   AccountSubscribers,
@@ -80,15 +80,16 @@ export default function AnalyticsTab() {
   const [sub, setSub] = useState<IntelSection>("account-subscribers");
   const [mode, setMode] = useState<SheetMode>("charts");
 
-  // 08-Jun · Single batched fetch instead of 16 per-section calls.
-  // Backend `/intel/all` parallelizes the 16 bundles via asyncio.gather
-  // + a 10-connection Redshift pool, so wall-clock ≈ slowest single
-  // bundle. The earlier per-section prefetch was a stopgap when the
-  // backend was sequential; with /intel/all parallelized server-side
-  // it's both faster (one HTTP round-trip) and simpler (no client
-  // orchestration needed). Each sub-tab below reads its slice from
-  // `all.data` directly — instant sub-tab switching, no per-tab fetch.
-  const all = useIntelAll(account.id, period);
+  // 09-Jun · Reverted from useIntelAll → per-section useIntelBundle.
+  // Reason: /intel/all parallelizes server-side but blocks the page
+  // on the slowest single bundle (Category Watch ~14s). Per-section
+  // fetches let the lightweight bundles (DataHub, NPS, Training) paint
+  // in 2-3s while the heavies fill in progressively. User sees the
+  // page light up instead of staring at a 45s skeleton.
+  //
+  // All 16 hooks live below in SectionGrid — they fire in parallel
+  // because React mounts every child component on first render. The
+  // server still benefits from its connection pool + threadpool.
 
   const active = SUB_TABS.find((t) => t.id === sub)!;
 
@@ -188,34 +189,49 @@ export default function AnalyticsTab() {
         <div className="flex-1 h-px bg-analytics-line" />
       </div>
 
-      {/* 08-Jun · Single-fetch flow. The 16 bundles arrive together
-          (server parallelizes), so loading state is global and
-          sub-tab switches are instant cache reads. */}
-      {all.isLoading ? (
-        <SectionSkeleton />
-      ) : all.isError ? (
-        <ErrorCard error={all.error} />
-      ) : all.data ? (
-        <AnalyticsBody data={all.data} section={sub} mode={mode} />
-      ) : null}
+      {/* 09-Jun · Progressive load. 16 SectionFetcher instances mount
+          on first render; React Query fires all 16 in parallel. The
+          lightweight bundles (DataHub / NPS / Training / TL) paint in
+          2-3s while heavier ones (Category Watch, Abi) fill in by
+          15-20s. User sees the page light up instead of waiting on
+          the slowest single bundle. */}
+      <SectionFetcher
+        accountId={account.id}
+        period={period}
+        section={sub}
+        mode={mode}
+      />
+      {/* Hidden prefetcher row — keeps a useIntelBundle hook alive for
+          every section so they all fire in parallel on first mount.
+          Switching sub-tabs is then an instant cache read. */}
+      <HiddenPrefetcher accountId={account.id} period={period} active={sub} />
     </div>
   );
 }
 
-// ---------------- read from rollup + dispatch to sheet ----------------
+// ---------------- per-section render + dispatch ----------------
 
-function AnalyticsBody({
-  data,
+function SectionFetcher({
+  accountId,
+  period,
   section,
   mode,
 }: {
-  data: import("@/types/intel").IntelAll;
+  accountId: string;
+  period: ReturnType<typeof useAccountPeriod>["period"];
   section: IntelSection;
   mode: SheetMode;
 }) {
-  // The /intel/all response carries an optional _infra block (Redshift
-  // tunnel recovery) that's not on the IntelAll type. Read via cast.
-  const infra = (data as unknown as { _infra?: InfraHealth })._infra;
+  // useIntelBundle fires one request per section. While this section's
+  // bundle is in flight, show the section skeleton. Once data lands,
+  // render the matching sheet. Sub-tab switches hit the TanStack cache.
+  const { data, isLoading, isError, error } = useIntelBundle<unknown>(
+    accountId, period, section,
+  );
+  if (isLoading) return <SectionSkeleton />;
+  if (isError) return <ErrorCard error={error} />;
+  if (!data) return null;
+  const infra = (data as { _infra?: InfraHealth })._infra;
   return (
     <>
       {infra?.tunnel_recovering && (
@@ -229,48 +245,93 @@ function AnalyticsBody({
   );
 }
 
+// 09-Jun · Fires a useIntelBundle for every non-active section so all
+// 16 requests go out in parallel on first mount. Renders nothing —
+// just keeps the queries alive. Subsequent sub-tab switches read from
+// the TanStack cache instead of starting a fresh request.
+function HiddenPrefetcher({
+  accountId,
+  period,
+  active,
+}: {
+  accountId: string;
+  period: ReturnType<typeof useAccountPeriod>["period"];
+  active: IntelSection;
+}) {
+  const ALL_SECTIONS: IntelSection[] = [
+    "account-subscribers", "category-watch", "abi",
+    "supplier-discovery", "supplier-monitoring", "custom-usage",
+    "thought-leadership", "datahub", "inflation-watch",
+    "cirtuo", "nnamu", "upply", "alerts", "training", "nps",
+    "super-users",
+  ];
+  return (
+    <div className="hidden">
+      {ALL_SECTIONS.filter((s) => s !== active).map((s) => (
+        <PrefetchOne key={s} accountId={accountId} period={period} section={s} />
+      ))}
+    </div>
+  );
+}
+
+function PrefetchOne({
+  accountId,
+  period,
+  section,
+}: {
+  accountId: string;
+  period: ReturnType<typeof useAccountPeriod>["period"];
+  section: IntelSection;
+}) {
+  // Mounting useIntelBundle is what fires the request; we don't read
+  // the result here. The active section's own SectionFetcher reads
+  // from the same cache once data lands.
+  useIntelBundle(accountId, period, section);
+  return null;
+}
+
 function SubRender({
   data,
   section,
   mode,
 }: {
-  data: import("@/types/intel").IntelAll;
+  data: unknown;
   section: IntelSection;
   mode: SheetMode;
 }) {
   switch (section) {
     case "account-subscribers":
-      return <SubscribersSheet data={data.account_subscribers as AccountSubscribers} mode={mode} />;
+      return <SubscribersSheet data={data as AccountSubscribers} mode={mode} />;
     case "category-watch":
-      return <CategoryWatchSheet data={data.category_watch as CategoryWatch} mode={mode} />;
+      return <CategoryWatchSheet data={data as CategoryWatch} mode={mode} />;
     case "abi":
-      return <AbiSheet data={data.abi as Abi} mode={mode} />;
+      return <AbiSheet data={data as Abi} mode={mode} />;
     case "supplier-discovery":
-      return <SDSheet data={data.supplier_discovery as SupplierDiscovery} mode={mode} />;
+      return <SDSheet data={data as SupplierDiscovery} mode={mode} />;
     case "supplier-monitoring":
-      return <SMSheet data={data.supplier_monitoring as SupplierMonitoring} mode={mode} />;
+      return <SMSheet data={data as SupplierMonitoring} mode={mode} />;
     case "custom-usage":
-      return <CustomUsageSheet data={data.custom_usage as CustomUsage} mode={mode} />;
+      return <CustomUsageSheet data={data as CustomUsage} mode={mode} />;
     case "thought-leadership":
-      return <TLSheet data={data.thought_leadership as ThoughtLeadership} mode={mode} />;
+      return <TLSheet data={data as ThoughtLeadership} mode={mode} />;
     case "datahub":
-      return <DataHubSheet data={data.datahub as DataHubBundle} mode={mode} />;
+      return <DataHubSheet data={data as DataHubBundle} mode={mode} />;
     case "inflation-watch":
-      return <IWSheet data={data.inflation_watch as InflationWatch} mode={mode} />;
+      return <IWSheet data={data as InflationWatch} mode={mode} />;
     case "cirtuo":
-      return <CirtuoSheet data={data.cirtuo as OfflineBundle} mode={mode} />;
+      return <CirtuoSheet data={data as OfflineBundle} mode={mode} />;
     case "nnamu":
-      return <NnamuSheet data={data.nnamu as OfflineBundle} mode={mode} />;
+      return <NnamuSheet data={data as OfflineBundle} mode={mode} />;
     case "upply":
-      return <UpplySheet data={data.upply as OfflineBundle} mode={mode} />;
+      return <UpplySheet data={data as OfflineBundle} mode={mode} />;
     case "alerts":
-      return <AlertsSheet data={data.alerts as AlertsBundle} mode={mode} />;
+      return <AlertsSheet data={data as AlertsBundle} mode={mode} />;
     case "training":
-      return <TrainingSheet data={data.training as OfflineBundle} mode={mode} />;
+      return <TrainingSheet data={data as OfflineBundle} mode={mode} />;
     case "nps":
-      return <NpsSheet data={data.nps as OfflineBundle} mode={mode} />;
+      return <NpsSheet data={data as OfflineBundle} mode={mode} />;
     case "super-users":
-      return <SuperUsersSheet data={data.super_users as SuperUsersBundle} mode={mode} />;
+      return <SuperUsersSheet data={data as SuperUsersBundle} mode={mode} />;
   }
 }
 
