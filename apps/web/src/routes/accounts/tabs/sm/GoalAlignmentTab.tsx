@@ -53,6 +53,22 @@ import type { Contact, ContactListResponse } from "@/types/contact";
 // 09-Jun · G7 — touchpoint counts per initiative come from
 // account_activities.linked_initiatives.
 import type { Activity } from "@/types/signal";
+// 09-Jun bug (Bug Tracker · Jun-8 #5) — surface VPD-extracted candidate
+// goals on this tab so the CSM doesn't have to hunt for them on the
+// document row.
+import type {
+  Document as AccountDocument,
+  DocumentListResponse,
+} from "@/types/document";
+import type {
+  CsGoalsExtractionResult,
+  ExtractedGoal,
+} from "@/types/cs_goals_extraction";
+import type {
+  VpdMetricsExtractionResult,
+  ExtractedMetric,
+} from "@/types/vpd_metrics_extraction";
+import { VpdExtractionReview } from "@/components/VpdExtractionReview";
 
 // ---------------------------------------------------------------------------
 // Brand palette (locked)
@@ -598,6 +614,40 @@ export default function GoalAlignmentTab() {
   });
   const goals = useMemo(() => goalsQ.data?.items ?? [], [goalsQ.data]);
 
+  // 09-Jun bug (Bug Tracker · Jun-8 #5) — VPD candidate-goals banner.
+  // The worker extracts candidate goals + metrics from every VPD upload
+  // (workers/tasks.py). Previously the only way to review them was the
+  // pulsing pill on the VPD doc row in the Documents tab. Bug report
+  // said: "Goals should automatically [be derived] from VPD. No Goals
+  // showing." Fix: surface the same review modal directly on this tab
+  // so the CSM can click "Review N candidates" without going hunting.
+  const vpdDocsQ = useQuery<DocumentListResponse>({
+    queryKey: ["documents", account.id, "vpd"],
+    queryFn: () =>
+      api.get<DocumentListResponse>(
+        `/api/v1/accounts/${account.id}/documents?kind=vpd`,
+      ),
+  });
+  const latestVpdWithGoals = useMemo<AccountDocument | null>(() => {
+    const items = vpdDocsQ.data?.items ?? [];
+    for (const d of items) {
+      if (d.deleted_at) continue;
+      const g = d.cs_goals_extracted as unknown as
+        | CsGoalsExtractionResult
+        | null
+        | undefined;
+      const m = d.metrics_extracted as unknown as
+        | VpdMetricsExtractionResult
+        | null
+        | undefined;
+      const gn = (g?.goals?.length ?? 0);
+      const mn = (m?.metrics?.length ?? 0);
+      if (gn > 0 || mn > 0) return d;
+    }
+    return null;
+  }, [vpdDocsQ.data]);
+  const [vpdReviewOpen, setVpdReviewOpen] = useState(false);
+
   const csOnbQ = useQuery<CSOnboarding>({
     queryKey: ["cs-onboarding", account.id],
     queryFn: () =>
@@ -682,8 +732,52 @@ export default function GoalAlignmentTab() {
     return <div className="text-[12px] text-text-muted p-4">Loading goals…</div>;
   }
 
+  // VPD candidate counts for banner.
+  const vpdGoalsCount = latestVpdWithGoals
+    ? ((latestVpdWithGoals.cs_goals_extracted as unknown as CsGoalsExtractionResult | null)
+        ?.goals?.length ?? 0)
+    : 0;
+  const vpdMetricsCount = latestVpdWithGoals
+    ? ((latestVpdWithGoals.metrics_extracted as unknown as VpdMetricsExtractionResult | null)
+        ?.metrics?.length ?? 0)
+    : 0;
+
   return (
     <div className="space-y-3">
+      {latestVpdWithGoals && (vpdGoalsCount > 0 || vpdMetricsCount > 0) && (
+        <VpdCandidateBanner
+          goalsCount={vpdGoalsCount}
+          metricsCount={vpdMetricsCount}
+          docName={latestVpdWithGoals.filename}
+          onOpen={() => setVpdReviewOpen(true)}
+        />
+      )}
+      {vpdReviewOpen && latestVpdWithGoals && (
+        <VpdExtractionReview
+          accountId={account.id}
+          documentName={latestVpdWithGoals.filename}
+          goals={
+            latestVpdWithGoals.cs_goals_extracted
+              ? ({
+                  ...(latestVpdWithGoals.cs_goals_extracted as unknown as CsGoalsExtractionResult),
+                  goals: ((latestVpdWithGoals.cs_goals_extracted as unknown as CsGoalsExtractionResult)
+                    .goals ?? []) as ExtractedGoal[],
+                } satisfies CsGoalsExtractionResult)
+              : null
+          }
+          metrics={
+            latestVpdWithGoals.metrics_extracted
+              ? ({
+                  ...(latestVpdWithGoals.metrics_extracted as unknown as VpdMetricsExtractionResult),
+                  metrics: ((latestVpdWithGoals.metrics_extracted as unknown as VpdMetricsExtractionResult)
+                    .metrics ?? []) as ExtractedMetric[],
+                } satisfies VpdMetricsExtractionResult)
+              : null
+          }
+          initialTab="goals"
+          onClose={() => setVpdReviewOpen(false)}
+        />
+      )}
       <NextActionBanner action={next} onClick={handleNextAction} />
       <StakeholderBar
         onboarding={csOnbQ.data}
@@ -3351,5 +3445,66 @@ function InitiativeTargetDelta({
         </span>
       )}
     </div>
+  );
+}
+
+// 09-Jun bug (Bug Tracker · Jun-8 #5) — fuscia pill that surfaces the
+// VPD-extracted candidate goals + metrics directly on the Goal Validation
+// tab. Click → opens the unified VpdExtractionReview modal, so the CSM
+// can create goals without leaving this screen.
+function VpdCandidateBanner({
+  goalsCount,
+  metricsCount,
+  docName,
+  onOpen,
+}: {
+  goalsCount: number;
+  metricsCount: number;
+  docName: string;
+  onOpen: () => void;
+}) {
+  const parts: string[] = [];
+  if (goalsCount > 0)
+    parts.push(`${goalsCount} goal${goalsCount === 1 ? "" : "s"}`);
+  if (metricsCount > 0)
+    parts.push(
+      `${metricsCount} metric${metricsCount === 1 ? "" : "s"}`,
+    );
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full flex items-center gap-2 rounded-lg border px-4 py-2.5 text-left hover:brightness-105 transition"
+      style={{
+        background: "#fdf0fd",
+        borderColor: BRAND.fuscia,
+        color: "#7a1a90",
+      }}
+      title={`AI extracted candidate goals from ${docName} — review and create on this tab`}
+    >
+      <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+        <span
+          className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+          style={{ background: BRAND.fuscia }}
+        />
+        <span
+          className="relative inline-flex rounded-full h-2.5 w-2.5"
+          style={{ background: BRAND.fuscia }}
+        />
+      </span>
+      <span className="text-[12.5px] font-bold">
+        🎯 {parts.join(" + ")} extracted from VPD
+      </span>
+      <span className="text-[11px] opacity-80 hidden sm:inline">
+        — review &amp; create
+      </span>
+      <span
+        className="ml-auto text-[10.5px] opacity-70 truncate max-w-[40%]"
+        title={docName}
+      >
+        {docName}
+      </span>
+      <span className="text-[13px] font-bold">→</span>
+    </button>
   );
 }

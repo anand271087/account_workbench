@@ -121,6 +121,12 @@ export default function AccountPlanTab() {
           {/* ARR Growth Tracker — 27-May Row 61: always render. */}
           <ArrBurnDown appetite={appetite} account={account} />
 
+          {/* 09-Jun bug (Bug Tracker · Jun-8 #6 part 1) — Product &
+              Services Saturation moved ABOVE Expansion Plays (per spec
+              feedback: "Product & Services Saturation should come before
+              Expansion Plays and after ARR Growth Tracker"). */}
+          <ProductSaturation accountId={account.id} />
+
           {/* Plays section — 27-May Row 61: stable literal "Expansion Plays" heading. */}
           <div className="bg-white border border-beroe-card-border rounded-card p-4">
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -150,9 +156,6 @@ export default function AccountPlanTab() {
             />
           </div>
 
-          {/* Product & Services Saturation */}
-          <ProductSaturation accountId={account.id} />
-
           {/* Recommended Plays from Similar Accounts */}
           <RecommendedPlays plays={allPlays} mode={mode} />
         </div>
@@ -168,9 +171,16 @@ export default function AccountPlanTab() {
             mode={mode}
           />
 
-          {/* Mode-aware checklist — Expand / Retain (29-May bug 29-48). */}
+          {/* 09-Jun bug (Bug Tracker · Jun-8 #6 part 2) — Mode-aware
+              checklist now covers ALL THREE modes (Expand / Retain /
+              Rescue). Previously rescue mode fell back to the retain
+              checklist; tester said "this should be a dynamic box. The
+              box should be changed to Rescue checklist if I change mode
+              to Rescue from Retain". */}
           {mode === "expand" ? (
             <ExpandChecklist plays={allPlays} appetite={appetite} />
+          ) : mode === "rescue" ? (
+            <RescueChecklist plays={allPlays} appetite={appetite} />
           ) : (
             <RetainChecklist plays={allPlays} appetite={appetite} />
           )}
@@ -1372,6 +1382,99 @@ function ExpandChecklist({
           )}
         >
           {done} / {items.length} ready
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((it) => (
+          <li
+            key={it.label}
+            className="flex items-start gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
+          >
+            <span className={it.done ? "text-beroe-green" : "text-beroe-amber"}>
+              {it.done ? "✓" : "⚠"}
+            </span>
+            <span className="flex-1">
+              {it.label}
+              {!it.done && it.hint && (
+                <span className="text-text-muted text-[11px] ml-1.5">
+                  — {it.hint}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// 1c. Rescue Checklist — 09-Jun bug (Bug Tracker · Jun-8 #6 part 2).
+//     Surfaces when mode === "rescue" so the CSM sees rescue-specific
+//     hygiene instead of falling back to the retain checklist. Mirrors
+//     RetainChecklist / ExpandChecklist shape — items are derived from
+//     existing appetite + plays state; no new persistence.
+function RescueChecklist({
+  plays,
+  appetite,
+}: {
+  plays: Play[];
+  appetite: Appetite;
+}) {
+  const livePlays = plays.filter((p) => !p.hidden);
+  const rescuePlays = livePlays.filter((p) => p.modes.includes("rescue"));
+  const items: { label: string; done: boolean; hint?: string }[] = [
+    {
+      label: "≥1 rescue play in motion",
+      done: rescuePlays.length > 0,
+      hint:
+        rescuePlays.length === 0
+          ? "Add at least one rescue-tagged play below"
+          : undefined,
+    },
+    {
+      label: "Executive sponsor engaged",
+      done: rescuePlays.some(
+        (p) => (p.title || "").toLowerCase().includes("exec") ||
+               (p.trigger_text || "").toLowerCase().includes("sponsor"),
+      ),
+      hint: "Schedule an exec-sponsor touchpoint",
+    },
+    {
+      label: "Open critical / risk signals being worked",
+      done: appetite.breakdown.sig_pts > 0 && appetite.breakdown.sig_pts < 15,
+      hint: "Resolve open risks (signal mix is risk-heavy)",
+    },
+    {
+      label: "Health-recovery plan documented",
+      done: appetite.breakdown.health_pts < 16 && rescuePlays.length > 0,
+      hint: "Document the health-recovery plan as a play below",
+    },
+    {
+      label: "Stabilise ARR — pause expansion asks",
+      done: appetite.breakdown.arr_status !== "declining",
+      hint: "ARR is declining — pull back any expand commitments",
+    },
+    {
+      label: "Mode confirmed (auto or manual)",
+      done: true,
+    },
+  ];
+  const done = items.filter((i) => i.done).length;
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[13px] font-bold">🚑 Rescue Checklist</div>
+        <span
+          className={cn(
+            "text-[11px] font-bold px-2 py-0.5 rounded-full",
+            done === items.length
+              ? "bg-beroe-green/20 text-beroe-green"
+              : done >= items.length - 2
+                ? "bg-beroe-amber/20 text-beroe-amber"
+                : "bg-beroe-red/15 text-beroe-red",
+          )}
+        >
+          {done} / {items.length} stable
         </span>
       </div>
       <ul className="space-y-1.5">

@@ -371,7 +371,30 @@ function AddSignalModal({
             })}
           </div>
         </FormRow>
-        <FormRow label="Signal">
+        {/* 09-Jun bug (Bug Tracker · Jun-8 #7) —
+            (1) Field order was Type → Signal → Description → Category.
+                Stakeholder asked for Category to sit BETWEEN Type and
+                Signal Name (so user picks the bucket first, then names
+                the signal in context).
+            (2) "Sentiment" added to the Category dropdown — was missing
+                from the four buckets (Commercial / Product / Strategic /
+                Relationship) and tester needed it for soft-sentiment
+                signals (e.g. champion frustration, CFO praise). */}
+        <FormRow label="Category *">
+          <select
+            value={form.category ?? ""}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5 bg-white"
+          >
+            <option value="">— Select —</option>
+            <option value="commercial">💰 Commercial</option>
+            <option value="product">📦 Product</option>
+            <option value="strategic">🎯 Strategic</option>
+            <option value="relationship">🤝 Relationship</option>
+            <option value="sentiment">💬 Sentiment</option>
+          </select>
+        </FormRow>
+        <FormRow label="Signal name">
           <input
             value={form.signal}
             onChange={(e) => setForm({ ...form, signal: e.target.value })}
@@ -387,22 +410,6 @@ function AddSignalModal({
             placeholder="One-line context — who said what, when"
             className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
           />
-        </FormRow>
-        {/* 29-May bug 29-49 — Category required + dropdown (was optional
-            free-text); order rearranged so Category sits above Impact /
-            Valid Until. */}
-        <FormRow label="Category *">
-          <select
-            value={form.category ?? ""}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-            className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5 bg-white"
-          >
-            <option value="">— Select —</option>
-            <option value="commercial">💰 Commercial</option>
-            <option value="product">📦 Product</option>
-            <option value="strategic">🎯 Strategic</option>
-            <option value="relationship">🤝 Relationship</option>
-          </select>
         </FormRow>
         <div className="grid grid-cols-2 gap-2">
           <FormRow label="Impact">

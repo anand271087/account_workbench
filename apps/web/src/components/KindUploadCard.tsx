@@ -249,6 +249,15 @@ export function KindUploadCard({
     pending.forEach((d) => {
       const h = d.handoff_extracted_fields as unknown as HandoffExtractionResult;
       if (!hasAnyHandoff(h)) {
+        // 09-Jun bug (Bug Tracker · Jun-8 #3) — previously silent.
+        // Tester uploaded a contract PDF and saw nothing happen because
+        // either (a) PDF was image-only and markitdown returned nothing,
+        // or (b) Claude couldn't pull fields from the text. Now we
+        // surface a clear toast so the CSM knows to fill manually
+        // instead of waiting for an auto-fill that won't arrive.
+        setExtractionToast(
+          `AI couldn't pull contract terms from "${d.filename}" — open Sales Hand-off and fill the fields manually.`,
+        );
         localStorage.setItem(
           appliedKey(d.id, d.handoff_extracted_at),
           new Date().toISOString(),

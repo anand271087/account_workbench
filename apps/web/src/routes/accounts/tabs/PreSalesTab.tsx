@@ -1554,10 +1554,13 @@ function BeroeUserPicker({
         className={inputCls(!disabled)}
       >
         <option value="">{isLoading ? "Loading…" : (placeholder ?? "— Select —")}</option>
+        {/* 09-Jun bug — Tester saw "(former teammate)" suffix appended on
+            Sales Lead chip for any saved email that didn't match the current
+            user list. Spec says: just show the name/email. The stale option
+            still needs to be rendered so the saved value is selectable, but
+            without the annotation. */}
         {valueIsStale && value && (
-          <option value={value}>
-            {value} (former teammate)
-          </option>
+          <option value={value}>{value}</option>
         )}
         {(data ?? []).map((u) => (
           <option key={u.id} value={u.email}>

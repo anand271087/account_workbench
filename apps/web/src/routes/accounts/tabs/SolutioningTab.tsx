@@ -126,47 +126,45 @@ export default function SolutioningTab() {
   const lockMutation = useMutation({
     mutationFn: () =>
       api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/lock`),
-    onSuccess: (res) => {
-      // 08-Jun · The seed-once useEffect (line 50) leaves `form` stale
-      // after the post-lock refetch, so isLocked never flips. Patch the
-      // lock metadata + is_editable onto form directly so the UI
-      // (banner, disabled inputs, save bar) updates in one tick.
-      setForm((prev) =>
-        prev
-          ? {
-              ...prev,
-              locked_at: res.locked_at,
-              locked_by: res.locked_by,
-              is_editable: false,
-            }
-          : prev,
-      );
-      qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
+    onSuccess: async (res) => {
+      // 09-Jun bug (Bug Tracker · Jun-8 #2) — the lock route also writes
+      // sh_value_from_solutioning + sh_value_themes_from_solutioning +
+      // sh_value_received_at as an automatic snapshot to the Sales
+      // Hand-off side. Previously we only patched locked_at/locked_by
+      // onto form, so once the post-lock refetch landed, those three
+      // server-owned fields appeared in `data` but not in `form` and
+      // dirty flipped back to true — tester saw the "Save" button
+      // reappear right after locking. Fix: refetch the full solutioning
+      // shape synchronously, then replace form with the new server
+      // state so form === data and dirty stays false.
+      const fresh = await qc.fetchQuery({
+        queryKey: ["solutioning", account.id],
+        queryFn: () =>
+          api.get<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`),
+      });
+      setForm(fresh);
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
       setLockError(null);
+      void res;
     },
     onError: (e: ApiError) => setLockError(e.message),
   });
   const unlockMutation = useMutation({
     mutationFn: () =>
       api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/unlock`),
-    onSuccess: (res) => {
-      // Same fix — also flip is_editable=true so the inputs un-disable
-      // and the sticky save bar reappears. Backend will refetch with
-      // the authoritative value on the next tick.
-      setForm((prev) =>
-        prev
-          ? {
-              ...prev,
-              locked_at: res.locked_at,
-              locked_by: res.locked_by,
-              is_editable: true,
-            }
-          : prev,
-      );
-      qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
+    onSuccess: async (res) => {
+      // Same shape as lock — fetch + replace form so the un-locked
+      // state (is_editable=true + locked_at=null + any sh_* fields
+      // that the unlock route may touch) is in form on the first tick.
+      const fresh = await qc.fetchQuery({
+        queryKey: ["solutioning", account.id],
+        queryFn: () =>
+          api.get<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`),
+      });
+      setForm(fresh);
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
       setLockError(null);
+      void res;
     },
     onError: (e: ApiError) => setLockError(e.message),
   });

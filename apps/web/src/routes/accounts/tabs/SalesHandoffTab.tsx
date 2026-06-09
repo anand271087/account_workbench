@@ -679,16 +679,34 @@ const ContractAuditSection = memo(function ContractAuditSection({
     // PATCH /api/v1/accounts/:id — for the typed gate_* fields (acv, term, dates, modules, tier, segment).
     mutationFn: (body: Record<string, unknown>) =>
       api.patch(`/api/v1/accounts/${account.id}`, body),
-    // 08-Jun · Narrow the invalidate to just signing-gate. The account
-    // PATCH does touch the Account row (so ["account"] still matters
-    // if the header chip changed), but contacts/solutioning/documents
-    // don't depend on it. Skips 3 unnecessary refetches per click.
+    // 09-Jun bug (Bug Tracker · Jun-8 #4) — patch was non-optimistic, so
+    // after filling Signed date / Contract term / ACV the user saw red X
+    // on the Contract Audit checklist for ~300-600ms until the refetch
+    // landed. They could (and did) hit "Complete Audit" while the cache
+    // still had the OLD null values and the checklist was still red. Now
+    // we flip the cache instantly in onMutate so the checklist responds
+    // in the same tick. The refetch on onSuccess re-syncs with server.
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: ["signing-gate", account.id] });
+      const prev = qc.getQueryData<SigningGate>([
+        "signing-gate",
+        account.id,
+      ]);
+      qc.setQueryData<SigningGate>(["signing-gate", account.id], (g) =>
+        g ? { ...g, ...(body as Partial<SigningGate>) } : g,
+      );
+      return { prev };
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["signing-gate", account.id] });
       qc.invalidateQueries({ queryKey: ["account", account.id] });
     },
-    onError: (e: ApiError) =>
-      notify({ title: "Save failed", body: e.message, tone: "error" }),
+    onError: (e: ApiError, _body, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(["signing-gate", account.id], ctx.prev);
+      }
+      notify({ title: "Save failed", body: e.message, tone: "error" });
+    },
   });
 
   // 05-Jun — Auto-apply contract-extraction draft. When a contract doc is
