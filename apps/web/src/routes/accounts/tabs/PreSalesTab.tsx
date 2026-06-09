@@ -234,7 +234,7 @@ export default function PreSalesTab() {
         accountId={account.id}
         kind="mom"
         title="Meeting Minutes (MoM)"
-        description="Upload discovery / kick-off / cadence MoMs. Claude will summarise each and auto-extract structured fields into Engagement, Brief, and Contacts."
+        description="Upload discovery / kick-off / cadence MoMs. AI will summarise each and auto-extract structured fields into Engagement, Brief, and Contacts."
         emptyHint="No MoMs uploaded yet. Drag a .docx, .pdf, .txt, .vtt or .eml onto the card above."
         headerAction={<BriefOverlayButton accountId={account.id} accountName={account.name} />}
       />

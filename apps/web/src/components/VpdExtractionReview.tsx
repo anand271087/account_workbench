@@ -156,7 +156,7 @@ function EmptyTab({ kind }: { kind: string }) {
   return (
     <div className="px-5 py-10 text-center text-[13px] text-text-muted italic">
       No {kind.toLowerCase()} were extracted from this VPD yet — the worker may
-      still be running, or this VPD didn't contain anything Claude could
+      still be running, or this VPD didn't contain anything the AI could
       surface. Re-run AI on the document to try again.
     </div>
   );

@@ -1225,7 +1225,7 @@ function AIAccountBriefCard({
       </div>
       {isLoading ? (
         <div className="text-[12px] text-text-muted italic">
-          Generating Claude summary for {accountName}…
+          Generating AI summary for {accountName}…
         </div>
       ) : !data ? (
         <div className="text-[12px] text-text-muted italic">

@@ -768,7 +768,7 @@ function SignOffModal({
                   setClientAck((prev) =>
                     prev
                       ? prev
-                      : "[Prompt copied to clipboard — paste into Claude / AI panel and paste the response back here.]",
+                      : "[Prompt copied to clipboard — paste into your AI panel and paste the response back here.]",
                   );
                 } catch {
                   // ignore

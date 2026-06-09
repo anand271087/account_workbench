@@ -228,7 +228,7 @@ export default function SolutioningTab() {
         accountId={account.id}
         kind="vpd"
         title="Value Proposition Deck (VPD)"
-        description="Upload the latest VPD. Claude reads it and proposes values for the structured Solutioning fields below — review and edit anything that's off. Saving flips the badge to AI-assisted. Re-uploading won't overwrite fields you've already edited."
+        description="Upload the latest VPD. AI reads it and proposes values for the structured Solutioning fields below — review and edit anything that's off. Saving flips the badge to AI-assisted. Re-uploading won't overwrite fields you've already edited."
         emptyHint="No VPDs yet. Drag a .docx, .pdf or .txt onto the card above."
       />
 

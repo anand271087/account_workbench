@@ -400,7 +400,7 @@ function SalesHandoffSection({
         accountId={account.id}
         kind="contract"
         title="Signed Contract"
-        description="Upload the signed contract (MSA or Signed Proposal). Claude reads it and auto-populates the Contract Audit fields below — signed date, term, ACV, modules, tier, segment, subscribers, plus payment terms and other contract clauses when present. Review and adjust anything that's off."
+        description="Upload the signed contract (MSA or Signed Proposal). AI reads it and auto-populates the Contract Audit fields below — signed date, term, ACV, modules, tier, segment, subscribers, plus payment terms and other contract clauses when present. Review and adjust anything that's off."
         emptyHint="No contracts yet. Drag a .pdf, .docx or .txt onto the card above."
       />
 

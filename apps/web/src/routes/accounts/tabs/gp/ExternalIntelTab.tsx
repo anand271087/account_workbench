@@ -96,7 +96,7 @@ export default function ExternalIntelTab() {
               onClick={() => refreshMutation.mutate()}
               disabled={refreshMutation.isPending}
               className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold disabled:opacity-50"
-              title="Generate fresh intel via Claude (stub when no key)"
+              title="Generate fresh intel via AI (stub when no key)"
             >
               {refreshMutation.isPending ? "Refreshing…" : "🔄 Refresh"}
             </button>
