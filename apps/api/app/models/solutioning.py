@@ -71,7 +71,9 @@ class AccountSolutioning(Base):
     sh_value_validation: Mapped[str | None] = mapped_column(ShValidation, nullable=True)
     sh_validation_notes: Mapped[str | None] = mapped_column(String, nullable=True)
     sh_go_live_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    sh_first_checkpoint: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 09-Jun · stores a CADENCE LABEL like "30 days" / "45 days" / "60 days"
+    # — not an actual date. Was Date typed which rejected every save.
+    sh_first_checkpoint: Mapped[str | None] = mapped_column(String, nullable=True)
     sh_stakeholder_signoff: Mapped[str | None] = mapped_column(String, nullable=True)
     sh_commercial_context: Mapped[str | None] = mapped_column(String, nullable=True)
     sales_watchouts: Mapped[str | None] = mapped_column(String, nullable=True)

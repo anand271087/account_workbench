@@ -52,7 +52,7 @@ class SolutioningOut(BaseModel):
     sh_value_validation: ShValidation | None = None
     sh_validation_notes: str | None = None
     sh_go_live_date: date | None = None
-    sh_first_checkpoint: date | None = None
+    sh_first_checkpoint: str | None = None
     sh_stakeholder_signoff: str | None = None
     sh_commercial_context: str | None = None
     sales_watchouts: str | None = None
@@ -87,7 +87,7 @@ class SolutioningUpdate(BaseModel):
     sh_value_validation: ShValidation | None = None
     sh_validation_notes: str | None = Field(None, max_length=4000)
     sh_go_live_date: date | None = None
-    sh_first_checkpoint: date | None = None
+    sh_first_checkpoint: str | None = None
     sh_stakeholder_signoff: str | None = Field(None, max_length=600)
     sh_commercial_context: str | None = Field(None, max_length=4000)
     sales_watchouts: str | None = Field(None, max_length=4000)
