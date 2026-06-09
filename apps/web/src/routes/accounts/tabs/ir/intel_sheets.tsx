@@ -557,9 +557,9 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2 mb-3">
           <KpiTile label="# Unique users" value={fmtNum((ci.unique_users as number) ?? 0)} accent={PALETTE.aqua}
             sub={typeof ci.unique_users_note === "string" ? "downloads-only" : undefined} />
-          <KpiTile label="Categories unlocked" value={fmtNum(ci.categories_unlocked as number)} accent={PALETTE.indigo} />
-          <KpiTile label="Avg cats / user" value={(ci.avg_categories_per_user as number).toFixed(2)} accent={PALETTE.fuscia} />
-          <KpiTile label="Newly added (period)" value={fmtNum(newlyAdded.length)} accent={PALETTE.bumblebee} />
+          <KpiTile label="% Revisits" value={`${revisitPct}%`} accent={PALETTE.indigo} />
+          <KpiTile label="# Categories Unlocked" value={fmtNum(ci.categories_unlocked as number)} accent={PALETTE.fuscia} />
+          <KpiTile label="Avg categories unlocked / user" value={(ci.avg_categories_per_user as number).toFixed(2)} accent={PALETTE.bumblebee} />
           <KpiTile
             label="# Total Time Spent"
             value={(() => {
@@ -569,9 +569,9 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
             sub={`${fmtNum(Math.round((ci.total_time_mins as number) ?? 0))} mins`}
             accent={PALETTE.midnight}
           />
-          <KpiTile label="Avg time / sub (m)" value={(ci.avg_time_per_subscriber_mins as number).toFixed(1)} accent={PALETTE.indigo} />
-          <KpiTile label="Report views" value={fmtNum(ci.report_views_total as number)} accent={PALETTE.aqua} />
-          <KpiTile label="Report downloads" value={fmtNum(ci.report_downloads_total as number)} accent={PALETTE.fuscia} />
+          <KpiTile label="Avg time spent / subscriber" value={`${(ci.avg_time_per_subscriber_mins as number).toFixed(1)} mins`} accent={PALETTE.indigo} />
+          <KpiTile label="# Report views (total)" value={fmtNum(ci.report_views_total as number)} accent={PALETTE.aqua} />
+          <KpiTile label="# Report downloads (total)" value={fmtNum(ci.report_downloads_total as number)} accent={PALETTE.fuscia} />
         </div>
 
         {/* Visits gauge + revisit gauge — spec calls Category visits "Bar
@@ -600,7 +600,7 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
             scan times out — see backend note). */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <div>
-            <div className="text-[11px] font-semibold mb-1">Categories added — monthly trend</div>
+            <div className="text-[11px] font-semibold mb-1">Category additions over last 12 months</div>
             {catTrend.length === 0 ? (
               <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
             ) : (
@@ -614,7 +614,7 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           </div>
           <div>
             <div className="flex items-center gap-1.5 mb-1">
-              <div className="text-[11px] font-semibold">Category Watch visits — 12-month trend</div>
+              <div className="text-[11px] font-semibold">Category Watch visits over last 12 months</div>
               {typeof ci.category_visits_monthly_trend_note === "string" && (
                 <span className="text-[9px] uppercase tracking-wider font-bold px-1 py-0.5 rounded bg-amber-100 text-amber-700">
                   proxy
@@ -639,7 +639,8 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
             })()}
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Reports downloaded — monthly trend</div>
+            {/* Bonus chart kept from earlier — not in v4 spec but useful */}
+            <div className="text-[11px] font-semibold mb-1">Report downloads — monthly trend</div>
             {dlTrend.length === 0 ? (
               <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
             ) : (
@@ -699,11 +700,10 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
         {/* Spend pool + Top categories added + Top report views/downloads */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <div>
-            <div className="text-[11px] font-semibold mb-1">Spend pool (top 10)</div>
+            <div className="text-[11px] font-semibold mb-1">Top Spendpools</div>
             <BarChart rows={barRows(spendPool)} />
           </div>
           <div>
-            {/* 09-Jun · DevSpec row 10 — Top 10 categories added. */}
             <div className="text-[11px] font-semibold mb-1">Top 10 categories added</div>
             <BarChart
               rows={barRows(
@@ -714,11 +714,11 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
             />
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Top 10 report views</div>
+            <div className="text-[11px] font-semibold mb-1">Top 10 categories viewed</div>
             <BarChart rows={barRows(topViews)} />
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Top 10 report downloads</div>
+            <div className="text-[11px] font-semibold mb-1">Top 10 categories downloaded</div>
             <BarChart rows={barRows(topDownloads)} />
           </div>
         </div>
@@ -758,24 +758,24 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
       <Card>
         <CardTitle>Market Movement Dashboard (MMD)</CardTitle>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-          <KpiTile label="MMD Subscribers" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
-          <KpiTile label="Total time (m)" value={fmtNum(Math.round(mmd.total_time_mins))} accent={PALETTE.aqua} />
-          <KpiTile label="Avg time / user (m)" value={mmd.avg_time_per_user_mins.toFixed(1)} accent={PALETTE.fuscia} />
-          <KpiTile label="Unique categories" value={fmtNum(mmd.unique_categories_viewed)} accent={PALETTE.bumblebee} />
+          <KpiTile label="Subscribers (MMD)" value={fmtNum(mmd.subscribers)} accent={PALETTE.indigo} />
+          <KpiTile label="Total time spent (Mins)" value={fmtNum(Math.round(mmd.total_time_mins))} accent={PALETTE.aqua} />
+          <KpiTile label="Avg time spent (Mins)" value={mmd.avg_time_per_user_mins.toFixed(1)} accent={PALETTE.fuscia} />
+          <KpiTile label="Unique categories viewed" value={fmtNum(mmd.unique_categories_viewed)} accent={PALETTE.bumblebee} />
           <KpiTile label="Avg cats / user" value={mmd.avg_categories_per_user.toFixed(1)} accent={PALETTE.midnight} />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           <div>
-            <div className="text-[11px] font-semibold mb-1">Grades viewed (top 10)</div>
+            <div className="text-[11px] font-semibold mb-1">Grades viewed in MMD</div>
             <BarChart rows={barRows(mmd.grades_viewed)} />
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Regions viewed (top 10)</div>
+            <div className="text-[11px] font-semibold mb-1">Regions viewed in MMD</div>
             <BarChart rows={barRows(mmd.regions_viewed)} />
           </div>
         </div>
         <div>
-          <div className="text-[11px] font-semibold mb-1">MMD module visits — monthly</div>
+          <div className="text-[11px] font-semibold mb-1">MMD module visits (monthly)</div>
           {mmd.monthly_trend.length === 0 ? (
             <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
           ) : (
@@ -1051,14 +1051,14 @@ function AbiDashboard({ data: a }: { data: Abi }) {
           the DevSpec v4 additions: % L1.A, # Bot/HITL/Research,
           Avg/user, % feedback given. */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2">
-        <KpiTile label="Total Queries" value={fmtNum(a.total_queries)} accent={PALETTE.indigo} />
-        <KpiTile label="Unique Users" value={fmtNum(a.unique_users)} accent={PALETTE.aqua} />
-        <KpiTile label="Avg Queries / User" value={a.avg_queries_per_user.toFixed(1)} accent={PALETTE.fuscia} />
-        <KpiTile label="Repeat Users" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
+        <KpiTile label="Total Abi queries" value={fmtNum(a.total_queries)} accent={PALETTE.indigo} />
+        <KpiTile label="# Unique Subscribers" sub="who have raised queries" value={fmtNum(a.unique_users)} accent={PALETTE.aqua} />
+        <KpiTile label="Avg Queries per user" value={a.avg_queries_per_user.toFixed(1)} accent={PALETTE.fuscia} />
+        <KpiTile label="Repeat users %" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
         <KpiTile label="% resolved as L1.A" value={`${a.l1a_resolved_pct}%`} accent={PALETTE.indigo} />
-        <KpiTile label="# Resolved by Bot" value={fmtNum(a.resolved_by_bot_count)} accent={PALETTE.aqua} />
-        <KpiTile label="# Resolved by HITL" value={fmtNum(a.resolved_by_hitl_count)} accent={PALETTE.fuscia} />
-        <KpiTile label="# Passed to Research" value={fmtNum(a.passed_to_research_count)} accent={PALETTE.bumblebee} />
+        <KpiTile label="# resolved by Bot" value={fmtNum(a.resolved_by_bot_count)} accent={PALETTE.aqua} />
+        <KpiTile label="# resolved by HITL" value={fmtNum(a.resolved_by_hitl_count)} accent={PALETTE.fuscia} />
+        <KpiTile label="# passed to Research" value={fmtNum(a.passed_to_research_count)} accent={PALETTE.bumblebee} />
       </div>
 
       {/* Feedback row — 2 tiles together since spec separates avg
@@ -1071,7 +1071,7 @@ function AbiDashboard({ data: a }: { data: Abi }) {
           accent={PALETTE.indigo}
         />
         <KpiTile
-          label="% Feedback Ratings Given"
+          label="% feedback ratings given"
           value={`${a.feedback_given_pct}%`}
           sub={`${fmtNum(Math.round((a.total_queries * a.feedback_given_pct) / 100))} of ${fmtNum(a.total_queries)} queries`}
           accent={PALETTE.aqua}
@@ -1093,14 +1093,14 @@ function AbiDashboard({ data: a }: { data: Abi }) {
           <DonutChart slices={a.by_complexity.map((c) => ({ label: c.label, value: c.count }))} />
         </Card>
         <Card>
-          <CardTitle>Query status</CardTitle>
+          <CardTitle>Query status (workflow)</CardTitle>
           <DonutChart slices={a.by_status.map((c) => ({ label: c.label, value: c.count }))} />
         </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Card>
-          <CardTitle>Top deliverable (top 5)</CardTitle>
+          <CardTitle>Top deliverable</CardTitle>
           <BarChart rows={barRows(a.top_deliverable)} />
         </Card>
         <Card>
@@ -1109,19 +1109,19 @@ function AbiDashboard({ data: a }: { data: Abi }) {
           <BarChart rows={barRows((a.top_categories ?? a.inside_vs_outside_split).slice(0, 10))} />
         </Card>
         <Card>
-          <CardTitle>Query channel</CardTitle>
+          <CardTitle>Query Channel</CardTitle>
           <BarChart rows={barRows(a.by_source)} />
         </Card>
         <Card>
-          <CardTitle>Top declined deliverable</CardTitle>
+          <CardTitle>Top declined Deliverables</CardTitle>
           <BarChart rows={barRows(a.top_declined_deliverable)} />
         </Card>
         <Card>
-          <CardTitle>Top geographies</CardTitle>
+          <CardTitle>Top geographies queried</CardTitle>
           <BarChart rows={barRows(a.top_geographies)} />
         </Card>
         <Card>
-          <CardTitle>Research referral reasons</CardTitle>
+          <CardTitle>Research referral Reasons</CardTitle>
           <BarChart rows={barRows(a.research_referral_reasons)} />
         </Card>
       </div>
@@ -1212,19 +1212,19 @@ export function SDSheet({ data: s, mode }: { data: SupplierDiscovery; mode?: She
         <CardTitle>Supplier Discovery</CardTitle>
         {/* 7 KPI tiles per spec */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 mb-3">
-          <KpiTile label="Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
-          <KpiTile label="Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
-          <KpiTile label="Avg searches / user" value={s.avg_searches_per_user.toFixed(1)} accent={PALETTE.fuscia} />
-          <KpiTile label="Visits" value={fmtNum(s.total_visits)} accent={PALETTE.bumblebee} />
-          <KpiTile label="Time spent (m)" value={fmtNum(Math.round(s.total_time_mins))} accent={PALETTE.midnight} />
+          <KpiTile label="# Users" value={fmtNum(s.users)} accent={PALETTE.indigo} />
+          <KpiTile label="# Searches" value={fmtNum(s.total_searches)} accent={PALETTE.aqua} />
+          <KpiTile label="Avg searches / subscriber" value={s.avg_searches_per_user.toFixed(1)} accent={PALETTE.fuscia} />
+          <KpiTile label="SD total visits" value={fmtNum(s.total_visits)} accent={PALETTE.bumblebee} />
+          <KpiTile label="SD total time spent (Mins)" value={fmtNum(Math.round(s.total_time_mins))} accent={PALETTE.midnight} />
           <KpiTile
-            label="Downloads"
+            label="SD downloads"
             value={sdDownloadsNum != null ? fmtNum(sdDownloadsNum) : "—"}
             na={isUnavailable(s.sd_downloads) ? { reason: s.sd_downloads.reason } : undefined}
             accent={PALETTE.indigo}
           />
           <KpiTile
-            label="Avg shortlisted"
+            label="Suppliers shortlisted (per search avg)"
             value={shortlistedNum != null ? shortlistedNum.toFixed(1) : "—"}
             na={isUnavailable(s.suppliers_shortlisted_avg) ? { reason: s.suppliers_shortlisted_avg.reason } : undefined}
             accent={PALETTE.aqua}
@@ -1235,7 +1235,7 @@ export function SDSheet({ data: s, mode }: { data: SupplierDiscovery; mode?: She
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <RadialGauge label="Repeat users %" pct={s.repeat_users_pct ?? 0} color={PALETTE.fuscia} />
           <div className="md:col-span-2">
-            <div className="text-[11px] font-semibold mb-1">Top categories searched</div>
+            <div className="text-[11px] font-semibold mb-1">Top Categories Searched</div>
             <BarChart rows={barRows(s.top_categories_searched)} />
           </div>
         </div>
@@ -1243,7 +1243,7 @@ export function SDSheet({ data: s, mode }: { data: SupplierDiscovery; mode?: She
         {/* Top regions + categories % — Bar charts */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <div className="text-[11px] font-semibold mb-1">Top regions scoped</div>
+            <div className="text-[11px] font-semibold mb-1">Top Regions Scoped</div>
             {isUnavailable(s.top_regions_scoped) ? (
               <NaPill reason={(s.top_regions_scoped as { reason: string }).reason} />
             ) : (
@@ -1251,7 +1251,7 @@ export function SDSheet({ data: s, mode }: { data: SupplierDiscovery; mode?: She
             )}
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Categories (direct / indirect %)</div>
+            <div className="text-[11px] font-semibold mb-1">Categories (%)</div>
             {isUnavailable(s.categories_pct_split) ? (
               <NaPill reason={(s.categories_pct_split as { reason: string }).reason} />
             ) : (
@@ -1538,9 +1538,9 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
         {/* 09-Jun · DevSpec row 9 */}
         <ParamRow label="% feedback ratings given" value={`${c.feedback_given_pct ?? 0}%`} />
         <ParamRow label="AI SWAT vs BASICS split" value={val(c.ai_swat_vs_basics.length)} />
-        <ParamRow label="Top categories" value={val(c.top_categories.length)} />
-        <ParamRow label="Top spendpools" value={val(c.top_spendpools.length)} />
-        <ParamRow label="Top deliverables" value={val(c.top_deliverables.length)} />
+        <ParamRow label="Categories" value={val(c.top_categories.length)} />
+        <ParamRow label="Spendpools" value={val(c.top_spendpools.length)} />
+        <ParamRow label="Deliverables" value={val(c.top_deliverables.length)} />
       </Card>
   );
   if (mode === "numbers") {
@@ -1563,27 +1563,27 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2 mb-3">
           <KpiTile label="Total credits used" value={fmtNum(c.total_credits_used)} accent={PALETTE.indigo} />
           <KpiTile
-            label="Estimated (active)"
+            label="Credits estimated (active projects)"
             value={isUnavailable(c.credits_estimated_active) ? "—" : fmtNum(c.credits_estimated_active as number)}
             na={isUnavailable(c.credits_estimated_active) ? { reason: c.credits_estimated_active.reason } : undefined}
             accent={PALETTE.aqua}
           />
           <KpiTile
-            label="Allocated (tier)"
+            label="Credits available / allocated (tier)"
             value={isUnavailable(c.credits_allocated_tier) ? "—" : fmtNum(c.credits_allocated_tier as number)}
             na={isUnavailable(c.credits_allocated_tier) ? { reason: c.credits_allocated_tier.reason } : undefined}
             accent={PALETTE.fuscia}
           />
-          <KpiTile label="Commodity dashboards" value={fmtNum(c.commodity_dashboards)} accent={PALETTE.bumblebee} />
-          <KpiTile label="Country reports" value={fmtNum(c.country_reports)} accent={PALETTE.midnight} />
+          <KpiTile label="Commodity Dashboards" value={fmtNum(c.commodity_dashboards)} accent={PALETTE.bumblebee} />
+          <KpiTile label="Country Reports" value={fmtNum(c.country_reports)} accent={PALETTE.midnight} />
           <KpiTile
-            label="Feedback score"
+            label="Client Feedback score"
             value={c.client_feedback_score == null ? "—" : c.client_feedback_score.toFixed(2)}
             sub="1-5 scale"
             accent={PALETTE.indigo}
           />
           <KpiTile
-            label="% Feedback Ratings Given"
+            label="% feedback ratings given"
             value={`${c.feedback_given_pct ?? 0}%`}
             accent={PALETTE.aqua}
           />
@@ -1625,9 +1625,9 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
 
         {/* Top categories / spendpools / deliverables — chips */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <ChipCloud title="Top categories" items={c.top_categories} />
-          <ChipCloud title="Top spendpools" items={c.top_spendpools} />
-          <ChipCloud title="Top deliverables" items={c.top_deliverables} />
+          <ChipCloud title="Categories" items={c.top_categories} />
+          <ChipCloud title="Spendpools" items={c.top_spendpools} />
+          <ChipCloud title="Deliverables" items={c.top_deliverables} />
         </div>
       </Card>
     </div>
@@ -1694,10 +1694,10 @@ export function TLSheet({ data: t, mode }: { data: ThoughtLeadership; mode?: She
       <Card>
         <CardTitle>Thought Leadership</CardTitle>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-          <KpiTile label="Webinar Views" value={fmtNum(t.webinar_views)} accent={PALETTE.indigo} />
-          <KpiTile label="Articles Opened" value={fmtNum(t.articles_opened)} accent={PALETTE.aqua} />
-          <KpiTile label="Beigebook Views" value={fmtNum(t.beigebook_views)} accent={PALETTE.fuscia} />
-          <KpiTile label="Beigebook Downloads" value={fmtNum(t.beigebook_downloads)} accent={PALETTE.bumblebee} />
+          <KpiTile label="# Webinar views in TL page" value={fmtNum(t.webinar_views)} accent={PALETTE.indigo} />
+          <KpiTile label="# TL articles opened" value={fmtNum(t.articles_opened)} accent={PALETTE.aqua} />
+          <KpiTile label="# Beigebook views" value={fmtNum(t.beigebook_views)} accent={PALETTE.fuscia} />
+          <KpiTile label="# Beigebook downloads" value={fmtNum(t.beigebook_downloads)} accent={PALETTE.bumblebee} />
         </div>
         <div>
           <div className="text-[11px] font-semibold mb-1">By type</div>
@@ -1727,7 +1727,7 @@ export function DataHubSheet({ data: d, mode }: { data: DataHubBundle; mode?: Sh
       <CardTitle>DataHub</CardTitle>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         <KpiTile
-          label="Data pulls"
+          label="# data pulls"
           value={pulls != null ? fmtNum(pulls) : "—"}
           sub="API calls × frequency"
           na={isUnavailable(d.data_pulls) ? { reason: d.data_pulls.reason } : undefined}
@@ -1775,12 +1775,12 @@ export function IWSheet({ data: iw, mode }: { data: InflationWatch; mode?: Sheet
         <CardTitle>Inflation Watch · GIT</CardTitle>
         {/* 6 KPI tiles per spec */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">
-          <KpiTile label="Unique visitors" value={fmtNum(iw.unique_visitors)} accent={PALETTE.indigo} />
-          <KpiTile label="Total sessions" value={fmtNum(iw.total_sessions)} accent={PALETTE.aqua} />
-          <KpiTile label="Time spent (m)" value={fmtNum(Math.round(iw.total_time_mins))} accent={PALETTE.fuscia} />
+          <KpiTile label="IW unique visitors" value={fmtNum(iw.unique_visitors)} accent={PALETTE.indigo} />
+          <KpiTile label="IW total visits (sessions)" value={fmtNum(iw.total_sessions)} accent={PALETTE.aqua} />
+          <KpiTile label="IW total time spent (mins)" value={fmtNum(Math.round(iw.total_time_mins))} accent={PALETTE.fuscia} />
           <KpiTile label="Avg sessions / visitor" value={iw.avg_sessions_per_visitor.toFixed(1)} accent={PALETTE.bumblebee} />
-          <KpiTile label="Avg session time (m)" value={iw.avg_session_time_mins.toFixed(1)} accent={PALETTE.midnight} />
-          <KpiTile label="Avg time / visitor (m)" value={iw.avg_time_per_visitor_mins.toFixed(1)} accent={PALETTE.indigo} />
+          <KpiTile label="Avg session time (mins)" value={iw.avg_session_time_mins.toFixed(1)} accent={PALETTE.midnight} />
+          <KpiTile label="Avg time spent / visitor (mins)" value={iw.avg_time_per_visitor_mins.toFixed(1)} accent={PALETTE.indigo} />
         </div>
 
         {/* Top features + Top pages — Table / bar pair */}
@@ -1885,9 +1885,9 @@ export function CirtuoSheet({ data: d, mode }: { data: OfflineBundle; mode?: She
       source="cirtuo"
       data={d}
       params={[
-        { key: "categories_supported", label: "# Categories Supported (Cirtuo projects)" },
+        { key: "categories_supported", label: "# Categories Supported" },
         { key: "feedback_captured_pct", label: "% Feedback captured" },
-        { key: "average_feedback", label: "Average feedback" },
+        { key: "average_feedback", label: "average feedback" },
       ]}
     />
   );
@@ -1923,7 +1923,7 @@ export function UpplySheet({ data: d, mode }: { data: OfflineBundle; mode?: Shee
         { key: "routes_benchmarked", label: "# routes benchmarked" },
         { key: "unique_users", label: "Unique users" },
         { key: "avg_routes_per_user", label: "Avg routes / user" },
-        { key: "routes_by_medium", label: "Routes by medium (AIR / OCEAN / ROAD)" },
+        { key: "routes_by_medium", label: "Routes by medium" },
         { key: "top_lanes", label: "Top origin→destination lanes" },
         { key: "benchmarks_trend_monthly", label: "Benchmarks trend (monthly)" },
       ]}
@@ -1979,7 +1979,7 @@ export function AlertsSheet({ data: al, mode }: { data: AlertsBundle; mode?: She
         {/* Open rate by category + by reachout — Bar charts */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <div className="text-[11px] font-semibold mb-1">Open rate by category</div>
+            <div className="text-[11px] font-semibold mb-1">Open rate by categories</div>
             {al.open_rate_by_category.length === 0 ? (
               <div className="text-[11px] text-text-muted py-3 text-center">No data</div>
             ) : (
@@ -1993,7 +1993,7 @@ export function AlertsSheet({ data: al, mode }: { data: AlertsBundle; mode?: She
             )}
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Open rate by type of reach-out</div>
+            <div className="text-[11px] font-semibold mb-1">Open rate by type of reachout</div>
             {al.open_rate_by_reachout.length === 0 ? (
               <div className="text-[11px] text-text-muted py-3 text-center">No data</div>
             ) : (
@@ -2038,7 +2038,7 @@ export function NpsSheet({ data: d, mode }: { data: OfflineBundle; mode?: SheetM
       title="NPS — 1 parameter from spec sheet"
       source="nps"
       data={d}
-      params={[{ key: "average_feedback_nps", label: "Average feedback (NPS score)" }]}
+      params={[{ key: "average_feedback_nps", label: "Average Feedback (NPS)" }]}
     />
   );
 }
@@ -2051,7 +2051,7 @@ export function SuperUsersSheet({ data: su, mode }: { data: SuperUsersBundle; mo
   const paramList = (
       <Card>
         <CardTitle>All 12 parameters from spec sheet</CardTitle>
-        <ParamRow label="Super users (count + identity) — top N" value={val(su.users.length)} />
+        <ParamRow label="Super users (count + identity)" value={val(su.users.length)} />
         <ParamRow label="Logins per user" value={val(su.users.length)} />
         <ParamRow label="Last login date (per user)" value={val(su.users.length)} />
         <ParamRow label="Login distribution (top 5)" value={val(su.login_distribution_top5.length)} />
@@ -2103,7 +2103,7 @@ function SuperUsersDashboard({
       </div>
 
       <Card>
-        <CardTitle>Login distribution — top 5</CardTitle>
+        <CardTitle>Login distribution (top 5)</CardTitle>
         <BarChart
           rows={su.login_distribution_top5.map((u, i) => ({
             label: u.email,
