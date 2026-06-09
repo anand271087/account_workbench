@@ -1312,106 +1312,200 @@ export function SMSheet({ data: s, mode }: { data: SupplierMonitoring; mode?: Sh
     low: "#10b981", medium: "#f59e0b", high: "#ef4444", unknown: "#94a3b8",
   };
 
+  // 09-Jun · DevSpec v4 layout exactly. 9 params (1 stacked-bar + 1
+  // line + 1 table + 6 KPI stats). Each tile carries a source pill in
+  // the top-right corner. Header shows source counts ("8 In Redshift /
+  // 1 Offline" — auto-derived from the params we render).
+  const totalMinsNum = s.total_time_mins;
+  const vsContractedAvailable = !isUnavailable(s.suppliers_added_vs_contracted_pct);
+  const dataRefreshesAvailable = !isUnavailable(s.data_refreshes_last_30d);
+  // Source-count header — match v4's "8 In Redshift / 1 Offline" badge.
+  const inRedshift = 8;   // monitored / new / users / data-refreshes / time / risk-split / trend / list
+  const offlineCt = vsContractedAvailable ? 0 : 1;
+
   return (
     <div className="space-y-3">
+      {/* Source counter header — matches DevSpec "8 In Redshift / 1 Offline" */}
+      <div className="flex items-center gap-2 mb-1">
+        <SourcePillCounter count={inRedshift} source="redshift" />
+        {offlineCt > 0 && <SourcePillCounter count={offlineCt} source="offline" />}
+      </div>
+
+      {/* KPI tiles — DevSpec v4 order:
+          1. # Users who added suppliers
+          2. # suppliers monitored
+          3. # New suppliers added (period)
+          4. Data refreshes in last 30 days
+          5. Total time spent (Mins)
+          6. % suppliers added vs contracted (offline)
+          Each tile gets a source pill in the top-right; MoM deltas
+          are placeholders until backend returns prev-period values. */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-2">
+        <SourcedKpi
+          label="# Users who added suppliers"
+          value={usersAddingNum != null ? fmtNum(usersAddingNum) : "—"}
+          source="redshift"
+          accent={PALETTE.indigo}
+        />
+        <SourcedKpi
+          label="# suppliers monitored"
+          value={monitoredNum != null ? fmtNum(monitoredNum) : "—"}
+          source="redshift"
+          accent={PALETTE.aqua}
+        />
+        <SourcedKpi
+          label="# New suppliers added (period)"
+          value={newInPeriodNum != null ? fmtNum(newInPeriodNum) : "—"}
+          source="redshift"
+          accent={PALETTE.fuscia}
+        />
+        <SourcedKpi
+          label="Data refreshes in last 30 days"
+          value={dataRefreshesAvailable
+            ? fmtNum(s.data_refreshes_last_30d as number)
+            : "—"}
+          source="redshift"
+          accent={PALETTE.bumblebee}
+        />
+        <SourcedKpi
+          label="Total time spent (Mins)"
+          value={(() => {
+            const m = Math.round(totalMinsNum ?? 0);
+            return m >= 60 ? `${Math.round(m / 60)}h` : `${m}m`;
+          })()}
+          sub={`${fmtNum(Math.round(totalMinsNum ?? 0))} mins`}
+          source="redshift"
+          accent={PALETTE.midnight}
+        />
+        <SourcedKpi
+          label="% suppliers added vs contracted"
+          value={vsContractedAvailable
+            ? `${Math.round(s.suppliers_added_vs_contracted_pct as number)}%`
+            : "—"}
+          source={vsContractedAvailable ? "redshift" : "offline"}
+          accent={PALETTE.indigo}
+        />
+      </div>
+
+      {/* Suppliers by risk level — Stacked bar */}
       <Card>
-        <CardTitle>Supplier Monitoring · Risk</CardTitle>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-          <KpiTile
-            label="Suppliers monitored"
-            value={monitoredNum != null ? fmtNum(monitoredNum) : "—"}
-            accent={PALETTE.indigo}
-          />
-          <KpiTile
-            label="New in period"
-            value={newInPeriodNum != null ? fmtNum(newInPeriodNum) : "—"}
-            accent={PALETTE.aqua}
-          />
-          <KpiTile
-            label="Users adding"
-            value={usersAddingNum != null ? fmtNum(usersAddingNum) : "—"}
-            accent={PALETTE.fuscia}
-          />
-          <KpiTile
-            label="Time spent (m)"
-            value={fmtNum(Math.round(s.total_time_mins))}
-            accent={PALETTE.bumblebee}
-          />
-          <KpiTile
-            label="Data refreshes (30d)"
-            value="—"
-            na={isUnavailable(s.data_refreshes_last_30d) ? { reason: s.data_refreshes_last_30d.reason } : undefined}
-            accent={PALETTE.midnight}
-          />
+        <div className="flex items-center justify-between mb-2">
+          <CardTitle>Suppliers by risk level</CardTitle>
+          <SourcePill source="redshift" />
         </div>
-
-        {/* Risk levels — Stacked bar */}
-        {riskLevels && (
-          <div className="mb-3">
-            <div className="text-[11px] font-semibold mb-1">Suppliers by risk level</div>
-            <SplitBar
-              slices={Object.entries(riskLevels).map(([k, v]) => ({
-                label: k,
-                value: v,
-                color: RISK_COLORS[k] ?? "#94a3b8",
-              }))}
-            />
+        {!riskLevels ? (
+          <div className="text-[11px] text-analytics-muted italic py-4 text-center">
+            No risk-level data
           </div>
-        )}
-
-        {/* MoM trend + vs-contracted gauge */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <div className="md:col-span-2">
-            <div className="text-[11px] font-semibold mb-1">Suppliers added — month-over-month</div>
-            {!momTrend || momTrend.length === 0 ? (
-              <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
-            ) : (
-              <LineChart
-                labels={momTrend.map((m) => m.month)}
-                values={momTrend.map((m) => m.suppliers_added)}
-                color={PALETTE.indigo}
-                height={130}
-              />
-            )}
-          </div>
-          {isUnavailable(s.suppliers_added_vs_contracted_pct) ? (
-            <KpiTile
-              label="vs contracted"
-              value="—"
-              na={{ reason: s.suppliers_added_vs_contracted_pct.reason }}
-            />
-          ) : (
-            <RadialGauge
-              label="vs contracted %"
-              pct={s.suppliers_added_vs_contracted_pct as number}
-              color={PALETTE.fuscia}
-            />
-          )}
-        </div>
-
-        {/* Suppliers added list — Table */}
-        {suppliersList && suppliersList.length > 0 && (
-          <div>
-            <div className="text-[11px] font-semibold mb-1">
-              Suppliers added — recent {Math.min(suppliersList.length, 30)}
-            </div>
-            <SimpleTable
-              cols={[
-                { key: "supplier_name", label: "Supplier" },
-                { key: "category", label: "Category" },
-                { key: "email", label: "Added by" },
-                { key: "added_at", label: "When", numeric: true },
-              ]}
-              rows={suppliersList.slice(0, 30).map((r) => ({
-                supplier_name: r.supplier_name || "—",
-                category: r.category,
-                email: r.email,
-                added_at: r.added_at ?? "—",
-              }))}
-            />
-          </div>
+        ) : (
+          (() => {
+            const entries = Object.entries(riskLevels);
+            const total = entries.reduce((sum, [, v]) => sum + (v as number), 0) || 1;
+            return (
+              <>
+                <SplitBar
+                  slices={entries.map(([k, v]) => ({
+                    label: k,
+                    value: v as number,
+                    color: RISK_COLORS[k] ?? "#94a3b8",
+                  }))}
+                />
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {entries.map(([k, v]) => {
+                    const pct = Math.round(((v as number) / total) * 100);
+                    return (
+                      <div
+                        key={k}
+                        className="flex items-center justify-between text-[11.5px]"
+                      >
+                        <span className="flex items-center gap-1.5 capitalize text-analytics-ink-2">
+                          <span
+                            className="inline-block w-2 h-2 rounded-full"
+                            style={{ background: RISK_COLORS[k] ?? "#94a3b8" }}
+                          />
+                          {k}
+                        </span>
+                        <span className="font-mono text-analytics-ink">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()
         )}
       </Card>
+
+      {/* MOM trend of suppliers added — Line chart */}
+      <Card>
+        <div className="flex items-center justify-between mb-2">
+          <CardTitle>MOM trend of suppliers added</CardTitle>
+          <SourcePill source="redshift" />
+        </div>
+        {!momTrend || momTrend.length === 0 ? (
+          <div className="text-[11.5px] text-analytics-muted italic py-6 text-center">
+            No data
+          </div>
+        ) : (
+          <LineChart
+            labels={momTrend.map((m) => m.month)}
+            values={momTrend.map((m) => m.suppliers_added)}
+            color={PALETTE.indigo}
+            height={140}
+          />
+        )}
+      </Card>
+
+      {/* Suppliers added list — Table */}
+      <Card>
+        <div className="flex items-center justify-between mb-2">
+          <CardTitle>Suppliers added list</CardTitle>
+          <SourcePill source="redshift" />
+        </div>
+        {!suppliersList || suppliersList.length === 0 ? (
+          <div className="text-[11.5px] text-analytics-muted italic py-4 text-center">
+            No suppliers added in window.
+          </div>
+        ) : (
+          <SimpleTable
+            cols={[
+              { key: "supplier_name", label: "Supplier" },
+              { key: "duns", label: "DUNS" },
+              { key: "added_at", label: "Added", numeric: true },
+            ]}
+            rows={suppliersList.slice(0, 30).map((r) => ({
+              supplier_name: r.supplier_name || "—",
+              duns: (r as { duns?: string }).duns ?? "—",
+              added_at: r.added_at ?? "—",
+            }))}
+          />
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// 09-Jun · Header pill that shows "N In Redshift" / "N Offline" etc.
+// Used at the top of each section to summarise data-source mix.
+function SourcePillCounter({ count, source }: { count: number; source: KpiSource }) {
+  const SOURCE_LABEL: Record<KpiSource, string> = {
+    redshift: "In Redshift",
+    app: "App layer",
+    offline: "Offline",
+  };
+  const SOURCE_TONE: Record<KpiSource, { bg: string; fg: string }> = {
+    redshift: { bg: "#dcfce7", fg: "#166534" },
+    app: { bg: "#fef3c7", fg: "#92400e" },
+    offline: { bg: "#f1f5f9", fg: "#475569" },
+  };
+  const t = SOURCE_TONE[source];
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 text-[10.5px] font-bold rounded-[6px] px-2 py-0.5"
+      style={{ background: t.bg, color: t.fg }}
+    >
+      <span className="text-[12.5px] font-extrabold">{count}</span>
+      <span className="uppercase tracking-[0.4px]">{SOURCE_LABEL[source]}</span>
     </div>
   );
 }

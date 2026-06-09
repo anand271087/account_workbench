@@ -1179,18 +1179,36 @@ def supplier_monitoring_bundle(acct: str, window: str = "90d") -> dict:
         )
     ]
 
-    added_list = [
-        {
-            "email": r[0], "supplier_name": r[1], "category": r[2],
-            "added_at": _date_iso(r[3]),
-        }
-        for r in _rows(
-            "SELECT email, supplier_name, category_name, supplier_added_date "
+    # 09-Jun · DevSpec v4 row 9 — table columns: Supplier / DUNS / Added.
+    # Spec uses `duns_number` from stg_user_cat_sup_report; fall back to
+    # null if the column is absent in this environment.
+    try:
+        added_rows = _rows(
+            "SELECT email, supplier_name, duns_number, category_name, supplier_added_date "
             "FROM tableau_schema.stg_user_cat_sup_report "
             "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL"
             + w + " ORDER BY supplier_added_date DESC NULLS LAST LIMIT 50",
             base,
         )
+    except Exception:  # noqa: BLE001 — duns_number column not in this env
+        added_rows = [
+            (r[0], r[1], None, r[2], r[3]) for r in _rows(
+                "SELECT email, supplier_name, category_name, supplier_added_date "
+                "FROM tableau_schema.stg_user_cat_sup_report "
+                "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL"
+                + w + " ORDER BY supplier_added_date DESC NULLS LAST LIMIT 50",
+                base,
+            )
+        ]
+    added_list = [
+        {
+            "email": r[0],
+            "supplier_name": r[1],
+            "duns": str(r[2]) if r[2] else None,
+            "category": r[3],
+            "added_at": _date_iso(r[4]),
+        }
+        for r in added_rows
     ]
 
     return _cache_put_and_return(key, {
