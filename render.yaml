@@ -97,16 +97,22 @@ services:
         value: ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml,.csv,.md,.markdown"
 
   # -------------------- Celery worker --------------------
+  # 09-Jun · Worker MUST use the Docker runtime so the AWS CLI +
+  # session-manager-plugin layers from the Dockerfile are available.
+  # Worker tasks (MoM/VPD/contract extract, AI summaries) all go
+  # through services/llm.py → Bifrost, and Bifrost lives behind the
+  # SSM tunnel that this layer is needed to open. Native python
+  # runtime wouldn't have these binaries and would fail at runtime.
   - type: worker
     name: beroe-awb-worker
-    runtime: python
+    runtime: docker
     plan: starter   # workers don't have a free tier; cheapest is $7/mo
     branch: main
     rootDir: apps/api
+    dockerfilePath: ./Dockerfile
     autoDeploy: true
-    buildCommand: pip install uv && uv sync --frozen
     # Linux doesn't have the macOS fork issue → default prefork pool is fine
-    startCommand: .venv/bin/celery -A app.workers.celery_app.celery_app worker --loglevel=INFO --concurrency=2
+    dockerCommand: .venv/bin/celery -A app.workers.celery_app.celery_app worker --loglevel=INFO --concurrency=2
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.10
