@@ -296,6 +296,30 @@ function SalesHandoffSection({
           }}
         />
       </Field>
+
+      {/* 09-Jun · G1 — value_flow_map Stage 3 gap-pill:
+          "If 'Revised' — Sales needs an explicit edit surface (today:
+          status toggle only, value text stays as Sol's original)."
+          When validation === "revised", reveal an inline editor for
+          sh_value_from_solutioning so Sales can rewrite the prose
+          that downstream CS Handoff renders. Saves on blur. */}
+      {solutioning?.sh_value_validation === "revised" && (
+        <Field label="Revised Value Definition (Sales-edited)">
+          <TextArea
+            value={solutioning?.sh_value_from_solutioning ?? ""}
+            disabled={locked}
+            placeholder="Rewrite the value definition with Sales' edits — this replaces Sol's narrative downstream."
+            onBlur={(v) =>
+              v !== (solutioning?.sh_value_from_solutioning ?? "") &&
+              patchSol.mutate({ sh_value_from_solutioning: v.trim() || null })
+            }
+          />
+          <div className="text-[10px] mt-1" style={{ color: "#854F0B" }}>
+            ⚠ Your edits replace the Solutioning-side narrative
+            downstream (CS Handoff Commitment block + VDD).
+          </div>
+        </Field>
+      )}
       <Field label="Sales Validation Notes">
         <TextArea
           value={solutioning?.sh_validation_notes ?? ""}

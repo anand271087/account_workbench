@@ -358,6 +358,14 @@ interface ProtoInit {
   targetContribution: number;
   delivered: number;
   updatedAt: string;
+  // 09-Jun · G6 — value_flow_map Stage 9 gap-pill:
+  // "evidenceConfirmed field missing — every $ today is unverified,
+  // disputable at renewal." Persisted on Initiative.value_fields
+  // jsonb (extra="allow" on the backend Pydantic model — no migration
+  // needed). evidenceUrl is a free-text link the CSM pastes once the
+  // proof artefact is uploaded.
+  evidenceConfirmed: boolean;
+  evidenceUrl: string;
 }
 function parseUsdNum(s: string | null | undefined): number {
   if (!s) return 0;
@@ -381,6 +389,8 @@ function readInit(it: Initiative, idx: number): ProtoInit {
     delivered: parseUsdNum(it.value_delivered),
     updatedAt:
       (vf.updatedAt as string) ?? new Date().toISOString().slice(0, 10),
+    evidenceConfirmed: vf.evidenceConfirmed === true,
+    evidenceUrl: typeof vf.evidenceUrl === "string" ? vf.evidenceUrl : "",
   };
 }
 function writeInit(p: ProtoInit): Initiative {
@@ -402,6 +412,8 @@ function writeInit(p: ProtoInit): Initiative {
       module: p.module,
       owner: p.owner,
       updatedAt: p.updatedAt,
+      evidenceConfirmed: p.evidenceConfirmed,
+      evidenceUrl: p.evidenceUrl,
     },
     client_data: [],
     value_history: [],
@@ -2694,6 +2706,30 @@ function InitiativeRow({
         <span style={{ fontSize: 9, color: BRAND.t3 }}>
           delivered of target
         </span>
+        {/* 09-Jun · G6 — Evidence confirmation badge. Confirmed = teal
+            ✓, unconfirmed = amber "?". Mirrors the spec's "$ unverified
+            disputable at renewal" framing. */}
+        {init.delivered > 0 && (
+          <div className="flex items-center justify-end gap-1 mt-0.5">
+            {init.evidenceConfirmed ? (
+              <span
+                className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{ background: "#e6f7f5", color: "#0b5e6b" }}
+                title={init.evidenceUrl || "Evidence confirmed"}
+              >
+                ✓ Evidenced
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{ background: "#fff3e0", color: "#854F0B" }}
+                title="No evidence confirmed — unverified, disputable at renewal"
+              >
+                ? Unverified
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div
         className="text-right text-[10px]"
@@ -2808,7 +2844,30 @@ function InitiativeEditRow({
           Done
         </button>
       </div>
-      <div className="flex justify-end mt-1.5">
+      {/* 09-Jun · G6 — Evidence confirmation row. CSM ticks the box
+          when the delivered $ is backed by an artefact (report, email,
+          deck) the client signed off on. Optional URL points at the
+          artefact. Stored in Initiative.value_fields jsonb. */}
+      <div
+        className="flex items-center gap-3 mt-2 pt-2 border-t"
+        style={{ borderColor: BRAND.cardBorder }}
+      >
+        <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer select-none" style={{ color: BRAND.t2 }}>
+          <input
+            type="checkbox"
+            checked={draft.evidenceConfirmed}
+            onChange={(e) => commit("evidenceConfirmed", e.target.checked)}
+          />
+          Evidence confirmed
+        </label>
+        <input
+          type="url"
+          placeholder="Link to proof artefact (optional)"
+          value={draft.evidenceUrl}
+          onChange={(e) => commit("evidenceUrl", e.target.value)}
+          className="flex-1 text-[11px] px-2 py-1 rounded-card border bg-white"
+          style={{ borderColor: BRAND.cardBorder, color: BRAND.t1 }}
+        />
         <button
           type="button"
           onClick={onClose}
@@ -2847,6 +2906,8 @@ function AddInitiativeForm({
     targetContribution: 0,
     delivered: 0,
     updatedAt: "",
+    evidenceConfirmed: false,
+    evidenceUrl: "",
   });
 
   if (!open) {
@@ -2928,6 +2989,8 @@ function AddInitiativeForm({
               targetContribution: 0,
               delivered: 0,
               updatedAt: "",
+              evidenceConfirmed: false,
+              evidenceUrl: "",
             });
           }}
           disabled={!draft.name.trim()}

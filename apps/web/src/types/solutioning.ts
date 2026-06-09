@@ -92,6 +92,10 @@ export interface SolutioningUpdate {
 
   sh_value_validation?: ShValidation | null;
   sh_validation_notes?: string | null;
+  // 09-Jun · G1 — Sales rewrites the value text when validation =
+  // "revised". Backend already accepts this field on the sh_* slice
+  // (M11 lock asymmetry — sh_* fields editable post-lock).
+  sh_value_from_solutioning?: string | null;
   sh_go_live_date?: string | null;
   sh_first_checkpoint?: string | null;
   sh_stakeholder_signoff?: string | null;
