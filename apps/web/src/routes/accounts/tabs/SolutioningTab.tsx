@@ -170,7 +170,19 @@ export default function SolutioningTab() {
   });
 
   const saveDirty = () => {
-    if (form && data) saveMutation.mutate(diff(form, data));
+    // 09-Jun bug — calling saveMutation.mutate({}) when there are no
+    // actual diffs caused PATCH with empty body to fail intermittently
+    // ("failed to fetch") and showed a confusing error to the user.
+    // Cmd+S keyboard shortcut and the companion-save event could both
+    // bypass the button's `disabled={!dirty}` guard. Skip the API call
+    // when diff is empty — saves a round-trip AND hides the
+    // false-positive error path.
+    if (form && data) {
+      const changes = diff(form, data);
+      if (Object.keys(changes).length > 0) {
+        saveMutation.mutate(changes);
+      }
+    }
     // 28-May — also poke Pre-Sales (sibling in the merged tab) to save
     // its dirty draft. Cross-save event keeps both forms in lockstep
     // so the user never sees a stuck dirty-PreSales after clicking
@@ -401,8 +413,9 @@ export default function SolutioningTab() {
           ) : (
             <>
               <div className="text-xs text-text-muted mb-3">
-                Once the value definition is final, lock it and pass to Sales Hand-off.
-                Requires a value definition.
+                Once Solutioning is finalised, lock it and pass to Sales Hand-off.
+                Requires: value definition · proposed solution · engagement type
+                + duration · ≥1 value theme · estimated value.
               </div>
               {roleCanWrite && (
                 <button
@@ -415,13 +428,45 @@ export default function SolutioningTab() {
                       });
                       return;
                     }
+                    // 09-Jun bug — lock previously only validated
+                    // `value_definition`. User said: "it's allowing to
+                    // lock when all fields are filled, but you're not
+                    // telling what fields are missing so the lock can
+                    // be done." Comprehensive validator below collects
+                    // every empty user-facing field and shows them in
+                    // one toast so the user knows exactly what to fill.
+                    const missing: string[] = [];
+                    if (!form.value_definition || !form.value_definition.trim()) {
+                      missing.push("Value definition");
+                    }
+                    if (!form.proposed_solution || !form.proposed_solution.trim()) {
+                      missing.push("Proposed solution");
+                    }
+                    if (!form.engagement_type) {
+                      missing.push("Engagement type");
+                    }
                     if (
-                      !form.value_definition ||
-                      !form.value_definition.trim()
+                      form.engagement_duration_months == null ||
+                      form.engagement_duration_months <= 0
                     ) {
+                      missing.push("Engagement duration (months)");
+                    }
+                    if (!form.value_themes || form.value_themes.length === 0) {
+                      missing.push("At least one value theme");
+                    }
+                    if (
+                      form.estimated_value_musd == null ||
+                      Number(form.estimated_value_musd) <= 0
+                    ) {
+                      missing.push("Estimated value ($M)");
+                    }
+                    if (missing.length > 0) {
                       notify({
-                        title: "Value definition required",
-                        body: "Fill in the value definition before locking.",
+                        title:
+                          missing.length === 1
+                            ? "1 field needs to be filled before locking"
+                            : `${missing.length} fields need to be filled before locking`,
+                        body: missing.map((m) => `• ${m}`).join("\n"),
                         tone: "warning",
                       });
                       return;
