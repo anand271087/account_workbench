@@ -929,6 +929,63 @@ def abi_bundle(acct: str, window: str = "90d") -> dict:
         )
     ]
 
+    # ============================================================
+    # 09-Jun · DevSpec Abi parity — 6 new KPIs. SQL straight from
+    # the spec's `sql` column. abi_query_class values: L1.A (Live.ai
+    # auto-answered, bot-resolved or HITL-resolved), L1.M (manual
+    # research touched), L2/L3/L4 (deeper research).
+    # ============================================================
+
+    # Gap #6 — % resolved as L1.A (Donut)
+    l1a_pct = _scalar(
+        f"SELECT SUM(CASE WHEN abi_query_class = 'L1.A' THEN 1 ELSE 0 END)::float "
+        f"/ NULLIF(COUNT(*), 0) "
+        f'FROM live_ai_incremental.freshservice_abi '
+        f'WHERE "company name" = %s{where}', p, default=0.0,
+    )
+
+    # Gap #7 — # resolved by Bot (absolute count, complementary to
+    # existing `bot_resolution_pct`).
+    resolved_by_bot_count = _scalar(
+        f'SELECT COUNT(*) FROM live_ai_incremental.freshservice_abi '
+        f'WHERE "company name" = %s AND "is it resolved by bot?" ILIKE %s{where}',
+        (acct, 'yes', start) if start else (acct, 'yes'), default=0,
+    )
+
+    # Gap #8 — # resolved by HITL (Human-In-The-Loop). L1.A queries
+    # where the bot DIDN'T resolve (so a human analyst stepped in).
+    resolved_by_hitl_count = _scalar(
+        f'SELECT COUNT(*) FROM live_ai_incremental.freshservice_abi '
+        f'WHERE "company name" = %s AND abi_query_class = \'L1.A\' '
+        f'  AND ("is it resolved by bot?" NOT ILIKE %s OR "is it resolved by bot?" IS NULL)'
+        f'{where}',
+        (acct, 'yes', start) if start else (acct, 'yes'), default=0,
+    )
+
+    # Gap #9 — # passed to Research (L1.M / L2 / L3 / L4 classes).
+    passed_to_research_count = _scalar(
+        f'SELECT COUNT(*) FROM live_ai_incremental.freshservice_abi '
+        f"WHERE \"company name\" = %s AND abi_query_class IN ('L1.M','L2','L3','L4')"
+        f'{where}', p, default=0,
+    )
+
+    # Gap #10 — Avg Queries per user.
+    avg_q_per_user = _scalar(
+        f"SELECT COUNT(ticket_id)::float / NULLIF(COUNT(DISTINCT requester_email), 0) "
+        f'FROM live_ai_incremental.freshservice_abi '
+        f'WHERE "company name" = %s{where}', p, default=0.0,
+    )
+
+    # Gap #13 — % feedback ratings given (denominator = total tickets,
+    # numerator = tickets with a non-blank feedback string).
+    feedback_pct = _scalar(
+        f"SELECT SUM(CASE WHEN feedback IS NOT NULL AND TRIM(feedback) <> '' "
+        f"           THEN 1 ELSE 0 END)::float "
+        f"/ NULLIF(COUNT(*), 0) "
+        f'FROM live_ai_incremental.freshservice_abi '
+        f'WHERE "company name" = %s{where}', p, default=0.0,
+    )
+
     return _cache_put_and_return(key, {
         "window": window,
         # Spec: AI-generated narrative — not a Redshift KPI. Wired via
@@ -945,11 +1002,22 @@ def abi_bundle(acct: str, window: str = "90d") -> dict:
         "thumbs_up_pct": round(float(thumbs_up_pct or 0) * 100, 1) if thumbs_up_pct is not None else None,
         "top_deliverable": top_deliv,
         "inside_vs_outside_split": inside_outside_split,
+        # Spec row 15 — "Top Categories" — same SQL shape as
+        # inside_vs_outside_split, surface as an alias so the
+        # frontend can render it as a dedicated bar chart.
+        "top_categories": inside_outside_split,
         "top_declined_deliverable": top_declined,
         "declined_by_module": declined_by_module,
         "research_referral_reasons": research_referral,
         "by_source": by_source,
         "top_geographies": top_geos,
+        # 09-Jun additions
+        "l1a_resolved_pct": round(float(l1a_pct or 0) * 100, 1),
+        "resolved_by_bot_count": int(resolved_by_bot_count or 0),
+        "resolved_by_hitl_count": int(resolved_by_hitl_count or 0),
+        "passed_to_research_count": int(passed_to_research_count or 0),
+        "avg_queries_per_user": round(float(avg_q_per_user or 0), 1),
+        "feedback_given_pct": round(float(feedback_pct or 0) * 100, 1),
         "source": "redshift",
     })
 

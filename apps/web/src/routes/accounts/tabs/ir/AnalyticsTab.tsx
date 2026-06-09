@@ -62,7 +62,7 @@ const SUB_TABS: SubMeta[] = [
   // sheet 17 (the last one), so it sits at the tail.
   { id: "account-subscribers", label: "Account & Subscribers", count: 10 },
   { id: "category-watch",      label: "Category Watch",        count: 29 },
-  { id: "abi",                 label: "Abi",                   count: 16 },
+  { id: "abi",                 label: "Abi",                   count: 19 },
   { id: "supplier-discovery",  label: "Supplier Discovery",    count: 11 },
   { id: "supplier-monitoring", label: "Supplier Monitoring",   count: 10 },
   { id: "custom-usage",        label: "Custom Usage",          count: 14 },

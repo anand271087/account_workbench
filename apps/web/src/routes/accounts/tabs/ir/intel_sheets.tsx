@@ -1001,27 +1001,27 @@ function RadialGauge({
 export function AbiSheet({ data: a, mode }: { data: Abi; mode?: SheetMode }) {
   const paramList = (
       <Card>
-        <CardTitle>All 16 parameters from spec sheet</CardTitle>
+        <CardTitle>All 19 parameters from spec sheet</CardTitle>
         <ParamRow label="Abi engagement insight (narrative)" value={maybeVal(a.engagement_insight as Maybe<string>)} />
         <ParamRow label="Total Abi queries" value={val(a.total_queries)} />
         <ParamRow label="# Unique subscribers who raised queries" value={val(a.unique_users)} />
         <ParamRow label="Queries by complexity (L1-L4)" value={val(a.by_complexity.length)} />
         <ParamRow label="Query status (workflow)" value={val(a.by_status.length)} />
-        <ParamRow label="Bot resolution rate %" value={val(`${a.bot_resolution_pct}%`)} />
-        <ParamRow label="# time spent on Abi per user (top 50)" value={val(a.time_per_user_top50.length)} />
-        <ParamRow label="Repeat users %" value={val(`${a.repeat_users_pct}%`)} />
+        {/* 09-Jun v4 additions */}
+        <ParamRow label="% resolved as L1.A" value={`${a.l1a_resolved_pct}%`} />
+        <ParamRow label="# resolved by Bot" value={val(a.resolved_by_bot_count)} />
+        <ParamRow label="# resolved by HITL" value={val(a.resolved_by_hitl_count)} />
+        <ParamRow label="# passed to Research" value={val(a.passed_to_research_count)} />
+        <ParamRow label="Avg Queries per user" value={a.avg_queries_per_user.toFixed(1)} />
+        <ParamRow label="Repeat users %" value={`${a.repeat_users_pct}%`} />
         <ParamRow
           label="Feedback (avg rating 1-5)"
-          value={val(a.avg_feedback == null ? "—" : a.avg_feedback.toFixed(2))}
+          value={a.avg_feedback == null ? "—" : a.avg_feedback.toFixed(2)}
         />
-        <ParamRow
-          label="Feedback (thumbs-up %)"
-          value={val(a.thumbs_up_pct == null ? "—" : `${a.thumbs_up_pct}%`)}
-        />
+        <ParamRow label="% feedback ratings given" value={`${a.feedback_given_pct}%`} />
         <ParamRow label="Top deliverable (top 5)" value={val(a.top_deliverable.length)} />
-        <ParamRow label="Top categories (Live.ai vs outside split)" value={val(a.inside_vs_outside_split.length)} />
+        <ParamRow label="Top Categories" value={val((a.top_categories ?? a.inside_vs_outside_split).length)} />
         <ParamRow label="Top declined deliverables (top 5)" value={val(a.top_declined_deliverable.length)} />
-        <ParamRow label="# declined queries — module-wise" value={val(a.declined_by_module.length)} />
         <ParamRow label="Research referral reasons" value={val(a.research_referral_reasons.length)} />
         <ParamRow label="Query channel" value={val(a.by_source.length)} />
         <ParamRow label="Top geographies queried" value={val(a.top_geographies.length)} />
@@ -1047,11 +1047,35 @@ function AbiDashboard({ data: a }: { data: Abi }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      {/* 09-Jun · KPI strip expanded from 4 → 8 tiles to surface
+          the DevSpec v4 additions: % L1.A, # Bot/HITL/Research,
+          Avg/user, % feedback given. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2">
         <KpiTile label="Total Queries" value={fmtNum(a.total_queries)} accent={PALETTE.indigo} />
         <KpiTile label="Unique Users" value={fmtNum(a.unique_users)} accent={PALETTE.aqua} />
-        <KpiTile label="Bot Resolution" value={`${a.bot_resolution_pct}%`} accent={PALETTE.fuscia} />
+        <KpiTile label="Avg Queries / User" value={a.avg_queries_per_user.toFixed(1)} accent={PALETTE.fuscia} />
         <KpiTile label="Repeat Users" value={`${a.repeat_users_pct}%`} accent={PALETTE.bumblebee} />
+        <KpiTile label="% resolved as L1.A" value={`${a.l1a_resolved_pct}%`} accent={PALETTE.indigo} />
+        <KpiTile label="# Resolved by Bot" value={fmtNum(a.resolved_by_bot_count)} accent={PALETTE.aqua} />
+        <KpiTile label="# Resolved by HITL" value={fmtNum(a.resolved_by_hitl_count)} accent={PALETTE.fuscia} />
+        <KpiTile label="# Passed to Research" value={fmtNum(a.passed_to_research_count)} accent={PALETTE.bumblebee} />
+      </div>
+
+      {/* Feedback row — 2 tiles together since spec separates avg
+          rating and % feedback-given. */}
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 gap-2">
+        <KpiTile
+          label="Feedback (avg rating)"
+          value={a.avg_feedback == null ? "—" : a.avg_feedback.toFixed(2)}
+          sub="1-5 scale"
+          accent={PALETTE.indigo}
+        />
+        <KpiTile
+          label="% Feedback Ratings Given"
+          value={`${a.feedback_given_pct}%`}
+          sub={`${fmtNum(Math.round((a.total_queries * a.feedback_given_pct) / 100))} of ${fmtNum(a.total_queries)} queries`}
+          accent={PALETTE.aqua}
+        />
       </div>
 
       {/* Inside vs Outside renders as a compact horizontal SplitBar (low
@@ -1080,6 +1104,11 @@ function AbiDashboard({ data: a }: { data: Abi }) {
           <BarChart rows={barRows(a.top_deliverable)} />
         </Card>
         <Card>
+          {/* 09-Jun · DevSpec row 15 — alias of inside_vs_outside_split */}
+          <CardTitle>Top Categories</CardTitle>
+          <BarChart rows={barRows((a.top_categories ?? a.inside_vs_outside_split).slice(0, 10))} />
+        </Card>
+        <Card>
           <CardTitle>Query channel</CardTitle>
           <BarChart rows={barRows(a.by_source)} />
         </Card>
@@ -1090,6 +1119,10 @@ function AbiDashboard({ data: a }: { data: Abi }) {
         <Card>
           <CardTitle>Top geographies</CardTitle>
           <BarChart rows={barRows(a.top_geographies)} />
+        </Card>
+        <Card>
+          <CardTitle>Research referral reasons</CardTitle>
+          <BarChart rows={barRows(a.research_referral_reasons)} />
         </Card>
       </div>
 

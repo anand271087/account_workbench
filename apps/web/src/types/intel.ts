@@ -128,11 +128,20 @@ export interface Abi {
   thumbs_up_pct: number | null;
   top_deliverable: LabelCount[];
   inside_vs_outside_split: LabelCount[];
+  // 09-Jun · DevSpec row 15 — alias of inside_vs_outside_split.
+  top_categories: LabelCount[];
   top_declined_deliverable: LabelCount[];
   declined_by_module: LabelCount[];
   research_referral_reasons: LabelCount[];
   by_source: LabelCount[];
   top_geographies: LabelCount[];
+  // 09-Jun · DevSpec additions.
+  l1a_resolved_pct: number;
+  resolved_by_bot_count: number;
+  resolved_by_hitl_count: number;
+  passed_to_research_count: number;
+  avg_queries_per_user: number;
+  feedback_given_pct: number;
   source: "redshift";
 }
 
