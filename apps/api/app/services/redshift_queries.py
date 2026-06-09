@@ -339,6 +339,88 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         for r in per_user_login_rows
     ]
 
+    # 09-Jun · DevSpec Account Summary additions — 4 extra KPIs that
+    # weren't in v11 XLSX but ARE in the prototype HTML the stakeholder
+    # is reading against. SQL straight from the spec's `sql` column.
+
+    # 1) Repeat Users % — users with >1 login / total users
+    repeat_users_pct = _scalar(
+        "SELECT COUNT(DISTINCT CASE WHEN logins > 1 THEN email END)::float "
+        "/ NULLIF(COUNT(DISTINCT email), 0) "
+        "FROM tableau_schema.activity_per_user "
+        "WHERE companyname = %s",
+        (acct,),
+    )
+
+    # 2) WAU / MAU — weekly active / monthly active users.
+    wau_mau_pct = _scalar(
+        "SELECT COUNT(DISTINCT CASE WHEN s.sessionlogin >= CURRENT_DATE - INTERVAL '7 days' THEN s.email END)::float "
+        "/ NULLIF(COUNT(DISTINCT CASE WHEN s.sessionlogin >= CURRENT_DATE - INTERVAL '30 days' THEN s.email END), 0) "
+        "FROM tableau_schema.stg_user_session_log s "
+        "JOIN tableau_schema.activity_per_user a ON a.email = s.email "
+        "WHERE a.companyname = %s",
+        (acct,),
+    )
+
+    # 3) Subscriber Status split — Active / Inactive / Yet to login.
+    # activity_per_user doesn't carry a separate last_login column we
+    # can rely on, so we differentiate Inactive (was active recently,
+    # quiet now) from Yet-to-login (never logged in) using
+    # stg_user_session_log: any row in session_log means they logged in
+    # at least once. The CASE then becomes:
+    #   logins > 0 AND seen in 30d            → Active
+    #   logins > 0 (but no recent session)    → Inactive
+    #   logins = 0 (never seen in session)    → Yet to login
+    status_rows = _rows(
+        "WITH recent AS ( "
+        "  SELECT DISTINCT s.email "
+        "  FROM tableau_schema.stg_user_session_log s "
+        "  WHERE s.sessionlogin >= CURRENT_DATE - INTERVAL '30 days' "
+        ") "
+        "SELECT CASE "
+        "  WHEN a.logins > 0 AND r.email IS NOT NULL THEN 'Active' "
+        "  WHEN a.logins > 0 THEN 'Inactive' "
+        "  ELSE 'Yet to login' "
+        "END AS status, "
+        "COUNT(DISTINCT a.email) "
+        "FROM tableau_schema.activity_per_user a "
+        "LEFT JOIN recent r ON r.email = a.email "
+        "WHERE a.companyname = %s "
+        "GROUP BY 1",
+        (acct,),
+    )
+    status_total = sum(int(r[1] or 0) for r in status_rows) or 1
+    subscriber_status_split = [
+        {
+            "label": r[0],
+            "count": int(r[1] or 0),
+            "pct": round(int(r[1] or 0) / status_total * 100, 1),
+        }
+        for r in status_rows
+    ]
+
+    # 4) % Active Users — trailing 12-month line chart.
+    trend_rows = _rows(
+        "SELECT DATE_TRUNC('month', s.sessionlogin) AS mth, "
+        "       COUNT(DISTINCT s.email) AS active_users "
+        "FROM tableau_schema.stg_user_session_log s "
+        "JOIN tableau_schema.activity_per_user a ON a.email = s.email "
+        "WHERE a.companyname = %s "
+        "  AND s.sessionlogin >= CURRENT_DATE - INTERVAL '12 months' "
+        "GROUP BY 1 "
+        "ORDER BY 1",
+        (acct,),
+    )
+    denom = max(int(total_subs or 0), 1)
+    active_users_12m_trend = [
+        {
+            "month": _date_iso(r[0]),
+            "pct_active": round(int(r[1] or 0) / denom * 100, 1),
+            "active_users": int(r[1] or 0),
+        }
+        for r in trend_rows
+    ]
+
     return _cache_put_and_return(key, {
         "window": window,
         "total_subscribers": int(total_subs or 0),
@@ -350,6 +432,11 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         "total_time_spent_mins": round(float(total_time_mins or 0), 1),
         "categories_unlocked": int(categories_unlocked or 0),
         "suppliers_added": int(suppliers_added or 0),
+        # 09-Jun additions
+        "repeat_users_pct": round(float(repeat_users_pct or 0) * 100, 1) if repeat_users_pct is not None else None,
+        "wau_mau_pct": round(float(wau_mau_pct or 0) * 100, 1) if wau_mau_pct is not None else None,
+        "subscriber_status_split": subscriber_status_split,
+        "active_users_12m_trend": active_users_12m_trend,
         "per_user_logins": per_user_logins,
         "source": "redshift",
     })

@@ -122,72 +122,260 @@ function barRows(items: LabelCount[]): Array<{ label: string; value: number; col
 // 1 — Account & Subscribers (9 spec params)
 // ============================================================
 
+// 09-Jun · DevSpec parity rebuild — 10 KPI tiles with source pills,
+// Subscriber Status donut, 12-month trend line, Account Details
+// metadata card. Mirrors the prototype HTML the stakeholder is
+// comparing against.
+type KpiSource = "redshift" | "app" | "offline";
+const SOURCE_LABEL: Record<KpiSource, string> = {
+  redshift: "In Redshift",
+  app: "App layer",
+  offline: "Offline",
+};
+const SOURCE_TONE: Record<KpiSource, { bg: string; fg: string }> = {
+  redshift: { bg: "#dcfce7", fg: "#166534" },
+  app: { bg: "#fef3c7", fg: "#92400e" },
+  offline: { bg: "#f1f5f9", fg: "#475569" },
+};
+
+function SourcePill({ source }: { source: KpiSource }) {
+  const t = SOURCE_TONE[source];
+  return (
+    <span
+      className="inline-block text-[8.5px] font-extrabold uppercase tracking-[0.4px] px-1.5 py-[1.5px] rounded-[5px]"
+      style={{ background: t.bg, color: t.fg }}
+    >
+      {SOURCE_LABEL[source]}
+    </span>
+  );
+}
+
+function SourcedKpi({
+  label,
+  value,
+  sub,
+  source,
+  accent,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  source: KpiSource;
+  accent?: string;
+}) {
+  return (
+    <div className="relative">
+      <div className="absolute top-1.5 right-1.5 z-10">
+        <SourcePill source={source} />
+      </div>
+      <KpiTile label={label} value={value} sub={sub} accent={accent} />
+    </div>
+  );
+}
+
+function SourceLegend() {
+  return (
+    <div className="mt-3 pt-2 border-t border-analytics-line-2 flex gap-3 flex-wrap text-[10px] text-analytics-muted">
+      <span className="flex items-center gap-1">
+        <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#166534" }} />
+        In Redshift today
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#92400e" }} />
+        App layer / AI-derived
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#475569" }} />
+        Offline / SharePoint
+      </span>
+    </div>
+  );
+}
+
+function fmtMonth(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+}
+
+const STATUS_TONE: Record<string, string> = {
+  Active: "#6EC457",
+  Inactive: "#F0BC41",
+  "Yet to login": "#94a3b8",
+};
+
 export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; mode?: SheetMode }) {
+  const account = useAccountFromLayout();
   const active_pct = a.total_subscribers
     ? Math.round((a.active_subscribers / a.total_subscribers) * 100)
     : 0;
-  const paramList = (
-    <Card>
-      <CardTitle>All 9 parameters from spec sheet</CardTitle>
-      <ParamRow label="Total subscribers" definition="Licensed subscribers on the account" value={val(a.total_subscribers)} />
-      <ParamRow label="Active subscribers" definition="Users with at least 1 login in the period" value={val(a.active_subscribers)} />
-      <ParamRow label="Subscription start date" value={val(fmtDate(a.subscription_start))} />
-      <ParamRow label="Subscription end date" value={val(fmtDate(a.subscription_end))} />
-      <ParamRow label="Company's last login" value={val(fmtDate(a.company_last_login))} />
-      <ParamRow label="Total logins" definition="Logins within current term" value={val(a.total_logins)} />
-      <ParamRow label="Total time spent (mins)" value={val(Math.round(a.total_time_spent_mins))} />
-      <ParamRow label="# categories unlocked (account)" value={val(a.categories_unlocked)} />
-      <ParamRow label="# suppliers added (account)" value={maybeVal(a.suppliers_added as Maybe<number>)} />
-    </Card>
-  );
-  if (mode === "numbers") return paramList;
-  // 08-Jun · Chart mode now surfaces all 9 spec KPIs as tiles (was 4).
-  // Date-valued KPIs render as date strings; the dash from val()/fmtDate()
-  // shows when the value isn't set yet.
+  const avg_logins_per_user = a.active_subscribers
+    ? +(a.total_logins / a.active_subscribers).toFixed(1)
+    : 0;
+  const total_time_hrs = Math.round(a.total_time_spent_mins / 60);
+
+  if (mode === "numbers") {
+    return (
+      <Card>
+        <CardTitle>All 10 parameters from spec sheet</CardTitle>
+        <ParamRow label="Total subscribers" definition="Licensed subscribers on the account" value={val(a.total_subscribers)} />
+        <ParamRow label="Active subscribers" definition={`${active_pct}% of total`} value={val(a.active_subscribers)} />
+        <ParamRow label="Total logins — current subscription" value={val(a.total_logins)} />
+        <ParamRow label="Total time spent (mins)" value={val(Math.round(a.total_time_spent_mins))} />
+        <ParamRow label="# Categories unlocked" value={val(a.categories_unlocked)} />
+        <ParamRow label="# Suppliers added" value={maybeVal(a.suppliers_added as Maybe<number>)} />
+        <ParamRow label="Repeat Users" value={a.repeat_users_pct == null ? "—" : `${a.repeat_users_pct}%`} />
+        <ParamRow label="WAU / MAU" value={a.wau_mau_pct == null ? "—" : `${a.wau_mau_pct}%`} />
+        <ParamRow
+          label="Subscriber Status"
+          value={a.subscriber_status_split.map((s) => `${s.label} ${s.count}`).join(" · ") || "—"}
+        />
+        <ParamRow
+          label="% Active Users — Trailing 12 Months"
+          value={`${a.active_users_12m_trend.length} months of data`}
+        />
+      </Card>
+    );
+  }
+
+  // Donut + line data
+  const statusSplit = a.subscriber_status_split.length
+    ? a.subscriber_status_split
+    : [
+        { label: "Active" as const, count: a.active_subscribers, pct: active_pct },
+        {
+          label: "Inactive" as const,
+          count: Math.max(a.total_subscribers - a.active_subscribers, 0),
+          pct: Math.max(100 - active_pct, 0),
+        },
+      ];
+
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-        <KpiTile label="Total Subscribers" value={fmtNum(a.total_subscribers)} accent={PALETTE.indigo} />
-        <KpiTile
+      {/* 8 KPI tiles matching DevSpec Account Summary order */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+        <SourcedKpi label="Total Subscribers" value={fmtNum(a.total_subscribers)} source="redshift" accent={PALETTE.indigo} />
+        <SourcedKpi
           label="Active Subscribers"
           value={fmtNum(a.active_subscribers)}
           sub={`${active_pct}% of total`}
+          source="redshift"
           accent={PALETTE.aqua}
         />
-        <KpiTile label="Total Logins" value={fmtNum(a.total_logins)} accent={PALETTE.fuscia} />
-        <KpiTile
-          label="Total Time (mins)"
-          value={fmtNum(Math.round(a.total_time_spent_mins))}
-          accent={PALETTE.bumblebee}
-        />
-        <KpiTile
-          label="Categories Unlocked"
-          value={fmtNum(a.categories_unlocked)}
-          accent={PALETTE.midnight}
-        />
-        <KpiTile
-          label="Suppliers Added"
-          value={fmtNum(((a.suppliers_added as Maybe<number>) as number) ?? 0)}
-          accent={PALETTE.indigo}
-        />
-        <KpiTile
-          label="Last Login"
-          value={val(fmtDate(a.company_last_login)) as string}
-          accent={PALETTE.aqua}
-        />
-        <KpiTile
-          label="Subscription Start"
-          value={val(fmtDate(a.subscription_start)) as string}
+        <SourcedKpi
+          label="Total Logins — Current Subscription"
+          value={fmtNum(a.total_logins)}
+          source="redshift"
           accent={PALETTE.fuscia}
         />
-        <KpiTile
-          label="Subscription End"
-          value={val(fmtDate(a.subscription_end)) as string}
+        <SourcedKpi
+          label="Total Time Spent"
+          value={`${fmtNum(total_time_hrs)}h`}
+          sub={`${fmtNum(Math.round(a.total_time_spent_mins))} mins`}
+          source="redshift"
           accent={PALETTE.bumblebee}
         />
+        <SourcedKpi label="# Categories Unlocked" value={fmtNum(a.categories_unlocked)} source="redshift" accent={PALETTE.midnight} />
+        <SourcedKpi
+          label="# Suppliers Added"
+          value={fmtNum(((a.suppliers_added as Maybe<number>) as number) ?? 0)}
+          source="redshift"
+          accent={PALETTE.indigo}
+        />
+        <SourcedKpi
+          label="Repeat Users"
+          value={a.repeat_users_pct == null ? "—" : `${a.repeat_users_pct}%`}
+          sub="logins > 1 per user"
+          source="redshift"
+          accent={PALETTE.aqua}
+        />
+        <SourcedKpi
+          label="WAU / MAU"
+          value={a.wau_mau_pct == null ? "—" : `${a.wau_mau_pct}%`}
+          sub="7-day ÷ 30-day actives"
+          source="redshift"
+          accent={PALETTE.fuscia}
+        />
       </div>
-      {/* 09-Jun · Spec v11 row 14 — per-user first/last login table.
-          Caps at the top 50 users by most-recent login (server-side). */}
+
+      {/* Subscriber Status donut + 12-month trend line */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <CardTitle>Subscriber Status</CardTitle>
+            <SourcePill source="redshift" />
+          </div>
+          <DonutChart
+            slices={statusSplit.map((s) => ({
+              label: s.label,
+              value: s.count,
+              color: STATUS_TONE[s.label] || PALETTE.midnight,
+            }))}
+            centerLabel={fmtNum(a.total_subscribers)}
+          />
+          <div className="mt-2 space-y-1">
+            {statusSplit.map((s) => (
+              <div key={s.label} className="flex items-center justify-between text-[11.5px]">
+                <span className="flex items-center gap-2 text-analytics-ink-2">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ background: STATUS_TONE[s.label] || PALETTE.midnight }}
+                  />
+                  {s.label}
+                </span>
+                <span className="font-mono text-analytics-ink">
+                  {fmtNum(s.count)} <span className="text-analytics-muted">({s.pct}%)</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <CardTitle>% Active Users — Trailing 12 Months</CardTitle>
+            <SourcePill source="redshift" />
+          </div>
+          {a.active_users_12m_trend.length === 0 ? (
+            <div className="text-[11.5px] text-analytics-muted italic py-6 text-center">
+              No session activity in the past 12 months.
+            </div>
+          ) : (
+            <LineChart
+              labels={a.active_users_12m_trend.map((p) => fmtMonth(p.month))}
+              values={a.active_users_12m_trend.map((p) => p.pct_active)}
+            />
+          )}
+        </Card>
+      </div>
+
+      {/* Account Details metadata card */}
+      <Card>
+        <div className="flex items-center justify-between mb-2">
+          <CardTitle>Account Details</CardTitle>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-analytics-muted">
+            Reference
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <ParamRow label="Segment Type" value={account.segment ?? "—"} />
+          <ParamRow label="Subscription Start" value={fmtDate(a.subscription_start) ?? "—"} />
+          <ParamRow label="Subscription End" value={fmtDate(a.subscription_end) ?? "—"} />
+          <ParamRow label="Company Last Login" value={fmtDate(a.company_last_login) ?? "—"} />
+          <ParamRow label="CSM Name" value={account.csm_full_name ?? "—"} />
+          <ParamRow label="CO Name" value={account.co_full_name ?? "—"} />
+          <ParamRow
+            label="Avg. Logins / User"
+            value={avg_logins_per_user ? `${avg_logins_per_user} / month` : "—"}
+          />
+          <ParamRow label="Type of Contract" value={account.gate_contract_term ?? "—"} />
+          <ParamRow label="# Categories Contracted" value="—" />
+          <ParamRow label="# Suppliers Contracted" value="—" />
+        </div>
+        <SourceLegend />
+      </Card>
+
+      {/* Spec v11 row 14 — per-user first/last login table. */}
       <PerUserLoginsTable rows={a.per_user_logins ?? []} />
     </div>
   );

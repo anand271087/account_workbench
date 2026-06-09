@@ -45,6 +45,19 @@ export interface AccountSubscribers {
   total_time_spent_mins: number;
   categories_unlocked: number;
   suppliers_added: Maybe<number>;
+  // 09-Jun · DevSpec Account Summary additions — 4 extra KPIs.
+  repeat_users_pct: number | null;
+  wau_mau_pct: number | null;
+  subscriber_status_split: Array<{
+    label: "Active" | "Inactive" | "Yet to login";
+    count: number;
+    pct: number;
+  }>;
+  active_users_12m_trend: Array<{
+    month: string;
+    pct_active: number;
+    active_users: number;
+  }>;
   // 09-Jun · Spec v11 row 14 — per-user first/last login table.
   per_user_logins?: PerUserLogin[];
   source: "redshift";
