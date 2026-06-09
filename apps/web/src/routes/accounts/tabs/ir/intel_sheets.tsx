@@ -199,6 +199,10 @@ function fmtMonth(iso: string | null): string {
 }
 
 const STATUS_TONE: Record<string, string> = {
+  // 10-Jun · Analytics Error Tracker row 4 — labels now come from
+  // existing_user_sub_start_rev_v2.status. Active is kept for callers
+  // that still synthesize the split client-side.
+  "Logged-in": "#6EC457",
   Active: "#6EC457",
   Inactive: "#F0BC41",
   "Yet to login": "#94a3b8",
@@ -223,7 +227,10 @@ export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; 
         <ParamRow label="Total logins — current subscription" value={val(a.total_logins)} />
         <ParamRow label="Total time spent (mins)" value={val(Math.round(a.total_time_spent_mins))} />
         <ParamRow label="# Categories unlocked" value={val(a.categories_unlocked)} />
-        <ParamRow label="# Suppliers added" value={maybeVal(a.suppliers_added as Maybe<number>)} />
+        <ParamRow label="# Suppliers unlocked" value={maybeVal(a.suppliers_added as Maybe<number>)} />
+        <ParamRow label="# Categories contracted" value={val(a.categories_contracted ?? 0)} />
+        <ParamRow label="# Suppliers contracted" value={val(a.suppliers_contracted ?? 0)} />
+        <ParamRow label="Type of Contract" value={a.type_of_contract || "—"} />
         <ParamRow label="Repeat Users" value={a.repeat_users_pct == null ? "—" : `${a.repeat_users_pct}%`} />
         <ParamRow label="WAU / MAU" value={a.wau_mau_pct == null ? "—" : `${a.wau_mau_pct}%`} />
         <ParamRow
@@ -277,7 +284,7 @@ export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; 
         />
         <SourcedKpi label="# Categories Unlocked" value={fmtNum(a.categories_unlocked)} source="redshift" accent={PALETTE.midnight} />
         <SourcedKpi
-          label="# Suppliers Added"
+          label="# Suppliers Unlocked"
           value={fmtNum(((a.suppliers_added as Maybe<number>) as number) ?? 0)}
           source="redshift"
           accent={PALETTE.indigo}
@@ -368,9 +375,9 @@ export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; 
             label="Avg. Logins / User"
             value={avg_logins_per_user ? `${avg_logins_per_user} / month` : "—"}
           />
-          <ParamRow label="Type of Contract" value={account.gate_contract_term ?? "—"} />
-          <ParamRow label="# Categories Contracted" value="—" />
-          <ParamRow label="# Suppliers Contracted" value="—" />
+          <ParamRow label="Type of Contract" value={a.type_of_contract || account.gate_contract_term || "—"} />
+          <ParamRow label="# Categories Contracted" value={a.categories_contracted != null ? fmtNum(a.categories_contracted) : "—"} />
+          <ParamRow label="# Suppliers Contracted" value={a.suppliers_contracted != null ? fmtNum(a.suppliers_contracted) : "—"} />
         </div>
         <SourceLegend />
       </Card>
@@ -463,7 +470,7 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
         <ParamRow label="Avg categories unlocked / user" value={maybeVal(ci.avg_categories_per_user as Maybe<number>)} />
         <ParamRow label="Categories added trend (monthly)" value={maybeVal(ci.categories_added_monthly_trend as Maybe<number>)} />
         <ParamRow label="Categories newly added (period)" value={maybeVal(ci.categories_newly_added_period as Maybe<number>)} />
-        <ParamRow label="Category type breakdown" value={maybeVal(ci.category_type_breakdown as Maybe<number>)} />
+        {/* 10-Jun · Analytics Error Tracker row 12 — Category type breakdown removed. */}
         <ParamRow label="# Category visits" value={maybeVal(ci.category_visits as Maybe<number>)} />
         <ParamRow label="Category revisit %" value={maybeVal(ci.category_revisit_pct as Maybe<number>)} />
         <ParamRow label="Avg time spent / subscriber (mins)" value={val(ci.avg_time_per_subscriber_mins as number)} />
@@ -471,8 +478,9 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
         <ParamRow label="Spend pool (top n)" value={maybeVal(ci.spend_pool_top_n as Maybe<number>)} />
         <ParamRow label="# Report downloads (total)" value={maybeVal(ci.report_downloads_total as Maybe<number>)} />
         <ParamRow label="# Report views (total)" value={maybeVal(ci.report_views_total as Maybe<number>)} />
-        <ParamRow label="Top 10 report views" value={maybeVal(ci.top_report_views as Maybe<number>)} />
-        <ParamRow label="Top 10 report downloads" value={maybeVal(ci.top_report_downloads as Maybe<number>)} />
+        {/* 10-Jun · Analytics Error Tracker rows 13, 14 — renamed to Reports. */}
+        <ParamRow label="Top 10 Reports Viewed" value={maybeVal(ci.top_report_views as Maybe<number>)} />
+        <ParamRow label="Top 10 Reports Downloaded" value={maybeVal(ci.top_report_downloads as Maybe<number>)} />
         <ParamRow label="Reports downloaded monthly trend" value={maybeVal(ci.reports_downloaded_monthly_trend as Maybe<number>)} />
         <ParamRow label="Added categories detail" value={maybeVal(ci.added_categories_detail as Maybe<number>)} />
       </Card>
@@ -486,8 +494,7 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
         <ParamRow label="Avg time spent (mins)" value={val(mmd.avg_time_per_user_mins)} />
         <ParamRow label="Unique categories viewed" value={val(mmd.unique_categories_viewed)} />
         <ParamRow label="Avg categories viewed / user" value={val(mmd.avg_categories_per_user)} />
-        <ParamRow label="Grades viewed in MMD" value={val(mmd.grades_viewed.length || 0)} />
-        <ParamRow label="Regions viewed in MMD" value={val(mmd.regions_viewed.length || 0)} />
+        {/* 10-Jun · Analytics Error Tracker rows 17, 18 — MMD grade/region tables removed. */}
         <ParamRow label="MMD module visits (monthly)" value={val(mmd.monthly_trend.length || 0)} />
       </Card>
   );
@@ -495,8 +502,9 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
   const bmCard = (
       <Card>
         <CardTitle>Category Benchmarks (5 params)</CardTitle>
-        <ParamRow label="Total benchmark responses" value={maybeVal(bm.total_benchmark_responses as Maybe<number>)} />
-        <ParamRow label="Total subscribers responded" value={maybeVal(bm.total_subscribers_responded as Maybe<number>)} />
+        {/* 10-Jun · Analytics Error Tracker rows 19, 20, 21 — renamed. */}
+        <ParamRow label="# Benchmarks done" value={maybeVal(bm.total_benchmark_responses as Maybe<number>)} />
+        <ParamRow label="# Users" value={maybeVal(bm.total_subscribers_responded as Maybe<number>)} />
         <ParamRow label="Benchmark question categories" value={maybeVal(bm.benchmark_question_categories as Maybe<number>)} />
         <ParamRow label="Total time spent in benchmark (mins)" value={val(bm.benchmark_time_mins as number)} />
         <ParamRow label="RFx template downloads" value={maybeVal(bm.rfx_template_downloads as Maybe<number>)} />
@@ -519,9 +527,6 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
     : [];
   const newlyAdded = Array.isArray(ci.categories_newly_added_period)
     ? (ci.categories_newly_added_period as string[])
-    : [];
-  const catTypeBreakdown = Array.isArray(ci.category_type_breakdown)
-    ? (ci.category_type_breakdown as Array<{ label: string; count: number }>)
     : [];
   const topViews = Array.isArray(ci.top_report_views)
     ? (ci.top_report_views as Array<{ label: string; count: number }>)
@@ -683,21 +688,12 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           );
         })()}
 
-        {/* Category type breakdown — Stacked bar (row 10) */}
-        {catTypeBreakdown.length > 0 && (
-          <div className="mb-3">
-            <div className="text-[11px] font-semibold mb-1">Category type breakdown</div>
-            <SplitBar
-              slices={catTypeBreakdown.map((r, i) => ({
-                label: r.label,
-                value: r.count,
-                color: SERIES_COLORS[i % SERIES_COLORS.length],
-              }))}
-            />
-          </div>
-        )}
+        {/* 10-Jun · Analytics Error Tracker row 12 — Category type
+            breakdown chart removed (no issue, just unwanted clutter). */}
 
         {/* Spend pool + Top categories added + Top report views/downloads */}
+        {/* 10-Jun · Analytics Error Tracker rows 13, 14 — Top 10 viewed
+            and downloaded relabelled to "Reports". */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <div>
             <div className="text-[11px] font-semibold mb-1">Top Spendpools</div>
@@ -714,44 +710,14 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
             />
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Top 10 categories viewed</div>
+            <div className="text-[11px] font-semibold mb-1">Top 10 Reports Viewed</div>
             <BarChart rows={barRows(topViews)} />
           </div>
           <div>
-            <div className="text-[11px] font-semibold mb-1">Top 10 categories downloaded</div>
+            <div className="text-[11px] font-semibold mb-1">Top 10 Reports Downloaded</div>
             <BarChart rows={barRows(topDownloads)} />
           </div>
         </div>
-
-        {/* Categories newly added — Table / chips (rows 9, 14) */}
-        {newlyAdded.length > 0 && (
-          <div className="mb-3">
-            <div className="text-[11px] font-semibold mb-1">Categories newly added (period)</div>
-            <div className="flex flex-wrap gap-1">
-              {newlyAdded.slice(0, 30).map((c, i) => (
-                <span
-                  key={i}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-beroe-blue/10 border border-beroe-blue/30 text-beroe-blue"
-                >
-                  {c}
-                </span>
-              ))}
-              {newlyAdded.length > 30 && (
-                <span className="text-[10px] text-text-muted self-center">
-                  +{newlyAdded.length - 30} more
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Added categories detail — grouped-by-user (row 21).
-            08-Jun · Was a 50-row table; reads as one giant block. Group
-            by user, show their categories as small chips, with a
-            "Show all" toggle for users beyond the first 8. */}
-        {addedDetail.length > 0 && (
-          <AddedCategoriesDetailGrouped rows={addedDetail} />
-        )}
       </Card>
 
       {/* MMD — section header */}
@@ -764,16 +730,8 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           <KpiTile label="Unique categories viewed" value={fmtNum(mmd.unique_categories_viewed)} accent={PALETTE.bumblebee} />
           <KpiTile label="Avg cats / user" value={mmd.avg_categories_per_user.toFixed(1)} accent={PALETTE.midnight} />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-          <div>
-            <div className="text-[11px] font-semibold mb-1">Grades viewed in MMD</div>
-            <BarChart rows={barRows(mmd.grades_viewed)} />
-          </div>
-          <div>
-            <div className="text-[11px] font-semibold mb-1">Regions viewed in MMD</div>
-            <BarChart rows={barRows(mmd.regions_viewed)} />
-          </div>
-        </div>
+        {/* 10-Jun · Analytics Error Tracker rows 17, 18 — Grades viewed
+            and Regions viewed tables removed. */}
         <div>
           <div className="text-[11px] font-semibold mb-1">MMD module visits (monthly)</div>
           {mmd.monthly_trend.length === 0 ? (
@@ -793,14 +751,15 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
       <Card>
         <CardTitle>Category Benchmarks</CardTitle>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+          {/* 10-Jun · Analytics Error Tracker rows 19, 20, 21 — renamed. */}
           <KpiTile
-            label="Total responses"
+            label="# Benchmarks done"
             value={isUnavailable(bm.total_benchmark_responses) ? "—" : fmtNum(bm.total_benchmark_responses as number)}
             na={isUnavailable(bm.total_benchmark_responses) ? { reason: bm.total_benchmark_responses.reason } : undefined}
             accent={PALETTE.indigo}
           />
           <KpiTile
-            label="Subscribers responded"
+            label="# Users"
             value={isUnavailable(bm.total_subscribers_responded) ? "—" : fmtNum(bm.total_subscribers_responded as number)}
             na={isUnavailable(bm.total_subscribers_responded) ? { reason: bm.total_subscribers_responded.reason } : undefined}
             accent={PALETTE.aqua}
@@ -830,6 +789,38 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           )}
         </div>
       </Card>
+
+      {/* 10-Jun · Analytics Error Tracker rows 15, 16 — Categories newly
+          added + Added categories detail moved to the bottom of the
+          Category Watch sub-tab. */}
+      {(newlyAdded.length > 0 || addedDetail.length > 0) && (
+        <Card>
+          <CardTitle>Categories added — recent activity</CardTitle>
+          {newlyAdded.length > 0 && (
+            <div className="mb-3">
+              <div className="text-[11px] font-semibold mb-1">Categories newly added (period)</div>
+              <div className="flex flex-wrap gap-1">
+                {newlyAdded.slice(0, 30).map((c, i) => (
+                  <span
+                    key={i}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-beroe-blue/10 border border-beroe-blue/30 text-beroe-blue"
+                  >
+                    {c}
+                  </span>
+                ))}
+                {newlyAdded.length > 30 && (
+                  <span className="text-[10px] text-text-muted self-center">
+                    +{newlyAdded.length - 30} more
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {addedDetail.length > 0 && (
+            <AddedCategoriesDetailGrouped rows={addedDetail} />
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -1081,7 +1072,7 @@ function AbiDashboard({ data: a }: { data: Abi }) {
       {/* Inside vs Outside renders as a compact horizontal SplitBar (low
           cardinality → donut overkill) above the two main donuts. */}
       <Card>
-        <CardTitle>Inside vs Outside Live.ai</CardTitle>
+        <CardTitle>% Queries in Live.ai vs Outside Live.ai</CardTitle>
         <SplitBar
           slices={a.inside_vs_outside_split.map((c) => ({ label: c.label, value: c.count }))}
         />
@@ -1537,7 +1528,7 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
         />
         {/* 09-Jun · DevSpec row 9 */}
         <ParamRow label="% feedback ratings given" value={`${c.feedback_given_pct ?? 0}%`} />
-        <ParamRow label="AI SWAT vs BASICS split" value={val(c.ai_swat_vs_basics.length)} />
+        {/* 10-Jun · Analytics Error Tracker row 31 — AI SWAT vs BASICS split removed. */}
         <ParamRow label="Categories" value={val(c.top_categories.length)} />
         <ParamRow label="Spendpools" value={val(c.top_spendpools.length)} />
         <ParamRow label="Deliverables" value={val(c.top_deliverables.length)} />
@@ -1613,21 +1604,25 @@ export function CustomUsageSheet({ data: c, mode }: { data: CustomUsage; mode?: 
           )}
         </div>
 
-        {/* AI SWAT vs BASICS — Stacked bar (was donut) */}
-        <div className="mb-3">
-          <div className="text-[11px] font-semibold mb-1">AI SWAT vs BASICS split</div>
-          <SplitBar
-            slices={c.ai_swat_vs_basics.map((r, i) => ({
-              label: r.label, value: r.count, color: SERIES_COLORS[i % SERIES_COLORS.length],
-            }))}
-          />
-        </div>
+        {/* 10-Jun · Analytics Error Tracker row 31 — AI SWAT vs BASICS
+            split removed (the column is not used in the spec). */}
 
-        {/* Top categories / spendpools / deliverables — chips */}
+        {/* 10-Jun · Analytics Error Tracker rows 28, 29, 30 — Categories /
+            Spendpools / Deliverables rendered as bar charts (was a chip
+            cloud, which made counts hard to compare across items). */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <ChipCloud title="Categories" items={c.top_categories} />
-          <ChipCloud title="Spendpools" items={c.top_spendpools} />
-          <ChipCloud title="Deliverables" items={c.top_deliverables} />
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Categories</div>
+            <BarChart rows={barRows(c.top_categories as LabelCount[])} />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Spendpools</div>
+            <BarChart rows={barRows(c.top_spendpools as LabelCount[])} />
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold mb-1">Deliverables</div>
+            <BarChart rows={barRows(c.top_deliverables as LabelCount[])} />
+          </div>
         </div>
       </Card>
     </div>

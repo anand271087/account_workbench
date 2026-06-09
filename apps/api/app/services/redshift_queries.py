@@ -268,18 +268,24 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         "WHERE companyname = %s",
         (acct,), default=0,
     )
+    # 10-Jun · Analytics Error Tracker row 1 — active subscribers now
+    # means subscribers with status = 'Logged-in' (not just `logins > 0`
+    # in activity_per_user, which over-counts inactive accounts).
     active_subs = _scalar(
-        "SELECT COUNT(DISTINCT email) FROM tableau_schema.activity_per_user "
-        "WHERE companyname = %s AND logins > 0",
+        "SELECT COUNT(DISTINCT email) FROM tableau_schema.existing_user_sub_start_rev_v2 "
+        "WHERE companyname = %s AND status = 'Logged-in'",
         (acct,), default=0,
     )
+    # 10-Jun · Analytics Error Tracker rows 8, 9 — subscription dates
+    # come from existing_user_sub_start_rev_v2 (the contract metadata
+    # table) not live_ai_all_account_usage_report (a usage roll-up).
     sub_start = _scalar(
-        'SELECT MIN("date of activation") FROM tableau_schema.live_ai_all_account_usage_report '
+        "SELECT MIN(subscriptionstartdate) FROM tableau_schema.existing_user_sub_start_rev_v2 "
         "WHERE companyname = %s",
         (acct,),
     )
     sub_end = _scalar(
-        'SELECT MAX("trial/subscription end date") FROM tableau_schema.live_ai_all_account_usage_report '
+        "SELECT MAX(subscriptionenddate) FROM tableau_schema.existing_user_sub_start_rev_v2 "
         "WHERE companyname = %s",
         (acct,),
     )
@@ -300,20 +306,48 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         + ("AND s.sessionlogin >= %s" if start else ""),
         (acct, start) if start else (acct,), default=0,
     )
+    # 10-Jun · Analytics Error Tracker row 2 — repointed to match the
+    # Category Watch tab's #Categories Unlocked. Both KPIs must reconcile.
     categories_unlocked = _scalar(
-        'SELECT SUM("no of category unlocked") FROM tableau_schema.live_ai_all_account_usage_report '
+        "SELECT COUNT(DISTINCT category_name) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s",
+        (acct,), default=0,
+    )
+    # 10-Jun · Analytics Error Tracker row 3 — repointed to match the
+    # Supplier Risk Monitoring tab's #Suppliers Monitored. The previous
+    # `COUNT(*)` over-counted because rows can repeat per category.
+    suppliers_added = _scalar(
+        "SELECT COUNT(DISTINCT supplier_id) FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL",
+        (acct,), default=0,
+    )
+    # 10-Jun · Analytics Error Tracker rows 6, 7 — # Categories/Suppliers
+    # contracted (commercial entitlement, not usage). Source:
+    # stg_subplantypes.{category_count, supplier_count}. MAX in case of
+    # multiple plan rows per account.
+    categories_contracted = _scalar(
+        "SELECT MAX(category_count) FROM tableau_schema.stg_subplantypes "
         "WHERE companyname = %s",
         (acct,), default=0,
     )
-    # 08-Jun · stg_user_cat_sup_report grants landed — one row per
-    # (email, category_added, supplier_added). supplier_id IS NOT NULL
-    # marks an actual supplier-add event; nulls are bare category opens.
-    suppliers_added = _scalar(
-        "SELECT COUNT(*) FROM tableau_schema.stg_user_cat_sup_report "
-        "WHERE procurement_company_name = %s AND supplier_id IS NOT NULL"
-        + (" AND supplier_added_date >= %s" if start else ""),
-        (acct, start) if start else (acct,), default=0,
+    suppliers_contracted = _scalar(
+        "SELECT MAX(supplier_count) FROM tableau_schema.stg_subplantypes "
+        "WHERE companyname = %s",
+        (acct,), default=0,
     )
+    # 10-Jun · Analytics Error Tracker row 10 — Type of Contract joins
+    # type_of_plan + type_of_sub_plan from the latest subscription row.
+    contract_type_rows = _rows(
+        "SELECT type_of_plan, type_of_sub_plan FROM tableau_schema.existing_user_sub_start_rev_v2 "
+        "WHERE companyname = %s "
+        "ORDER BY subscriptionstartdate DESC NULLS LAST LIMIT 1",
+        (acct,),
+    )
+    if contract_type_rows:
+        _plan, _subplan = contract_type_rows[0][0], contract_type_rows[0][1]
+        type_of_contract = " · ".join(p for p in (_plan, _subplan) if p)
+    else:
+        type_of_contract = None
 
     # 09-Jun · Spec v11 row 14 — per-user first/last login table.
     # Caps at top 50 by most-recent login so the response stays small
@@ -362,30 +396,16 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         (acct,),
     )
 
-    # 3) Subscriber Status split — Active / Inactive / Yet to login.
-    # activity_per_user doesn't carry a separate last_login column we
-    # can rely on, so we differentiate Inactive (was active recently,
-    # quiet now) from Yet-to-login (never logged in) using
-    # stg_user_session_log: any row in session_log means they logged in
-    # at least once. The CASE then becomes:
-    #   logins > 0 AND seen in 30d            → Active
-    #   logins > 0 (but no recent session)    → Inactive
-    #   logins = 0 (never seen in session)    → Yet to login
+    # 3) Subscriber Status split.
+    # 10-Jun · Analytics Error Tracker row 4 — sourced from
+    # existing_user_sub_start_rev_v2.status directly (same formula
+    # basis as Active Subscribers). Labels come from the data
+    # ('Logged-in', 'Yet to login', etc.) so the TS type below allows
+    # `string` instead of a fixed union.
     status_rows = _rows(
-        "WITH recent AS ( "
-        "  SELECT DISTINCT s.email "
-        "  FROM tableau_schema.stg_user_session_log s "
-        "  WHERE s.sessionlogin >= CURRENT_DATE - INTERVAL '30 days' "
-        ") "
-        "SELECT CASE "
-        "  WHEN a.logins > 0 AND r.email IS NOT NULL THEN 'Active' "
-        "  WHEN a.logins > 0 THEN 'Inactive' "
-        "  ELSE 'Yet to login' "
-        "END AS status, "
-        "COUNT(DISTINCT a.email) "
-        "FROM tableau_schema.activity_per_user a "
-        "LEFT JOIN recent r ON r.email = a.email "
-        "WHERE a.companyname = %s "
+        "SELECT status, COUNT(DISTINCT email) "
+        "FROM tableau_schema.existing_user_sub_start_rev_v2 "
+        "WHERE companyname = %s "
         "GROUP BY 1",
         (acct,),
     )
@@ -400,18 +420,23 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
     ]
 
     # 4) % Active Users — trailing 12-month line chart.
+    # 10-Jun · Analytics Error Tracker row 5 — uses the same logged-in
+    # basis as Active Subscribers. Numerator: distinct Logged-in users
+    # who had a session that month. Denominator: total active (Logged-in)
+    # subscribers (was total_subs, which under-reported %).
     trend_rows = _rows(
         "SELECT DATE_TRUNC('month', s.sessionlogin) AS mth, "
         "       COUNT(DISTINCT s.email) AS active_users "
         "FROM tableau_schema.stg_user_session_log s "
-        "JOIN tableau_schema.activity_per_user a ON a.email = s.email "
-        "WHERE a.companyname = %s "
+        "JOIN tableau_schema.existing_user_sub_start_rev_v2 e ON e.email = s.email "
+        "WHERE e.companyname = %s "
+        "  AND e.status = 'Logged-in' "
         "  AND s.sessionlogin >= CURRENT_DATE - INTERVAL '12 months' "
         "GROUP BY 1 "
         "ORDER BY 1",
         (acct,),
     )
-    denom = max(int(total_subs or 0), 1)
+    denom = max(int(active_subs or 0), 1)
     active_users_12m_trend = [
         {
             "month": _date_iso(r[0]),
@@ -432,6 +457,10 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         "total_time_spent_mins": round(float(total_time_mins or 0), 1),
         "categories_unlocked": int(categories_unlocked or 0),
         "suppliers_added": int(suppliers_added or 0),
+        # 10-Jun · Analytics Error Tracker rows 6, 7, 10
+        "categories_contracted": int(categories_contracted or 0),
+        "suppliers_contracted": int(suppliers_contracted or 0),
+        "type_of_contract": type_of_contract,
         # 09-Jun additions
         "repeat_users_pct": round(float(repeat_users_pct or 0) * 100, 1) if repeat_users_pct is not None else None,
         "wau_mau_pct": round(float(wau_mau_pct or 0) * 100, 1) if wau_mau_pct is not None else None,
@@ -823,6 +852,44 @@ def mmd_bundle(acct: str, window: str = "90d") -> dict:
 # ============================================================
 
 
+# 10-Jun · Analytics Error Tracker row 27 — synonym sprawl for the
+# geographical_region_scope column. Cells can carry comma-separated
+# regions or different spellings of the same place; this normaliser
+# collapses obvious variants so the bar chart isn't split per spelling.
+_GEO_SYNONYMS: dict[str, str] = {
+    "us": "United States", "usa": "United States", "u.s.": "United States",
+    "u.s.a.": "United States", "america": "United States",
+    "united states of america": "United States",
+    "uk": "United Kingdom", "u.k.": "United Kingdom",
+    "great britain": "United Kingdom", "britain": "United Kingdom",
+    "uae": "United Arab Emirates",
+    "apac": "Asia-Pacific", "asia pacific": "Asia-Pacific", "asia-pacific": "Asia-Pacific",
+    "emea": "EMEA", "latam": "Latin America", "latin-america": "Latin America",
+    "europe": "Europe", "eu": "Europe",
+    "global": "Global", "worldwide": "Global", "world": "Global",
+}
+
+
+def _dedupe_geos(rows: list[tuple]) -> list[dict]:
+    """Collapse synonyms + comma-split lists. Returns label-count dicts
+    descending by count."""
+    bucket: dict[str, int] = {}
+    for r in rows:
+        raw = (r[0] or "Unknown")
+        cnt = int(r[1] or 0)
+        # Split comma-separated multi-region cells so 'India, China' counts toward both.
+        parts = [p.strip() for p in str(raw).split(",")] if raw else ["Unknown"]
+        for part in parts:
+            if not part:
+                continue
+            key = _GEO_SYNONYMS.get(part.lower().strip(".").strip(), part)
+            bucket[key] = bucket.get(key, 0) + cnt
+    return [
+        {"label": k, "count": v}
+        for k, v in sorted(bucket.items(), key=lambda kv: -kv[1])
+    ]
+
+
 def abi_bundle(acct: str, window: str = "90d") -> dict:
     key = ("abi", acct, window)
     if (c := _cache_get(key)) is not None:
@@ -879,24 +946,39 @@ def abi_bundle(acct: str, window: str = "90d") -> dict:
         f"THEN 1 ELSE 0 END),0) "
         f'FROM live_ai_incremental.freshservice_abi WHERE "company name" = %s{where}', p,
     )
+    # 10-Jun · Analytics Error Tracker row 23 — Top deliverable now
+    # uses `type_of_deliverable` (the per-ticket deliverable type), not
+    # the beroe core category (which is too coarse).
     top_deliv = [
         {"label": str(r[0] or "Other"), "count": int(r[1] or 0)} for r in _rows(
-            f'SELECT "beroe core category", COUNT(*) FROM live_ai_incremental.freshservice_abi '
-            f'WHERE "company name" = %s{where} GROUP BY "beroe core category" '
+            f'SELECT type_of_deliverable, COUNT(*) FROM live_ai_incremental.freshservice_abi '
+            f'WHERE "company name" = %s{where} GROUP BY type_of_deliverable '
             f'ORDER BY 2 DESC LIMIT 5', p,
         )
     ]
+    # 10-Jun · Analytics Error Tracker row 22 — % Queries in Live.ai vs
+    # Outside. A ticket is "Inside Live.ai" if it has a category tag
+    # (cat_outside_l_ai is not null and not 'Others'); otherwise it
+    # falls outside Live.ai's classification space.
     inside_outside_split = [
         {"label": str(r[0] or "Unknown"), "count": int(r[1] or 0)} for r in _rows(
-            f'SELECT cat_outside_l_ai, COUNT(*) FROM live_ai_incremental.freshservice_abi '
-            f'WHERE "company name" = %s{where} GROUP BY cat_outside_l_ai', p,
+            "SELECT CASE "
+            "  WHEN cat_outside_l_ai IS NULL "
+            "    OR LOWER(TRIM(cat_outside_l_ai)) IN ('others','other') "
+            "  THEN 'Outside Live.ai' "
+            "  ELSE 'Inside Live.ai' "
+            "END, COUNT(*) FROM live_ai_incremental.freshservice_abi "
+            f'WHERE "company name" = %s{where} GROUP BY 1', p,
         )
     ]
+    # 10-Jun · Analytics Error Tracker row 26 — Top declined now uses
+    # type_of_deliverable + filters on `status` for Project Declined or
+    # Project on Hold (was final_query_status LIKE '%declin%').
     top_declined = [
         {"label": str(r[0] or "Other"), "count": int(r[1] or 0)} for r in _rows(
-            f'SELECT "beroe core category", COUNT(*) FROM live_ai_incremental.freshservice_abi '
-            f"WHERE \"company name\" = %s AND final_query_status ILIKE '%declin%'{where} "
-            f'GROUP BY "beroe core category" ORDER BY 2 DESC LIMIT 5', p,
+            f'SELECT type_of_deliverable, COUNT(*) FROM live_ai_incremental.freshservice_abi '
+            f"WHERE \"company name\" = %s AND status IN ('Project Declined','Project on Hold'){where} "
+            f'GROUP BY type_of_deliverable ORDER BY 2 DESC LIMIT 5', p,
         )
     ]
     declined_by_module = [
@@ -914,20 +996,25 @@ def abi_bundle(acct: str, window: str = "90d") -> dict:
             f'GROUP BY "reason for research referral" ORDER BY 2 DESC', p,
         )
     ]
+    # 10-Jun · Analytics Error Tracker row 25 — Query Channel sourced
+    # from `source` (not query_source which was a deprecated column).
     by_source = [
         {"label": str(r[0] or "Unknown"), "count": int(r[1] or 0)} for r in _rows(
-            f'SELECT query_source, COUNT(*) FROM live_ai_incremental.freshservice_abi '
-            f'WHERE "company name" = %s{where} GROUP BY query_source ORDER BY 2 DESC', p,
+            f'SELECT source, COUNT(*) FROM live_ai_incremental.freshservice_abi '
+            f'WHERE "company name" = %s{where} GROUP BY source ORDER BY 2 DESC', p,
         )
     ]
-    top_geos = [
-        {"label": str(r[0] or "Unknown"), "count": int(r[1] or 0)} for r in _rows(
-            f'SELECT geographic_scope_country, COUNT(*) '
-            f'FROM live_ai_incremental.freshservice_abi '
-            f'WHERE "company name" = %s{where} GROUP BY geographic_scope_country '
-            f'ORDER BY 2 DESC LIMIT 10', p,
-        )
-    ]
+    # 10-Jun · Analytics Error Tracker row 27 — Top geographies from
+    # `geographical_region_scope` (a richer region column). Synonym
+    # sprawl dedupes common variants ('USA' ≈ 'US' ≈ 'United States',
+    # 'UK' ≈ 'United Kingdom', etc.) so the chart isn't split by spelling.
+    raw_geos = _rows(
+        f'SELECT geographical_region_scope, COUNT(*) '
+        f'FROM live_ai_incremental.freshservice_abi '
+        f'WHERE "company name" = %s{where} GROUP BY geographical_region_scope '
+        f'ORDER BY 2 DESC', p,
+    )
+    top_geos = _dedupe_geos(raw_geos)[:10]
 
     # ============================================================
     # 09-Jun · DevSpec Abi parity — 6 new KPIs. SQL straight from
@@ -1002,10 +1089,18 @@ def abi_bundle(acct: str, window: str = "90d") -> dict:
         "thumbs_up_pct": round(float(thumbs_up_pct or 0) * 100, 1) if thumbs_up_pct is not None else None,
         "top_deliverable": top_deliv,
         "inside_vs_outside_split": inside_outside_split,
-        # Spec row 15 — "Top Categories" — same SQL shape as
-        # inside_vs_outside_split, surface as an alias so the
-        # frontend can render it as a dedicated bar chart.
-        "top_categories": inside_outside_split,
+        # 10-Jun · Analytics Error Tracker row 24 — Top Categories now
+        # sourced from `categories_and_sourcing_reports`, not aliased to
+        # the inside/outside split (which was a wrong proxy).
+        "top_categories": [
+            {"label": str(r[0] or "Other"), "count": int(r[1] or 0)} for r in _rows(
+                f'SELECT categories_and_sourcing_reports, COUNT(*) '
+                f'FROM live_ai_incremental.freshservice_abi '
+                f'WHERE "company name" = %s{where} '
+                f'GROUP BY categories_and_sourcing_reports '
+                f'ORDER BY 2 DESC LIMIT 10', p,
+            )
+        ],
         "top_declined_deliverable": top_declined,
         "declined_by_module": declined_by_module,
         "research_referral_reasons": research_referral,

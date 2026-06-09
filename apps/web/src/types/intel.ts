@@ -45,11 +45,19 @@ export interface AccountSubscribers {
   total_time_spent_mins: number;
   categories_unlocked: number;
   suppliers_added: Maybe<number>;
+  // 10-Jun · Analytics Error Tracker rows 6, 7, 10 — contracted entitlements
+  // + plan/sub-plan label sourced from existing_user_sub_start_rev_v2.
+  categories_contracted?: number;
+  suppliers_contracted?: number;
+  type_of_contract?: string | null;
   // 09-Jun · DevSpec Account Summary additions — 4 extra KPIs.
   repeat_users_pct: number | null;
   wau_mau_pct: number | null;
+  // 10-Jun · Analytics Error Tracker row 4 — labels are now sourced
+  // directly from existing_user_sub_start_rev_v2.status, so the label
+  // is a free-form string ('Logged-in', 'Yet to login', etc.).
   subscriber_status_split: Array<{
-    label: "Active" | "Inactive" | "Yet to login";
+    label: string;
     count: number;
     pct: number;
   }>;
