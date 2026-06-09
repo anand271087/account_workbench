@@ -68,6 +68,11 @@ interface ContactRow {
 }
 interface SolutioningRow {
   sh_value_themes_from_solutioning: string | null;
+  // 09-Jun · G2 — beroe_value_flow_map.html · Stage 4 gap-pill:
+  // "Today: chips + first metric + kickoff date shown. NARRATIVE
+  // missing. CSM must infer from chips." Surfacing the prose
+  // statement (sh_value_from_solutioning) on the Commitment card.
+  sh_value_from_solutioning: string | null;
   sh_go_live_date: string | null;
   sh_stakeholder_signoff: string | null;
 }
@@ -545,6 +550,7 @@ function BlockCommitment({
   });
   const themes = (sol.data?.sh_value_themes_from_solutioning ?? "")
     .split(/[,\n]/g).map((t) => t.trim()).filter(Boolean);
+  const narrative = (sol.data?.sh_value_from_solutioning ?? "").trim();
   const primary = metrics.data?.items?.[0] ?? null;
   const goLive = sol.data?.sh_go_live_date ?? account.gate_signed_date ?? null;
   return (
@@ -557,6 +563,21 @@ function BlockCommitment({
         teamColor={C.PURPLE}
         trailing={<span className="text-[10px] text-text-muted">From Sales Handoff</span>}
       />
+      {/* 09-Jun · G2 — value_flow_map Stage 4 narrative prose. Was
+          missing per spec gap-pill; the CSM previously had to infer
+          the commitment story from chips + metric alone. */}
+      {narrative && (
+        <div
+          className="mb-3 rounded-[8px] border px-3 py-2 text-[12px] leading-[1.55] italic"
+          style={{
+            background: "#fdf0fd",
+            borderColor: `${C.PURPLE}30`,
+            color: "#5a3a72",
+          }}
+        >
+          “{narrative}”
+        </div>
+      )}
       <GroupHead>Client Priorities</GroupHead>
       {themes.length === 0 ? (
         <EmptyHint>No value themes captured yet — set them on Solutioning.</EmptyHint>

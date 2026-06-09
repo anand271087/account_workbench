@@ -176,6 +176,14 @@ const INIT_TYPES: InitType[] = [
   { label: "Supplier Discovery", module: "Supplier Discovery", icon: "🔍" },
   { label: "Supplier Watch Review", module: "Supplier Watch", icon: "🛡" },
   { label: "Consultation", module: "Custom Credits", icon: "💬" },
+  // 09-Jun · G4 — beroe_value_flow_map.html · Stage 8 gap-pill:
+  // "INIT_TYPES today is all research deliverables — needs Module Upsell
+  // · Cross-sell · Seat Expansion added". Three commercial-side types
+  // so initiatives that drive contract growth (not just delivery) get
+  // tracked the same way as research deliverables.
+  { label: "Module Upsell", module: "Growth", icon: "📈" },
+  { label: "Cross-sell", module: "Growth", icon: "🔁" },
+  { label: "Seat Expansion", module: "Growth", icon: "🪑" },
   { label: "Training Session", module: "LiVE.Ai", icon: "🎓" },
   { label: "Other", module: "", icon: "📌" },
 ];
@@ -2522,6 +2530,15 @@ function GoalFrozenBody({
         </span>
       </div>
 
+      {/* 09-Jun · G5 — value_flow_map Stage 8 gap-pill:
+          "Sum of initiative targets may not equal goal target — silent
+          gap, no warning surfaced." Now we compute the delta and show
+          an amber strip when initiatives don't add up to (or overshoot)
+          the goal target. Hidden when there are no initiatives yet,
+          or when the goal target itself is missing. */}
+      <InitiativeTargetDelta goal={goal} inits={inits} />
+
+
       {inits.length === 0 ? (
         <EmptyInitiatives cat={goal.category} />
       ) : (
@@ -3152,6 +3169,71 @@ function AddGoalModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 09-Jun · G5 — Initiative target sum vs goal target delta banner.
+// Compares Σ initiatives[i].targetContribution to goal.target_value
+// (parsed via parseUsdNum). Surfaces:
+//   • amber "Under-allocated" strip when initiatives sum < goal target
+//   • amber "Over-allocated" strip when initiatives sum > goal target
+//   • teal "Matched" strip when within ±5% rounding
+// Hidden when:
+//   • no initiatives yet (the empty-state already prompts the CSM)
+//   • goal target is missing or unparseable (can't compute a delta)
+// ---------------------------------------------------------------------------
+function InitiativeTargetDelta({
+  goal,
+  inits,
+}: {
+  goal: CSGoal;
+  inits: ProtoInit[];
+}) {
+  const goalTarget = parseUsdNum(goal.target_value);
+  if (!goalTarget || inits.length === 0) return null;
+  const initSum = inits.reduce((s, i) => s + (i.targetContribution || 0), 0);
+  const delta = initSum - goalTarget;
+  const absDelta = Math.abs(delta);
+  const pctOff = absDelta / goalTarget;
+  const fmt = (n: number) => {
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+    return `$${n.toFixed(0)}`;
+  };
+  // Within 5% counts as matched — small rounding tolerance.
+  const matched = pctOff < 0.05;
+  const tone = matched
+    ? { bg: "#e6f7f5", border: "#35E1D4", fg: "#0b5e6b" }
+    : { bg: "#fff3e0", border: "#EF9637", fg: "#854F0B" };
+  const direction = matched
+    ? "Matched"
+    : delta < 0
+      ? "Under-allocated"
+      : "Over-allocated";
+  return (
+    <div
+      className="mb-2 rounded-[8px] border px-3 py-1.5 text-[11.5px] flex items-center gap-2"
+      style={{
+        background: tone.bg,
+        borderColor: tone.border,
+        color: tone.fg,
+      }}
+    >
+      <span className="text-[13px]">{matched ? "✓" : "⚠"}</span>
+      <span className="font-bold">{direction}</span>
+      <span>·</span>
+      <span>
+        Initiatives Σ <b>{fmt(initSum)}</b> vs goal target{" "}
+        <b>{fmt(goalTarget)}</b>
+      </span>
+      {!matched && (
+        <span className="ml-auto">
+          Gap <b>{delta < 0 ? "−" : "+"}{fmt(absDelta)}</b>{" "}
+          <span className="opacity-70">({(pctOff * 100).toFixed(0)}%)</span>
+        </span>
+      )}
     </div>
   );
 }

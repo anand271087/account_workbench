@@ -375,6 +375,13 @@ export default function DeliveryRenewalTab() {
           </div>
           <ScoreBadge score={form.readiness_score} />
         </div>
+        {/* 09-Jun · G8 — value_flow_map Stage 12 gap-pill:
+            "Renewal banner shows 'Negotiation Required' because Q3 = No.
+            Action: deliver ROI deck this week." Surface the WHY behind
+            the readiness state — name the failing question(s) so the
+            CSM knows exactly what to fix instead of inferring from the
+            three-cell grid. */}
+        <ReadinessWhy readiness={form.readiness} />
         <ReadinessGrid
           value={form.readiness}
           editable={editable}
@@ -1446,6 +1453,97 @@ function VddSection({
       ) : (
         children
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 09-Jun · G8 — "Why" banner for Renewal Readiness.
+// Lists every gate that's failing (answer === "no") with a one-line
+// action the CSM can take. When all three are Yes → green "Ready to
+// renew". When all three are Unknown → grey "Status pending". Mixed
+// states show the blockers in amber so the CSM knows exactly what to
+// chase rather than inferring it from the three-cell grid.
+// ---------------------------------------------------------------------------
+function ReadinessWhy({ readiness }: { readiness: Readiness }) {
+  const QS: Array<{
+    key: keyof Readiness;
+    short: string;
+    blockedLabel: string;
+    action: string;
+  }> = [
+    {
+      key: "delivered_metric",
+      short: "Q1",
+      blockedLabel: "Primary success metric not delivered",
+      action: "Close out the metric or document why it shifted",
+    },
+    {
+      key: "proof_data",
+      short: "Q2",
+      blockedLabel: "Proof / data not captured",
+      action: "Upload supporting data and link it to the readiness gate",
+    },
+    {
+      key: "client_acknowledged",
+      short: "Q3",
+      blockedLabel: "Client hasn't acknowledged the value",
+      action: "Deliver the ROI deck and capture client sign-off",
+    },
+  ];
+  const states = QS.map((q) => ({
+    ...q,
+    answer: (readiness[q.key] as { answer?: string } | undefined)?.answer ?? "unknown",
+  }));
+  const blockers = states.filter((s) => s.answer === "no");
+  const pending = states.filter((s) => s.answer === "unknown");
+  const ready = states.every((s) => s.answer === "yes");
+  if (ready) {
+    return (
+      <div
+        className="mb-2.5 rounded-[8px] border px-3 py-2 text-[11.5px] flex items-center gap-2"
+        style={{ background: "#e6f7f5", borderColor: "#35E1D4", color: "#0b5e6b" }}
+      >
+        <span className="text-[13px]">✓</span>
+        <span className="font-bold">Ready to renew</span>
+        <span>· all three gates confirmed</span>
+      </div>
+    );
+  }
+  if (blockers.length === 0 && pending.length > 0) {
+    return (
+      <div
+        className="mb-2.5 rounded-[8px] border px-3 py-2 text-[11.5px] flex items-center gap-2"
+        style={{ background: "#f1f5f9", borderColor: "#94a3b8", color: "#475569" }}
+      >
+        <span className="text-[13px]">…</span>
+        <span className="font-bold">Status pending</span>
+        <span>
+          · {pending.length} gate{pending.length === 1 ? "" : "s"} unanswered
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="mb-2.5 rounded-[8px] border px-3 py-2 text-[11.5px]"
+      style={{ background: "#fff3e0", borderColor: "#EF9637", color: "#854F0B" }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[13px]">⚠</span>
+        <span className="font-bold">Negotiation required</span>
+        <span>
+          · {blockers.length} gate{blockers.length === 1 ? "" : "s"} failing
+        </span>
+      </div>
+      <ul className="ml-5 list-disc">
+        {blockers.map((b) => (
+          <li key={b.key}>
+            <b>{b.short}: {b.blockedLabel}.</b>{" "}
+            <span className="opacity-80">{b.action}.</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
