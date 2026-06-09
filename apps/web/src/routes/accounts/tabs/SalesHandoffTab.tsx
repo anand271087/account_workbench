@@ -902,7 +902,21 @@ const ContractAuditSection = memo(function ContractAuditSection({
   const yrs = yearsFromTerm(gate.gate_contract_term) ?? 0;
   const autoTcv = yrs * acvNum;
 
-  const modules = gate.gate_contract_modules ?? [];
+  // 09-Jun bug — accounts can have STALE / PHANTOM entries in
+  // gate_contract_modules: names that no longer match any in
+  // ALL_MODULES (renamed modules, hand-imported data, old test
+  // rows). Those phantoms aren't rendered as chips (chip strip
+  // iterates ALL_MODULES) so the user can't uncheck them — but
+  // they DO count toward modules.length and the "All module
+  // configs filled" check, which then can never go green.
+  //
+  // Fix: derive `validModules` (= modules ∩ ALL_MODULES) and use
+  // that for every count + completeness check. Phantoms stay in
+  // the DB until the user next toggles a module, at which point
+  // toggleModule's rebuild prunes them (see below).
+  const ALL_MODULE_SET = new Set<string>(ALL_MODULES);
+  const rawModules = gate.gate_contract_modules ?? [];
+  const modules = rawModules.filter((m) => ALL_MODULE_SET.has(m));
   const allConfigsFilled = modules.every(
     (m) => moduleConfigStatus(m, cfgs[m] as Record<string, unknown>).status === "complete",
   );
