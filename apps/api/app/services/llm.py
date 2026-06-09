@@ -11,7 +11,7 @@ adding another LLM SDK is friction we don't need).
 Routing:
 
   1. If `AI_GATEWAY_URL` is set → use Bifrost. Model from
-     `AI_GATEWAY_MODEL` (default `bedrock/eu.anthropic.claude-sonnet-4-7-…`).
+     `AI_GATEWAY_MODEL` (default `bedrock/eu.anthropic.claude-opus-4-5-…`).
   2. Else if `ANTHROPIC_API_KEY` is set → fall back to direct Anthropic SDK.
      This lets local dev keep working without the SSM tunnel.
   3. Else → raise `NoLLMConfigured`. Callers should already be catching this

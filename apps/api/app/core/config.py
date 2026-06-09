@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # private DNS + IAM role and points AI_GATEWAY_URL at that.
     ai_gateway_url: str | None = None  # e.g. http://localhost:8087/v1
     ai_gateway_api_key: SecretStr | None = None  # optional x-bf-ak pin
-    ai_gateway_model: str = "bedrock/eu.anthropic.claude-sonnet-4-7-20251101-v1:0"
+    ai_gateway_model: str = "bedrock/eu.anthropic.claude-opus-4-5-20251101-v1:0"
 
     # ---- Redis / Celery ----
     redis_url: str = "redis://localhost:6379/0"

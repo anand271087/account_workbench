@@ -116,7 +116,7 @@ Required values (all SECRETS; never commit `.env.prod`):
 | `SUPABASE_URL` | same as `VITE_SUPABASE_URL` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Project Settings → API → service_role (secret) |
 | `SUPABASE_JWT_SECRET` | Supabase Project Settings → API → JWT secret |
-| `AI_GATEWAY_URL` + `AI_GATEWAY_API_KEY` + `AI_GATEWAY_MODEL` | Bifrost team (Karthick / Beroe DevOps) — model defaults to `bedrock/eu.anthropic.claude-sonnet-4-7-20251101-v1:0` |
+| `AI_GATEWAY_URL` + `AI_GATEWAY_API_KEY` + `AI_GATEWAY_MODEL` | Bifrost team (Karthick / Beroe DevOps) — model defaults to `bedrock/eu.anthropic.claude-opus-4-5-20251101-v1:0` |
 | `ANTHROPIC_API_KEY` | Only if Bifrost isn't reachable from the deploy host |
 
 ### 3c. Apply database migrations to Supabase
