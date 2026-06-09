@@ -19,6 +19,7 @@ import type {
   LabelCount,
   Maybe,
   OfflineBundle,
+  ScoresBundle,
   SuperUsersBundle,
   SupplierDiscovery,
   SupplierMonitoring,
@@ -185,7 +186,70 @@ export function SubscribersSheet({ data: a, mode }: { data: AccountSubscribers; 
           accent={PALETTE.bumblebee}
         />
       </div>
+      {/* 09-Jun · Spec v11 row 14 — per-user first/last login table.
+          Caps at the top 50 users by most-recent login (server-side). */}
+      <PerUserLoginsTable rows={a.per_user_logins ?? []} />
     </div>
+  );
+}
+
+function PerUserLoginsTable({
+  rows,
+}: {
+  rows: Array<{
+    email: string;
+    first_login: string | null;
+    last_login: string | null;
+    sessions: number;
+  }>;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!rows.length) return null;
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <CardTitle>Per-user activity ({rows.length})</CardTitle>
+        <span className="text-[11px] font-semibold text-analytics-teal-700">
+          {open ? "Hide ▴" : "Show all ▾"}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-[11.5px]">
+            <thead>
+              <tr className="border-b border-analytics-line text-left text-analytics-muted font-semibold uppercase tracking-[0.4px] text-[10px]">
+                <th className="py-1.5 pr-3">Email</th>
+                <th className="py-1.5 pr-3">First login</th>
+                <th className="py-1.5 pr-3">Last login</th>
+                <th className="py-1.5 pr-3 text-right">Sessions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.email} className="border-b border-analytics-line-2 last:border-b-0">
+                  <td className="py-1.5 pr-3 font-mono text-analytics-ink text-[11px]">
+                    {r.email}
+                  </td>
+                  <td className="py-1.5 pr-3 text-analytics-ink-2">
+                    {fmtDate(r.first_login) ?? "—"}
+                  </td>
+                  <td className="py-1.5 pr-3 text-analytics-ink-2">
+                    {fmtDate(r.last_login) ?? "—"}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-mono text-analytics-ink">
+                    {r.sessions}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1690,6 +1754,118 @@ function SuperUsersDashboard({
           }))}
         />
       </Card>
+    </div>
+  );
+}
+
+// ============================================================
+// 17 — Auto-computed Scores (09-Jun, spec sheet 17)
+// Application-derived, not Redshift. 9 KPIs rendered as a tile grid.
+// ============================================================
+
+const RISK_TONE: Record<ScoresBundle["risk_bucket"], string> = {
+  High: "#CF4548",
+  Medium: "#F0BC41",
+  Low: "#6EC457",
+};
+
+const MODE_TONE: Record<ScoresBundle["appetite_mode"], string> = {
+  rescue: "#CF4548",
+  retain: "#F0BC41",
+  expand: "#6EC457",
+};
+
+export function ScoresSheet({
+  data: s,
+  mode,
+}: {
+  data: ScoresBundle;
+  mode?: SheetMode;
+}) {
+  if (mode === "numbers") {
+    return (
+      <Card>
+        <CardTitle>All 9 auto-computed scores</CardTitle>
+        <ParamRow label="Account Health Score" value={val(s.health_score)} />
+        <ParamRow label="Product Score (Health component)" value={val(s.product_score)} />
+        <ParamRow label="Signal Score (Health component)" value={val(s.signal_score)} />
+        <ParamRow label="Churn Risk Score" value={val(s.churn_risk_score)} />
+        <ParamRow label="Risk Bucket" value={s.risk_bucket} />
+        <ParamRow
+          label="Appetite Score → Mode"
+          value={`${s.appetite_score} → ${s.appetite_mode}${
+            s.appetite_mode !== s.appetite_recommended_mode
+              ? ` (recommended: ${s.appetite_recommended_mode})`
+              : ""
+          }`}
+        />
+        <ParamRow
+          label="Renewal Readiness Score"
+          value={s.renewal_readiness_score == null ? "—" : val(s.renewal_readiness_score)}
+        />
+        <ParamRow label="Days to Renewal" value={s.days_to_renewal == null ? "—" : val(s.days_to_renewal)} />
+        <ParamRow
+          label="Health trend (vs 30d ago)"
+          value={s.health_trend_30d == null ? "—" : val(s.health_trend_30d)}
+          definition={s.health_trend_note ?? undefined}
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+        <KpiTile label="Health" value={fmtNum(s.health_score)} sub="of 100" accent={PALETTE.aqua} />
+        <KpiTile label="Product" value={fmtNum(s.product_score)} sub="health component" accent={PALETTE.indigo} />
+        <KpiTile label="Signal" value={fmtNum(s.signal_score)} sub="health component" accent={PALETTE.fuscia} />
+        <KpiTile
+          label="Churn Risk"
+          value={fmtNum(s.churn_risk_score)}
+          sub={s.risk_bucket}
+          accent={RISK_TONE[s.risk_bucket]}
+        />
+        <KpiTile
+          label="Appetite"
+          value={fmtNum(s.appetite_score)}
+          sub={`mode: ${s.appetite_mode}`}
+          accent={MODE_TONE[s.appetite_mode]}
+        />
+        <KpiTile
+          label="Renewal Readiness"
+          value={s.renewal_readiness_score == null ? "—" : fmtNum(s.renewal_readiness_score)}
+          sub="of 100"
+          accent={PALETTE.bumblebee}
+        />
+        <KpiTile
+          label="Days to Renewal"
+          value={s.days_to_renewal == null ? "—" : fmtNum(s.days_to_renewal)}
+          sub="days"
+          accent={PALETTE.midnight}
+        />
+        <KpiTile
+          label="Health Trend (30d)"
+          value={s.health_trend_30d == null ? "—" : fmtNum(s.health_trend_30d)}
+          sub={s.health_trend_30d == null ? "history pending" : "vs 30d ago"}
+          accent={PALETTE.aqua}
+        />
+        <KpiTile label="Recommended Mode" value={s.appetite_recommended_mode} accent={MODE_TONE[s.appetite_recommended_mode]} />
+      </div>
+
+      <Card>
+        <CardTitle>Appetite breakdown — how the score is calculated</CardTitle>
+        <ParamRow label="Health (40%)" value={val(s.breakdown.health_pts)} />
+        <ParamRow label="Signal mix (25%)" value={val(s.breakdown.sig_pts)} />
+        <ParamRow label="Renewal proximity (15%)" value={val(s.breakdown.renew_pts)} />
+        <ParamRow
+          label="ARR growth (20%)"
+          value={`${val(s.breakdown.arr_pts)} · ${s.breakdown.arr_status}`}
+        />
+      </Card>
+
+      <div className="text-[10.5px] text-analytics-muted italic mt-1">
+        Computed at {s.as_of} · derived in-app, not Redshift.
+      </div>
     </div>
   );
 }

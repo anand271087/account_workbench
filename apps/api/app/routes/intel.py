@@ -300,6 +300,32 @@ async def get_benchmarks(
 
 
 # ─────────────────────────────────────────────────────────────
+# Auto-computed Scores — 09-Jun, spec sheet 17.
+# Pure-derived; reads from Supabase Postgres (not Redshift) so it
+# doesn't need the threadpool wrapper. Joins /intel/all's gather
+# as a peer async coroutine.
+# ─────────────────────────────────────────────────────────────
+
+
+@router.get("/{account_id}/intel/scores")
+async def get_scores(
+    user: CurrentUser,
+    account_id: Annotated[UUID, Path(...)],
+    db: AsyncSession = Depends(get_db),
+):
+    # _scope_and_resolve is sufficient for view-scope check; we use its
+    # side-effect (403 if forbidden) but ignore the redshift-name return.
+    await _scope_and_resolve(db, user, account_id)
+    from app.services.scores import compute_scores
+
+    started = time.perf_counter()
+    payload = await compute_scores(db, account_id)
+    elapsed = (time.perf_counter() - started) * 1000.0
+    logger.info("intel.bundle scores %.0fms · derived", elapsed)
+    return _wrap(payload)
+
+
+# ─────────────────────────────────────────────────────────────
 # Rollup — every bundle in one call (used on tab open)
 # ─────────────────────────────────────────────────────────────
 
@@ -344,11 +370,21 @@ async def get_intel_all(
         ("nps", lambda: rq.nps_bundle(name, window)),
         ("super_users", lambda: rq.super_users_bundle(name, top_n=20)),
     ]
-    results = await asyncio.gather(*[_bundle_run(s, fn) for s, fn in tasks])
+    # 09-Jun · Scores bundle joins this fan-out as a peer async
+    # coroutine (no threadpool needed — it reads Supabase, not Redshift).
+    from app.services.scores import compute_scores
+    scores_task = compute_scores(db, account_id)
+
+    results = await asyncio.gather(
+        *[_bundle_run(s, fn) for s, fn in tasks],
+        scores_task,
+    )
     payload = {"redshift_company_name": name, "window": window}
-    for (section, _), result in zip(tasks, results):
+    for (section, _), result in zip(tasks, results[:-1]):
         payload[section] = result
+    payload["scores"] = results[-1]
 
     total_ms = (time.perf_counter() - started) * 1000.0
-    logger.info("intel.all (%s) parallelized %d bundles in %.0fms", name, len(tasks), total_ms)
+    logger.info("intel.all (%s) parallelized %d bundles + scores in %.0fms",
+                name, len(tasks), total_ms)
     return _wrap(payload)

@@ -23,6 +23,7 @@ import type {
   InflationWatch,
   InfraHealth,
   OfflineBundle,
+  ScoresBundle,
   SuperUsersBundle,
   SupplierDiscovery,
   SupplierMonitoring,
@@ -39,6 +40,7 @@ import {
   IWSheet,
   NnamuSheet,
   NpsSheet,
+  ScoresSheet,
   SDSheet,
   SMSheet,
   SubscribersSheet,
@@ -56,7 +58,10 @@ interface SubMeta {
 }
 
 const SUB_TABS: SubMeta[] = [
-  { id: "account-subscribers", label: "Account & Subscribers", count: 9 },
+  // 09-Jun — Scores tab first; it's a snapshot of everything else and
+  // loads instantly (no Redshift round-trip).
+  { id: "scores",              label: "Scores",                count: 9 },
+  { id: "account-subscribers", label: "Account & Subscribers", count: 10 },
   { id: "category-watch",      label: "Category Watch",        count: 29 },
   { id: "abi",                 label: "Abi",                   count: 16 },
   { id: "supplier-discovery",  label: "Supplier Discovery",    count: 11 },
@@ -77,7 +82,7 @@ const SUB_TABS: SubMeta[] = [
 export default function AnalyticsTab() {
   const account = useAccountFromLayout();
   const { period } = useAccountPeriod();
-  const [sub, setSub] = useState<IntelSection>("account-subscribers");
+  const [sub, setSub] = useState<IntelSection>("scores");
   const [mode, setMode] = useState<SheetMode>("charts");
 
   // 09-Jun · Reverted from useIntelAll → per-section useIntelBundle.
@@ -332,6 +337,8 @@ function SubRender({
       return <NpsSheet data={data as OfflineBundle} mode={mode} />;
     case "super-users":
       return <SuperUsersSheet data={data as SuperUsersBundle} mode={mode} />;
+    case "scores":
+      return <ScoresSheet data={data as ScoresBundle} mode={mode} />;
   }
 }
 

@@ -45,7 +45,41 @@ export interface AccountSubscribers {
   total_time_spent_mins: number;
   categories_unlocked: number;
   suppliers_added: Maybe<number>;
+  // 09-Jun · Spec v11 row 14 — per-user first/last login table.
+  per_user_logins?: PerUserLogin[];
   source: "redshift";
+}
+
+export interface PerUserLogin {
+  email: string;
+  first_login: string | null;
+  last_login: string | null;
+  sessions: number;
+}
+
+// 09-Jun · Spec sheet 17 "Auto-computed Scores".
+export interface ScoresBundle {
+  source: "derived";
+  as_of: string;
+  health_score: number;
+  product_score: number;
+  signal_score: number;
+  churn_risk_score: number;
+  risk_bucket: "High" | "Medium" | "Low";
+  appetite_score: number;
+  appetite_mode: "rescue" | "retain" | "expand";
+  appetite_recommended_mode: "rescue" | "retain" | "expand";
+  renewal_readiness_score: number | null;
+  days_to_renewal: number | null;
+  health_trend_30d: number | null;
+  health_trend_note: string | null;
+  breakdown: {
+    health_pts: number;
+    sig_pts: number;
+    renew_pts: number;
+    arr_pts: number;
+    arr_status: "on_track" | "behind" | "declining" | "n/a";
+  };
 }
 
 export interface MmdSection {
@@ -231,6 +265,8 @@ export interface IntelAll {
   training: OfflineBundle;
   nps: OfflineBundle;
   super_users: SuperUsersBundle;
+  // 09-Jun — Auto-computed Scores bundle (sheet 17).
+  scores: ScoresBundle;
 }
 
 // Period → window adapter used by every hook.

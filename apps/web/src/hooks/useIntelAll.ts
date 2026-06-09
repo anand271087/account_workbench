@@ -12,8 +12,9 @@ import { periodToWindow } from "@/types/intel";
 import { type AccountPeriod } from "@/routes/accounts/AccountProfileLayout";
 
 // Section keys = endpoint paths on /api/v1/accounts/:id/intel/:key
-// Aligned 1:1 with the 16 spec sheets (Auto-computed Scores lives on
-// /appetite-score, not here).
+// Aligned 1:1 with the 17 spec sheets — 09-Jun added "scores" (sheet 17
+// "Auto-computed Scores") which is application-derived (Supabase), not
+// Redshift, but joins this fan-out as a peer for symmetry.
 export type IntelSection =
   | "account-subscribers"
   | "category-watch"
@@ -30,7 +31,8 @@ export type IntelSection =
   | "alerts"
   | "training"
   | "nps"
-  | "super-users";
+  | "super-users"
+  | "scores";
 
 export function useIntelBundle<T = unknown>(
   accountId: string,

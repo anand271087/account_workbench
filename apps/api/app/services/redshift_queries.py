@@ -315,6 +315,30 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         (acct, start) if start else (acct,), default=0,
     )
 
+    # 09-Jun · Spec v11 row 14 — per-user first/last login table.
+    # Caps at top 50 by most-recent login so the response stays small
+    # for large accounts. Frontend renders a collapsible sub-section.
+    per_user_login_rows = _rows(
+        "SELECT s.email, MIN(s.sessionlogin) AS first_login, "
+        "MAX(s.sessionlogin) AS last_login, COUNT(*) AS sessions "
+        "FROM tableau_schema.stg_user_session_log s "
+        "JOIN tableau_schema.activity_per_user a ON a.email = s.email "
+        "WHERE a.companyname = %s "
+        "GROUP BY s.email "
+        "ORDER BY MAX(s.sessionlogin) DESC NULLS LAST "
+        "LIMIT 50",
+        (acct,),
+    )
+    per_user_logins = [
+        {
+            "email": r[0],
+            "first_login": _date_iso(r[1]),
+            "last_login": _date_iso(r[2]),
+            "sessions": int(r[3] or 0),
+        }
+        for r in per_user_login_rows
+    ]
+
     return _cache_put_and_return(key, {
         "window": window,
         "total_subscribers": int(total_subs or 0),
@@ -326,6 +350,7 @@ def account_subscribers_bundle(acct: str, window: str = "90d") -> dict:
         "total_time_spent_mins": round(float(total_time_mins or 0), 1),
         "categories_unlocked": int(categories_unlocked or 0),
         "suppliers_added": int(suppliers_added or 0),
+        "per_user_logins": per_user_logins,
         "source": "redshift",
     })
 
