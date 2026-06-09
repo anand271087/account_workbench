@@ -507,48 +507,31 @@ function ClientStakeholdersRoster({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["contacts", accountId] }),
   });
 
-  function RoleRow({
-    label, c, role,
-  }: { label: string; c: ContactRow | null; role: "spoc" | "budget_owner" }) {
-    const [name, setName] = useState(c?.name ?? "");
-    const [title, setTitle] = useState(c?.title ?? "");
-    const [email, setEmail] = useState(c?.email ?? "");
-    useEffect(() => { setName(c?.name ?? ""); setTitle(c?.title ?? ""); setEmail(c?.email ?? ""); }, [c]);
-
-    const flagBody = role === "spoc" ? { is_spoc: true } : { is_sponsor: true };
-
-    async function saveRow() {
-      if (c) {
-        const body: Partial<ContactRow> = {};
-        if (name !== (c.name ?? "")) body.name = name;
-        if (title !== (c.title ?? "")) body.title = title;
-        if (email !== (c.email ?? "")) body.email = email;
-        if (Object.keys(body).length > 0) patchContact.mutate({ id: c.id, body });
-      } else if (name.trim().length >= 3) {
-        createContact.mutate({
-          name: name.trim(),
-          title: title.trim() || null,
-          ...flagBody,
-        });
-      }
-    }
-
-    return (
-      <div className="mb-2.5">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{label}</div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr_1.2fr] gap-2">
-          <Input value={name} disabled={locked} onChange={setName} onBlur={saveRow} placeholder="Name" />
-          <Input value={title} disabled={locked} onChange={setTitle} onBlur={saveRow} placeholder="Title" />
-          <Input type="email" value={email} disabled={locked} onChange={setEmail} onBlur={saveRow} placeholder="Email" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
-      <RoleRow label="Primary Contact (SPOC / Gatekeeper)" c={spoc} role="spoc" />
-      <RoleRow label="Budget Owner" c={budgetOwner} role="budget_owner" />
+      {/* 09-Jun bug — RoleRow used to be defined INSIDE this component's
+          body, which gave it a fresh function identity on every parent
+          re-render. React then unmounted + remounted each row on every
+          keystroke, losing input focus and discarding the typed value
+          before blur could fire. Tester saw: SPOC text "wouldn't come",
+          Budget Owner row stuck on blank Title / Email fields. RoleRow
+          is now hoisted to module scope — see below. */}
+      <RoleRow
+        label="Primary Contact (SPOC / Gatekeeper)"
+        c={spoc}
+        role="spoc"
+        locked={locked}
+        onPatch={(id, body) => patchContact.mutate({ id, body })}
+        onCreate={(body) => createContact.mutate(body)}
+      />
+      <RoleRow
+        label="Budget Owner"
+        c={budgetOwner}
+        role="budget_owner"
+        locked={locked}
+        onPatch={(id, body) => patchContact.mutate({ id, body })}
+        onCreate={(body) => createContact.mutate(body)}
+      />
       <div className="mt-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
@@ -585,6 +568,94 @@ function ClientStakeholdersRoster({
         )}
       </div>
     </>
+  );
+}
+
+// 09-Jun bug — hoisted from inside ClientStakeholdersRoster. Defining
+// this as a nested function gave it a new identity on every parent
+// render, which made React unmount the input on every keystroke and
+// drop typed text. Module-level definition keeps the component
+// reference stable so the local Name / Title / Email state survives.
+function RoleRow({
+  label,
+  c,
+  role,
+  locked,
+  onPatch,
+  onCreate,
+}: {
+  label: string;
+  c: ContactRow | null;
+  role: "spoc" | "budget_owner";
+  locked: boolean;
+  onPatch: (id: string, body: Partial<ContactRow>) => void;
+  onCreate: (body: {
+    name: string;
+    title?: string | null;
+    email?: string | null;
+    is_spoc?: boolean;
+    is_sponsor?: boolean;
+  }) => void;
+}) {
+  const [name, setName] = useState(c?.name ?? "");
+  const [title, setTitle] = useState(c?.title ?? "");
+  const [email, setEmail] = useState(c?.email ?? "");
+  useEffect(() => {
+    setName(c?.name ?? "");
+    setTitle(c?.title ?? "");
+    setEmail(c?.email ?? "");
+  }, [c]);
+
+  const flagBody =
+    role === "spoc" ? { is_spoc: true } : { is_sponsor: true };
+
+  function saveRow() {
+    if (c) {
+      const body: Partial<ContactRow> = {};
+      if (name !== (c.name ?? "")) body.name = name;
+      if (title !== (c.title ?? "")) body.title = title;
+      if (email !== (c.email ?? "")) body.email = email;
+      if (Object.keys(body).length > 0) onPatch(c.id, body);
+    } else if (name.trim().length >= 3) {
+      onCreate({
+        name: name.trim(),
+        title: title.trim() || null,
+        email: email.trim() || null,
+        ...flagBody,
+      });
+    }
+  }
+
+  return (
+    <div className="mb-2.5">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">
+        {label}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr_1.2fr] gap-2">
+        <Input
+          value={name}
+          disabled={locked}
+          onChange={setName}
+          onBlur={saveRow}
+          placeholder="Name"
+        />
+        <Input
+          value={title}
+          disabled={locked}
+          onChange={setTitle}
+          onBlur={saveRow}
+          placeholder="Title"
+        />
+        <Input
+          type="email"
+          value={email}
+          disabled={locked}
+          onChange={setEmail}
+          onBlur={saveRow}
+          placeholder="Email"
+        />
+      </div>
+    </div>
   );
 }
 
