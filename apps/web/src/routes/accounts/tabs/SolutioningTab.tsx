@@ -414,8 +414,7 @@ export default function SolutioningTab() {
             <>
               <div className="text-xs text-text-muted mb-3">
                 Once Solutioning is finalised, lock it and pass to Sales Hand-off.
-                Requires: value definition · proposed solution · engagement type
-                + duration · ≥1 value theme · estimated value.
+                Requires: value definition · proposed solution · ≥1 value theme.
               </div>
               {roleCanWrite && (
                 <button
@@ -428,13 +427,17 @@ export default function SolutioningTab() {
                       });
                       return;
                     }
-                    // 09-Jun bug — lock previously only validated
-                    // `value_definition`. User said: "it's allowing to
-                    // lock when all fields are filled, but you're not
-                    // telling what fields are missing so the lock can
-                    // be done." Comprehensive validator below collects
-                    // every empty user-facing field and shows them in
-                    // one toast so the user knows exactly what to fill.
+                    // 09-Jun bug — validator must only require fields
+                    // that the user can actually FILL from this tab.
+                    // engagement_type, engagement_duration_months and
+                    // estimated_value_musd were intentionally removed
+                    // from the UI per stakeholder feedback (see the
+                    // "Engagement Shape removed" + "Estimated value
+                    // section removed" comments above). Tester saw
+                    // "2 fields need to be filled — engagement
+                    // duration / estimated value" and couldn't find
+                    // them. The validator now lists only fields that
+                    // have a visible input.
                     const missing: string[] = [];
                     if (!form.value_definition || !form.value_definition.trim()) {
                       missing.push("Value definition");
@@ -442,23 +445,8 @@ export default function SolutioningTab() {
                     if (!form.proposed_solution || !form.proposed_solution.trim()) {
                       missing.push("Proposed solution");
                     }
-                    if (!form.engagement_type) {
-                      missing.push("Engagement type");
-                    }
-                    if (
-                      form.engagement_duration_months == null ||
-                      form.engagement_duration_months <= 0
-                    ) {
-                      missing.push("Engagement duration (months)");
-                    }
                     if (!form.value_themes || form.value_themes.length === 0) {
                       missing.push("At least one value theme");
-                    }
-                    if (
-                      form.estimated_value_musd == null ||
-                      Number(form.estimated_value_musd) <= 0
-                    ) {
-                      missing.push("Estimated value ($M)");
                     }
                     if (missing.length > 0) {
                       notify({
