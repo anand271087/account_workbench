@@ -58,9 +58,8 @@ interface SubMeta {
 }
 
 const SUB_TABS: SubMeta[] = [
-  // 09-Jun — Scores tab first; it's a snapshot of everything else and
-  // loads instantly (no Redshift round-trip).
-  { id: "scores",              label: "Scores",                count: 9 },
+  // Order mirrors the XLSX v11 sheet order — Auto-computed Scores is
+  // sheet 17 (the last one), so it sits at the tail.
   { id: "account-subscribers", label: "Account & Subscribers", count: 10 },
   { id: "category-watch",      label: "Category Watch",        count: 29 },
   { id: "abi",                 label: "Abi",                   count: 16 },
@@ -77,12 +76,13 @@ const SUB_TABS: SubMeta[] = [
   { id: "training",            label: "Platform Training",     count: 2 },
   { id: "nps",                 label: "NPS",                   count: 1 },
   { id: "super-users",         label: "Super Users",           count: 12 },
+  { id: "scores",              label: "Auto-computed Scores",  count: 9 },
 ];
 
 export default function AnalyticsTab() {
   const account = useAccountFromLayout();
   const { period } = useAccountPeriod();
-  const [sub, setSub] = useState<IntelSection>("scores");
+  const [sub, setSub] = useState<IntelSection>("account-subscribers");
   const [mode, setMode] = useState<SheetMode>("charts");
 
   // 09-Jun · Reverted from useIntelAll → per-section useIntelBundle.
