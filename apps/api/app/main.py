@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core import redshift as redshift_core
+from app.core import bifrost as bifrost_core
 from app.routes import accounts as account_routes
 from app.routes import auth as auth_routes
 from app.routes import contacts as contact_routes
@@ -60,6 +61,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         log.info("Redshift smoke test: ok=%s · %s", ok, msg)
     except Exception:  # noqa: BLE001
         log.exception("Redshift bootstrap failed (non-fatal)")
+    # 09-Jun — same pattern for Bifrost (internal AI gateway). Mirrors
+    # Redshift exactly; both are SSM-tunnelled services in a private
+    # VPC. Either can be off and the app still boots.
+    try:
+        await asyncio.to_thread(bifrost_core.start_tunnel)
+        ok, msg = await asyncio.to_thread(bifrost_core.smoke_test)
+        log.info("Bifrost smoke test: ok=%s · %s", ok, msg)
+    except Exception:  # noqa: BLE001
+        log.exception("Bifrost bootstrap failed (non-fatal)")
     yield
     # 08-Jun · Drain the Redshift connection pool before stopping the
     # tunnel so we don't leak sessions on the cluster side.
@@ -71,6 +81,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await asyncio.to_thread(redshift_core.stop_tunnel)
     except Exception:  # noqa: BLE001
         log.exception("Redshift tunnel shutdown failed")
+    try:
+        await asyncio.to_thread(bifrost_core.stop_tunnel)
+    except Exception:  # noqa: BLE001
+        log.exception("Bifrost tunnel shutdown failed")
 
 
 def create_app() -> FastAPI:

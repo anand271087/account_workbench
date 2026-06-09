@@ -52,11 +52,34 @@ services:
         sync: false
       # Path A — Bifrost AI gateway (preferred when reachable inside VPC).
       - key: AI_GATEWAY_URL
-        sync: false  # e.g. http://bifrost.beroe.internal:8087/v1 (Karthick)
+        sync: false  # in-VPC: http://bifrost.beroe.internal:8087/v1 · tunnelled: http://localhost:8087/v1
       - key: AI_GATEWAY_API_KEY
         sync: false  # x-bf-ak — set to beroe-bedrock-dev-for-csm or prod equivalent
       - key: AI_GATEWAY_MODEL
         value: bedrock/eu.anthropic.claude-sonnet-4-7-20251101-v1:0
+      # Bifrost SSM tunnel — only needed when this service is OUTSIDE
+      # the VPC and AI_GATEWAY_URL points at localhost:8087. Once the
+      # service is inside the VPC (Karthick's path), flip
+      # BIFROST_AUTOSTART_TUNNEL=false and aim AI_GATEWAY_URL at
+      # private DNS — no tunnel needed.
+      - key: BIFROST_AUTOSTART_TUNNEL
+        value: "true"
+      - key: BIFROST_SSM_TARGET
+        sync: false  # e.g. i-0af78c12204f8391c
+      - key: BIFROST_SSM_DOCUMENT
+        value: AWS-StartPortForwardingSession
+      - key: BIFROST_SSM_REMOTE_PORT
+        value: "8087"
+      - key: BIFROST_SSM_LOCAL_PORT
+        value: "8087"
+      - key: BIFROST_AWS_ACCESS_KEY_ID
+        sync: false
+      - key: BIFROST_AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: BIFROST_AWS_REGION
+        value: eu-west-1
+      - key: BIFROST_AWS_PROFILE
+        sync: false  # optional — leave blank if creds above are sufficient
       # Path B — direct Anthropic SDK. Now optional; leave blank to force
       # the gateway path. If gateway is unreachable from Render, set this.
       - key: ANTHROPIC_API_KEY
@@ -105,11 +128,34 @@ services:
         sync: false
       # Path A — Bifrost AI gateway (preferred when reachable inside VPC).
       - key: AI_GATEWAY_URL
-        sync: false  # e.g. http://bifrost.beroe.internal:8087/v1 (Karthick)
+        sync: false  # in-VPC: http://bifrost.beroe.internal:8087/v1 · tunnelled: http://localhost:8087/v1
       - key: AI_GATEWAY_API_KEY
         sync: false  # x-bf-ak — set to beroe-bedrock-dev-for-csm or prod equivalent
       - key: AI_GATEWAY_MODEL
         value: bedrock/eu.anthropic.claude-sonnet-4-7-20251101-v1:0
+      # Bifrost SSM tunnel — only needed when this service is OUTSIDE
+      # the VPC and AI_GATEWAY_URL points at localhost:8087. Once the
+      # service is inside the VPC (Karthick's path), flip
+      # BIFROST_AUTOSTART_TUNNEL=false and aim AI_GATEWAY_URL at
+      # private DNS — no tunnel needed.
+      - key: BIFROST_AUTOSTART_TUNNEL
+        value: "true"
+      - key: BIFROST_SSM_TARGET
+        sync: false  # e.g. i-0af78c12204f8391c
+      - key: BIFROST_SSM_DOCUMENT
+        value: AWS-StartPortForwardingSession
+      - key: BIFROST_SSM_REMOTE_PORT
+        value: "8087"
+      - key: BIFROST_SSM_LOCAL_PORT
+        value: "8087"
+      - key: BIFROST_AWS_ACCESS_KEY_ID
+        sync: false
+      - key: BIFROST_AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: BIFROST_AWS_REGION
+        value: eu-west-1
+      - key: BIFROST_AWS_PROFILE
+        sync: false  # optional — leave blank if creds above are sufficient
       # Path B — direct Anthropic SDK. Now optional; leave blank to force
       # the gateway path. If gateway is unreachable from Render, set this.
       - key: ANTHROPIC_API_KEY

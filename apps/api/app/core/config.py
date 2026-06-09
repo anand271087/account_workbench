@@ -99,6 +99,49 @@ class Settings(BaseSettings):
             self.redshift_password,
         ])
 
+    # ---- Bifrost SSM tunnel (infra for the AI gateway above) ----
+    # Mirrors the Redshift SSM tunnel but uses the simpler
+    # `AWS-StartPortForwardingSession` doc — direct EC2 port-forward,
+    # no jump-to-remote-host. This block is ONLY about opening the
+    # tunnel; the LLM helper (services/llm.py) still finds the gateway
+    # via the AI_GATEWAY_URL setting above.
+    #
+    # Three deployment shapes:
+    #   (A) Local / Render outside VPC → BIFROST_SSM_TARGET set +
+    #       autostart=true. Tunnel auto-spawns on app start; set
+    #       AI_GATEWAY_URL=http://localhost:8087/v1.
+    #   (B) Production inside the VPC → BIFROST_AUTOSTART_TUNNEL=false.
+    #       No tunnel; set AI_GATEWAY_URL=http://<bifrost-vpc-host>:8087/v1.
+    #   (C) Off → leave BIFROST_SSM_TARGET empty. The LLM helper falls
+    #       back to direct Anthropic (if ANTHROPIC_API_KEY is set) or
+    #       stubs.
+    #
+    # Bifrost may use a separate AWS account/profile from Redshift —
+    # the user's command uses `--profile bifrost-dev` in eu-west-1.
+    # Falls back to the shared aws_* settings above if unset.
+    bifrost_aws_access_key_id: SecretStr | None = None
+    bifrost_aws_secret_access_key: SecretStr | None = None
+    bifrost_aws_region: str | None = None
+    bifrost_aws_profile: str | None = None
+
+    bifrost_autostart_tunnel: bool = True
+    bifrost_ssm_target: str | None = None
+    bifrost_ssm_document: str = "AWS-StartPortForwardingSession"
+    bifrost_ssm_remote_port: int = 8087
+    bifrost_ssm_local_port: int = 8087
+
+    # Used by the smoke-test probe + tunnel-up detection. These match
+    # the local port that the SSM tunnel forwards to. Production
+    # deploys inside the VPC can leave them at defaults — the smoke
+    # test then hits the configured AI_GATEWAY_URL directly.
+    bifrost_host: str = "localhost"
+    bifrost_port: int = 8087
+
+    @property
+    def bifrost_configured(self) -> bool:
+        """True when either the tunnel target OR the in-VPC URL is set."""
+        return bool(self.ai_gateway_url) or bool(self.bifrost_ssm_target)
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
