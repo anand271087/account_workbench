@@ -415,7 +415,7 @@ export default function PreSalesTab() {
                 {scoreLabel(aiResult.score)} ({aiResult.score}/5)
                 {aiResult.is_stub && (
                   <span className="ml-2 text-[10px] font-normal opacity-70">
-                    [stub — Anthropic key not configured]
+                    [stub — no AI backend configured (Bifrost / Anthropic)]
                   </span>
                 )}
               </div>
