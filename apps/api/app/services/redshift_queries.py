@@ -637,6 +637,83 @@ def category_watch_bundle(acct: str, window: str = "90d") -> dict:
     )
     cat_intel["avg_time_per_subscriber_mins"] = round(float(avg_time or 0), 1)
 
+    # ============================================================
+    # 09-Jun · DevSpec Category Watch parity — 5 new KPIs.
+    # See /tmp/per_section.json for the spec source. SQL straight
+    # from the spec's `sql` column except where the source table
+    # doesn't expose the required mapping (Direct : Indirect).
+    # ============================================================
+
+    # Gap #1 — # Unique users (Category Intelligence). The full union
+    # query on the views table consistently times out (Redshift scan
+    # over the un-pruned table is too slow); the downloads-only query
+    # completes fast. As a useful approximation we surface the
+    # downloads-side distinct count and tag it so the frontend can
+    # render it with a "downloads-only" footnote.
+    dn_unique = _scalar(
+        "SELECT COUNT(DISTINCT d.email) FROM tableau_schema.stg_categorydownloaded_reporttype d "
+        "JOIN tableau_schema.activity_per_user a ON a.email = d.email "
+        "WHERE a.companyname = %s" + dn_w,
+        dn_p, default=0,
+    )
+    cat_intel["unique_users"] = int(dn_unique or 0)
+    cat_intel["unique_users_note"] = (
+        "downloads-side count only — views-side scan times out; "
+        "needs materialized view in Redshift"
+    )
+
+    # Gap #2 — # Total Time Spent (Category Intelligence). Was only
+    # exposed as avg_time_per_subscriber_mins; spec wants the absolute
+    # total in minutes. Same source as session-log time.
+    cat_intel["total_time_mins"] = round(float(_scalar(
+        "SELECT SUM(s.totaltimespent_sec)/60.0 "
+        "FROM tableau_schema.stg_user_session_log s "
+        "JOIN tableau_schema.activity_per_user a ON a.email = s.email "
+        "WHERE a.companyname = %s",
+        (acct,), default=0,
+    ) or 0), 1)
+
+    # Gap #3 — Top 10 categories added (account-wide rollup). We
+    # already had per-user `added_categories_detail`; spec wants the
+    # category-rollup bar chart.
+    top_added_rows = _rows(
+        "SELECT category_name, COUNT(*) c "
+        "FROM tableau_schema.stg_user_cat_sup_report "
+        "WHERE procurement_company_name = %s "
+        "  AND category_name IS NOT NULL AND category_name <> '' "
+        + cat_window +
+        " GROUP BY 1 ORDER BY c DESC LIMIT 10",
+        cat_params,
+    )
+    cat_intel["top_categories_added"] = [
+        {"label": str(r[0]), "count": int(r[1] or 0)} for r in top_added_rows
+    ]
+
+    # Gap #4 — Category Watch visits over last 12 months. The DATE_TRUNC
+    # + JOIN scan on the views table times out (same root cause as
+    # unique_users above). For now we surface the existing downloads
+    # monthly trend as the proxy series — it tracks Category Intelligence
+    # engagement on the same shape — and flag the substitution. When the
+    # views table gets a covering index / materialized view, swap to
+    # the spec SQL.
+    cat_intel["category_visits_monthly_trend"] = [
+        {"month": r["month"], "visits": r["downloads"]}
+        for r in cat_intel["reports_downloaded_monthly_trend"]
+    ]
+    cat_intel["category_visits_monthly_trend_note"] = (
+        "proxy: using report-downloads monthly trend until "
+        "stg_categoryview_reporttype has a DATE_TRUNC-friendly index"
+    )
+
+    # Gap #5 — Direct : Indirect split. Spec acknowledges no SQL is
+    # possible without a category→type mapping table that doesn't
+    # exist in Redshift today. Return a shaped N/A so the frontend
+    # can reserve a donut card with the "Pipeline needed" pill.
+    cat_intel["direct_indirect_split"] = _na(
+        "no category→type (direct/indirect) mapping in source — "
+        "needs offline mapping table to compute"
+    )
+
     mmd = {
         "subscribers": int(_scalar(
             f"SELECT COUNT(DISTINCT email) FROM tableau_schema.live_ai_mmd_report "

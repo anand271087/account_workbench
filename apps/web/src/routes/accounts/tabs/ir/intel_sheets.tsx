@@ -552,14 +552,26 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           Live from Redshift (stg_user_cat_sup_report + stg_category*_reporttype).
         </div>
 
-        {/* KPI-stat row (spec: rows 6, 7, 9, 13, 16, 17 + revisit-as-KPI) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-3">
+        {/* KPI-stat row — 09-Jun expanded from 6 to 8 tiles to cover
+            DevSpec rows: # Unique users + # Total Time Spent. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2 mb-3">
+          <KpiTile label="# Unique users" value={fmtNum((ci.unique_users as number) ?? 0)} accent={PALETTE.aqua}
+            sub={typeof ci.unique_users_note === "string" ? "downloads-only" : undefined} />
           <KpiTile label="Categories unlocked" value={fmtNum(ci.categories_unlocked as number)} accent={PALETTE.indigo} />
-          <KpiTile label="Avg cats / user" value={(ci.avg_categories_per_user as number).toFixed(2)} accent={PALETTE.aqua} />
-          <KpiTile label="Newly added (period)" value={fmtNum(newlyAdded.length)} accent={PALETTE.fuscia} />
-          <KpiTile label="Avg time / subscriber (m)" value={(ci.avg_time_per_subscriber_mins as number).toFixed(1)} accent={PALETTE.bumblebee} />
-          <KpiTile label="Report views" value={fmtNum(ci.report_views_total as number)} accent={PALETTE.midnight} />
-          <KpiTile label="Report downloads" value={fmtNum(ci.report_downloads_total as number)} accent={PALETTE.indigo} />
+          <KpiTile label="Avg cats / user" value={(ci.avg_categories_per_user as number).toFixed(2)} accent={PALETTE.fuscia} />
+          <KpiTile label="Newly added (period)" value={fmtNum(newlyAdded.length)} accent={PALETTE.bumblebee} />
+          <KpiTile
+            label="# Total Time Spent"
+            value={(() => {
+              const m = (ci.total_time_mins as number) ?? 0;
+              return m >= 60 ? `${(m / 60).toFixed(0)}h` : `${m.toFixed(0)}m`;
+            })()}
+            sub={`${fmtNum(Math.round((ci.total_time_mins as number) ?? 0))} mins`}
+            accent={PALETTE.midnight}
+          />
+          <KpiTile label="Avg time / sub (m)" value={(ci.avg_time_per_subscriber_mins as number).toFixed(1)} accent={PALETTE.indigo} />
+          <KpiTile label="Report views" value={fmtNum(ci.report_views_total as number)} accent={PALETTE.aqua} />
+          <KpiTile label="Report downloads" value={fmtNum(ci.report_downloads_total as number)} accent={PALETTE.fuscia} />
         </div>
 
         {/* Visits gauge + revisit gauge — spec calls Category visits "Bar
@@ -583,8 +595,10 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           )}
         </div>
 
-        {/* Categories added trend — Line chart (row 8) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        {/* Monthly trends — 09-Jun added Category Watch visits as a
+            third line chart (uses proxy from downloads when the views
+            scan times out — see backend note). */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <div>
             <div className="text-[11px] font-semibold mb-1">Categories added — monthly trend</div>
             {catTrend.length === 0 ? (
@@ -597,6 +611,32 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
                 height={140}
               />
             )}
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <div className="text-[11px] font-semibold">Category Watch visits — 12-month trend</div>
+              {typeof ci.category_visits_monthly_trend_note === "string" && (
+                <span className="text-[9px] uppercase tracking-wider font-bold px-1 py-0.5 rounded bg-amber-100 text-amber-700">
+                  proxy
+                </span>
+              )}
+            </div>
+            {(() => {
+              const visits = Array.isArray(ci.category_visits_monthly_trend)
+                ? (ci.category_visits_monthly_trend as Array<{ month: string; visits: number }>)
+                : [];
+              if (visits.length === 0) {
+                return <div className="text-[11px] text-text-muted py-4 text-center">No data</div>;
+              }
+              return (
+                <LineChart
+                  labels={visits.map((m) => m.month)}
+                  values={visits.map((m) => m.visits)}
+                  color={PALETTE.aqua}
+                  height={140}
+                />
+              );
+            })()}
           </div>
           <div>
             <div className="text-[11px] font-semibold mb-1">Reports downloaded — monthly trend</div>
@@ -613,6 +653,35 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           </div>
         </div>
 
+        {/* 09-Jun · Direct : Indirect (Split) — spec donut. Source
+            doesn't have a category→type mapping in Redshift, so we
+            reserve the card with a "Pipeline needed" pill matching
+            the DevSpec legend. */}
+        {(() => {
+          const dis = ci.direct_indirect_split as
+            | { source_unavailable?: boolean; reason?: string }
+            | undefined;
+          if (!isUnavailable(dis)) return null;
+          return (
+            <div className="mb-3 rounded-[13px] border border-dashed border-analytics-line-2 bg-analytics-line-2/30 p-4">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-[12px] font-bold text-analytics-ink">
+                  Direct : Indirect (Split)
+                </div>
+                <span
+                  className="text-[9px] font-extrabold uppercase tracking-[0.4px] px-1.5 py-0.5 rounded-[5px]"
+                  style={{ background: "#fce7f3", color: "#9d174d" }}
+                >
+                  Pipeline needed
+                </span>
+              </div>
+              <div className="text-[10.5px] text-analytics-muted italic">
+                {dis?.reason || "category→type mapping not available in source"}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Category type breakdown — Stacked bar (row 10) */}
         {catTypeBreakdown.length > 0 && (
           <div className="mb-3">
@@ -627,11 +696,22 @@ export function CategoryWatchSheet({ data: cw, mode }: { data: CategoryWatch; mo
           </div>
         )}
 
-        {/* Spend pool + Top report views — Bar charts (rows 15, 18, 19) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
+        {/* Spend pool + Top categories added + Top report views/downloads */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <div>
             <div className="text-[11px] font-semibold mb-1">Spend pool (top 10)</div>
             <BarChart rows={barRows(spendPool)} />
+          </div>
+          <div>
+            {/* 09-Jun · DevSpec row 10 — Top 10 categories added. */}
+            <div className="text-[11px] font-semibold mb-1">Top 10 categories added</div>
+            <BarChart
+              rows={barRows(
+                Array.isArray(ci.top_categories_added)
+                  ? (ci.top_categories_added as LabelCount[])
+                  : [],
+              )}
+            />
           </div>
           <div>
             <div className="text-[11px] font-semibold mb-1">Top 10 report views</div>
