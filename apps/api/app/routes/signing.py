@@ -448,8 +448,19 @@ async def patch_module_configs(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SigningGateOut:
     """Merge per-module configs into accounts.gate_module_configs.
-    Modules absent from the body are left unchanged; pass an empty
-    dict to clear a module's config."""
+
+    Top-level: modules absent from body are left untouched.
+    Per-module: fields in body are MERGED into the existing module's
+    config (not replaced). An empty dict {} is the explicit "clear
+    this module" sentinel.
+
+    09-Jun bug — previously did `merged[mod] = cfg` which replaced
+    the whole module's config. Tester filled # of Commodities,
+    blurred (saved {commodities: "9"}), then filled Forecast
+    Horizon and blurred — the second save sent {horizonMonths: "6"}
+    and the backend wiped commodities. Per-module checklist tile
+    stayed red because one of the two fields was perpetually empty.
+    """
     _scoped, is_assigned, is_team = await _scope(db, user, account_id)
     del _scoped
     if not can_sign_account(user.role, is_assigned=is_assigned, is_team=is_team):
@@ -466,7 +477,13 @@ async def patch_module_configs(
     import copy
     merged = copy.deepcopy(real.gate_module_configs or {})
     for mod, cfg in body.configs.items():
-        merged[mod] = cfg
+        if cfg == {}:
+            # Explicit clear — frontend passes {} when the module is
+            # removed from gate_contract_modules to drop its config.
+            merged[mod] = {}
+        else:
+            existing = merged.get(mod) or {}
+            merged[mod] = {**existing, **cfg}
     real.gate_module_configs = merged
     await db.commit()
     await db.refresh(real)

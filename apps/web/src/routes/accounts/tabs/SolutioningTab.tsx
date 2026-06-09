@@ -419,13 +419,29 @@ export default function SolutioningTab() {
               {roleCanWrite && (
                 <button
                   onClick={async () => {
-                    if (dirty) {
-                      notify({
-                        title: "Save your edits first",
-                        body: "Lock works against the saved value definition.",
-                        tone: "warning",
-                      });
-                      return;
+                    // 09-Jun bug — tester saw "first click does
+                    // nothing, second click locks". Root cause: when
+                    // the user types in a textarea and clicks Lock
+                    // immediately, dirty=true (the latest keystroke
+                    // hasn't yet been saved), so the early-return
+                    // toast fires. By the time they click a second
+                    // time, the textarea's onBlur has auto-saved
+                    // and dirty=false → lock proceeds. The fix is
+                    // to auto-save first (await) instead of bailing,
+                    // so a single click does save+lock atomically.
+                    if (dirty && form && data) {
+                      const changes = diff(form, data);
+                      if (Object.keys(changes).length > 0) {
+                        try {
+                          await saveMutation.mutateAsync(changes);
+                        } catch {
+                          // saveMutation already surfaces its own
+                          // error toast via savingError state; just
+                          // abort the lock so the user can fix the
+                          // save first.
+                          return;
+                        }
+                      }
                     }
                     // 09-Jun bug — validator must only require fields
                     // that the user can actually FILL from this tab.
@@ -467,11 +483,15 @@ export default function SolutioningTab() {
                     });
                     if (ok) lockMutation.mutate();
                   }}
-                  disabled={lockMutation.isPending || dirty}
+                  disabled={lockMutation.isPending || saveMutation.isPending}
                   className="w-full px-3 py-1.5 rounded-lg bg-beroe-blue text-white text-xs font-semibold disabled:opacity-50"
-                  title={dirty ? "Save changes before locking" : ""}
+                  title=""
                 >
-                  {lockMutation.isPending ? "Locking…" : "🔒 Lock & pass to Sales →"}
+                  {lockMutation.isPending
+                    ? "Locking…"
+                    : saveMutation.isPending
+                      ? "Saving…"
+                      : "🔒 Lock & pass to Sales →"}
                 </button>
               )}
             </>
