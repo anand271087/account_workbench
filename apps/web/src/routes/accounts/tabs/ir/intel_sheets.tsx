@@ -612,8 +612,10 @@ function AddedCategoriesDetailGrouped({
 // 08-Jun · Compact radial gauge for the spec's "Gauge / KPI" representations
 // (Category revisit %, future similar). 0..100 input, renders a partial
 // arc + the % in the center.
+// 09-Jun · Repainted to match the Account_Analytics_DevSpec_v3 card
+// idiom — uses spec teal palette, Manrope text + IBM Plex Mono for the %.
 function RadialGauge({
-  label, pct, color = PALETTE.indigo,
+  label, pct, color = PALETTE.teal600,
 }: {
   label: string;
   pct: number;
@@ -624,9 +626,9 @@ function RadialGauge({
   const C = 2 * Math.PI * R;
   const arc = (clamped / 100) * C;
   return (
-    <div className="rounded-lg border border-beroe-card-border bg-white p-3 flex items-center gap-3">
+    <div className="font-manrope rounded-[13px] border border-analytics-line bg-analytics-card py-[14px] px-[15px] flex items-center gap-3 shadow-[0_1px_2px_rgba(10,74,84,0.04),0_4px_14px_rgba(10,74,84,0.05)] hover:shadow-[0_8px_28px_rgba(10,74,84,0.11)] transition-shadow">
       <svg width={92} height={92} viewBox="0 0 92 92" className="flex-none">
-        <circle cx={46} cy={46} r={R} stroke="#e5e7eb" strokeWidth={9} fill="none" />
+        <circle cx={46} cy={46} r={R} stroke="#dce8ea" strokeWidth={9} fill="none" />
         <circle
           cx={46}
           cy={46}
@@ -640,20 +642,20 @@ function RadialGauge({
         />
         <text
           x={46}
-          y={50}
+          y={51}
           textAnchor="middle"
-          className="font-bold"
-          style={{ fill: color, fontSize: 17 }}
+          fontFamily="'IBM Plex Mono', monospace"
+          style={{ fill: color, fontSize: 17, fontWeight: 800, letterSpacing: "-0.5px" }}
         >
           {clamped.toFixed(0)}%
         </text>
       </svg>
       <div>
-        <div className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted mb-0.5">
+        <div className="text-[13px] font-bold leading-[1.25] text-analytics-ink mb-[6px]">
           {label}
         </div>
-        <div className="text-[11px] text-text-secondary">
-          % of categories viewed more than once
+        <div className="text-[11px] text-analytics-muted font-semibold">
+          gauge · 0–100%
         </div>
       </div>
     </div>

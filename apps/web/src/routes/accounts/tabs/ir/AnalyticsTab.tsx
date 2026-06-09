@@ -93,78 +93,99 @@ export default function AnalyticsTab() {
   const active = SUB_TABS.find((t) => t.id === sub)!;
 
   return (
-    <div>
-      {/* Live banner */}
-      <div className="mb-3 flex items-center gap-3 px-3 py-2 rounded-md bg-beroe-teal/10 border border-beroe-teal/30">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-beroe-teal">
+    <div className="font-manrope bg-analytics-bg text-analytics-ink -mx-4 -my-4 px-4 py-4">
+      {/* 09-Jun · Repainted top stripe — spec topbar gradient
+          (teal-950 → teal-800), 58px tall, white text. */}
+      <div
+        className="mb-3 h-[58px] flex items-center gap-4 px-5 rounded-[10px] text-white shadow-[0_2px_12px_rgba(6,48,56,.22)]"
+        style={{
+          background: "linear-gradient(100deg, #063038, #0b5e6b)",
+        }}
+      >
+        <div className="flex items-center gap-2.5">
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-analytics-teal-300 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-analytics-teal-300" />
           </span>
-          LIVE
-        </span>
-        <div className="text-[11px] text-text-secondary flex-1">
-          Pulled from Redshift —{" "}
-          <span className="font-semibold">
+          <span className="text-[12.5px] font-extrabold tracking-[0.4px] uppercase">
+            Live
+          </span>
+        </div>
+        <div className="text-[12.5px] opacity-90 flex-1 truncate">
+          Pulled from Redshift ·{" "}
+          <span className="font-bold">
             {account.redshift_company_name ?? account.name}
-          </span>{" "}
-          · window: <span className="font-semibold">{period ?? "90d"}</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-2.5 bg-white/10 border border-white/20 rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold">
+          <span className="opacity-70 text-[10.5px] uppercase tracking-wider">
+            Window
+          </span>
+          <span>{period ?? "90d"}</span>
         </div>
       </div>
 
-      {/* Sub-tab strip + mode toggle */}
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div className="flex gap-1 flex-wrap">
-          {SUB_TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setSub(t.id)}
-              className={cn(
-                "text-[11px] px-2.5 py-1.5 rounded-md border-[1.5px] transition-colors flex items-center gap-1.5",
-                sub === t.id
-                  ? "border-beroe-teal/40 bg-beroe-teal/10 text-beroe-teal font-bold"
-                  : "border-beroe-card-border bg-white text-text-secondary font-medium hover:bg-beroe-bg/60",
-              )}
-            >
-              {t.label}
-              <span
+      {/* Spec tab bar: sticky white, horizontal scroll, 2px teal underline
+          on the active tab. */}
+      <div className="mb-3 -mx-4 px-4 bg-white border-y border-analytics-line shadow-[0_1px_3px_rgba(10,74,84,.04)]">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <div className="flex">
+            {SUB_TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setSub(t.id)}
                 className={cn(
-                  "text-[9px] px-1 rounded-full",
-                  sub === t.id ? "bg-beroe-teal/20" : "bg-beroe-bg",
+                  "flex-none flex items-center gap-1.5 px-[11px] py-[8px] cursor-pointer whitespace-nowrap",
+                  "text-[12px] font-semibold border-b-[2px] transition-colors",
+                  sub === t.id
+                    ? "text-analytics-teal-700 border-analytics-teal-700"
+                    : "text-analytics-ink-2 border-transparent hover:text-analytics-teal-700 hover:bg-analytics-teal-50",
                 )}
               >
-                {t.count}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-0.5 bg-beroe-bg rounded-md p-0.5 flex-shrink-0">
-          {(["numbers", "charts"] as SheetMode[]).map((mv) => (
-            <button
-              key={mv}
-              onClick={() => setMode(mv)}
-              className={cn(
-                "text-[11px] px-2.5 py-1 rounded font-semibold uppercase tracking-wider",
-                mode === mv
-                  ? "bg-white shadow-sm text-beroe-teal"
-                  : "text-text-muted",
-              )}
-            >
-              {mv === "numbers" ? "#" : "📊 Chart"}
-            </button>
-          ))}
+                {t.label}
+                <span
+                  className={cn(
+                    "text-[9px] font-extrabold uppercase tracking-[0.4px] px-[5px] py-[1px] rounded-[6px]",
+                    sub === t.id
+                      ? "bg-analytics-teal-100 text-analytics-teal-800"
+                      : "bg-analytics-line-2 text-analytics-muted",
+                  )}
+                >
+                  {t.count}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="flex-1" />
+          <div className="flex-none flex gap-0.5 bg-analytics-line-2 rounded-[9px] p-[2px] my-1.5">
+            {(["numbers", "charts"] as SheetMode[]).map((mv) => (
+              <button
+                key={mv}
+                onClick={() => setMode(mv)}
+                className={cn(
+                  "text-[11px] px-[10px] py-[4px] rounded-[7px] font-bold uppercase tracking-[0.4px] transition-colors",
+                  mode === mv
+                    ? "bg-white text-analytics-teal-700 shadow-sm"
+                    : "text-analytics-muted hover:text-analytics-ink",
+                )}
+              >
+                {mv === "numbers" ? "# Numbers" : "📊 Charts"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="text-[11px] text-text-muted mb-2">
-        Sheet:{" "}
-        <span className="font-semibold text-text-secondary">{active.label}</span>
-        {" — "}
-        <span className="font-semibold">{active.count} parameters</span>{" · "}
-        Mode:{" "}
-        <span className="font-semibold text-beroe-teal">
-          {mode === "numbers" ? "Numbers (compact)" : "Charts (full dashboard)"}
-        </span>
+      {/* Section header — spec `.section-row` */}
+      <div className="flex items-center gap-3 mt-[6px] mb-[13px]">
+        <h2 className="text-[12.5px] font-extrabold uppercase tracking-[0.4px] text-analytics-teal-800">
+          {active.label}
+        </h2>
+        <div className="text-[11px] font-semibold text-analytics-muted whitespace-nowrap">
+          {active.count} parameter{active.count === 1 ? "" : "s"} ·{" "}
+          {mode === "numbers" ? "Compact view" : "Charts view"}
+        </div>
+        <div className="flex-1 h-px bg-analytics-line" />
       </div>
 
       {/* 08-Jun · Single-fetch flow. The 16 bundles arrive together
@@ -257,10 +278,10 @@ function ErrorCard({ error }: { error: unknown }) {
   const status = (error as { status?: number } | null)?.status;
   return (
     <Card>
-      <div className="text-[13px] font-semibold mb-1 text-risk-red">
+      <div className="font-manrope text-[13px] font-bold mb-1" style={{ color: "#c0392b" }}>
         Couldn't load Intelligence & Reports
       </div>
-      <div className="text-[11px] text-text-secondary">
+      <div className="font-manrope text-[12px] text-analytics-ink-2">
         {status === 409
           ? "Account not mapped to redshift_company_name yet."
           : (error as { message?: string } | null)?.message ?? "Unknown error"}
@@ -277,18 +298,18 @@ function ErrorCard({ error }: { error: unknown }) {
 function SectionSkeleton() {
   return (
     <Card>
-      <div className="flex items-center gap-2 text-[11px] font-semibold text-beroe-teal mb-3">
+      <div className="font-manrope flex items-center gap-2 text-[11px] font-bold text-analytics-teal-700 mb-3">
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-beroe-teal opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-beroe-teal" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-analytics-teal-500 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-analytics-teal-500" />
         </span>
         Loading from Redshift… first load takes 5-25s, then it's cached
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-[68px] rounded-md bg-beroe-bg animate-pulse"
+            className="h-[88px] rounded-[13px] bg-analytics-line-2 animate-pulse"
           />
         ))}
       </div>
@@ -296,7 +317,7 @@ function SectionSkeleton() {
         {[0, 1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="h-3 rounded bg-beroe-bg animate-pulse"
+            className="h-3 rounded bg-analytics-line-2 animate-pulse"
             style={{ width: `${85 - i * 8}%` }}
           />
         ))}

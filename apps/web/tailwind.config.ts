@@ -14,6 +14,10 @@ const config: Config = {
       fontFamily: {
         sans: ['"DM Sans"', "system-ui", "sans-serif"],
         mono: ['"DM Mono"', "monospace"],
+        // 09-Jun · Spec-mode fonts for the Analytics dashboard
+        // (Account_Analytics_DevSpec_v3.html).
+        manrope: ['"Manrope"', "system-ui", "sans-serif"],
+        "plex-mono": ['"IBM Plex Mono"', "monospace"],
       },
       colors: {
         // Beroe brand palette — anchored to the brand book (Sept 2025).
@@ -43,6 +47,38 @@ const config: Config = {
           amber: "#F0BC41",           // Risk Amber (was #EF9637)
           red: "#CF4548",             // Risk Red   (was #FD576B)
           coral: "#F0BC41",           // alias → Risk Amber (was duplicate of #EF9637)
+        },
+        // 09-Jun · Spec palette from Account_Analytics_DevSpec_v3.html
+        // — scoped to the `analytics-*` namespace so it doesn't bleed
+        // into the global brand. Used by the Analytics charts only.
+        analytics: {
+          "teal-950": "#063038",
+          "teal-900": "#0a4a54",
+          "teal-800": "#0b5e6b",
+          "teal-700": "#0c7c8c",
+          "teal-600": "#0e8fa3",
+          "teal-500": "#129aad",
+          "teal-400": "#3bb3c2",
+          "teal-300": "#7fd0db",
+          "teal-100": "#cdeef2",
+          "teal-50":  "#e9f7f9",
+          ink:        "#0f2228",
+          "ink-2":    "#3a5158",
+          muted:      "#6a8088",
+          line:       "#dce8ea",
+          "line-2":   "#eef4f5",
+          bg:         "#f3f7f8",
+          card:       "#ffffff",
+          ok:         "#0e8fa3",
+          "ok-bg":    "#e9f7f9",
+          derived:    "#5b54c9",
+          "derived-bg":"#eeedfb",
+          offline:    "#c4811a",
+          "offline-bg":"#fbf2e2",
+          pipe:       "#7a8a91",
+          "pipe-bg":  "#eef2f3",
+          "danger":   "#c0392b",
+          "danger-bg":"#fdecec",
         },
         text: {
           primary: "#001137",         // Midnight

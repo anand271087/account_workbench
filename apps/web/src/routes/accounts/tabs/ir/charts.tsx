@@ -1,8 +1,12 @@
 // 05-Jun · Shared zero-dependency SVG chart vocab for the Intelligence
 // dashboards. Originally inlined in M30 AnalyticsTab; extracted here
 // so the new live IntelligenceTab (Phase 2) can render the same shapes
-// against /intel/all data. All colors come from the locked Beroe
-// brand palette (Indigo / Fuscia / Aqua / Bumblebee + RAG + neutrals).
+// against /intel/all data.
+//
+// 09-Jun · Repainted to match Account_Analytics_DevSpec_v3.html. Uses
+// the analytics-teal palette + Manrope (text) / IBM Plex Mono (numbers).
+// Sizing locked: card radius 13px, card padding 14px 15px, KPI val 30px
+// /800 / -1px / tabular-nums, gauge 84px, bars 84px height.
 //
 // Vocab: KpiTile, LineChart, MultiLineChart, BarChart, DonutChart,
 // SimpleTable, Card, CardTitle, NaPill (for source_unavailable KPIs).
@@ -11,33 +15,59 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 // ============================================================
-// Brand palette (locked). Use these — no off-palette colors.
+// Spec palette — Account_Analytics_DevSpec_v3.html
+// (was the locked Beroe brand mix; analytics now sits on the
+// teal-family per stakeholder design refresh).
 // ============================================================
 export const PALETTE = {
-  indigo: "#4A00F8",
-  midnight: "#001137",
-  bumblebee: "#FFE61E",
-  fuscia: "#C344C7",
-  aqua: "#35E1D4",
-  green: "#6EC457",
-  amber: "#F0BC41",
-  red: "#CF4548",
-  slate: "#64748b",
-  card: "#e4eaf6",
-  bg: "#f8f9fb",
+  // Teal scale
+  teal950: "#063038",
+  teal900: "#0a4a54",
+  teal800: "#0b5e6b",
+  teal700: "#0c7c8c",
+  teal600: "#0e8fa3",
+  teal500: "#129aad",
+  teal400: "#3bb3c2",
+  teal300: "#7fd0db",
+  teal100: "#cdeef2",
+  teal50:  "#e9f7f9",
+  // Backwards-compat aliases — many existing callers still reference
+  // these names. Re-pointed to the closest spec colour so nothing
+  // visually drifts off-palette.
+  indigo:   "#0c7c8c",  // teal-700
+  midnight: "#063038",  // teal-950
+  fuscia:   "#5b54c9",  // spec --derived (purple-blue for "computed")
+  aqua:     "#3bb3c2",  // teal-400
+  bumblebee:"#c4811a",  // spec --offline (amber-brown)
+  green:    "#0e8fa3",  // spec --ok
+  amber:    "#c4811a",  // spec --offline
+  red:      "#c0392b",  // spec --danger
+  slate:    "#6a8088",  // spec --muted
+  ink:      "#0f2228",
+  ink2:     "#3a5158",
+  muted:    "#6a8088",
+  line:     "#dce8ea",
+  line2:    "#eef4f5",
+  bg:       "#f3f7f8",
+  card:     "#ffffff",
 } as const;
 
+// Default series order for multi-colour charts (bar / split / donut)
+// — first three teal shades, then derived/offline/pipe for variety.
 export const SERIES_COLORS = [
-  PALETTE.indigo,
-  PALETTE.fuscia,
-  PALETTE.aqua,
-  PALETTE.amber,
-  PALETTE.green,
-  PALETTE.red,
+  PALETTE.teal600,
+  PALETTE.teal400,
+  PALETTE.teal700,
+  PALETTE.fuscia,     // derived
+  PALETTE.teal800,
+  PALETTE.teal300,
+  PALETTE.bumblebee,  // offline
+  PALETTE.slate,
 ];
 
 // ============================================================
-// Card primitives
+// Card — spec sizing: 13px radius, 14px 15px padding, --shadow,
+// 1px var(--line) border. Hover lifts to --shadow-lg.
 // ============================================================
 
 export function Card({
@@ -50,7 +80,10 @@ export function Card({
   return (
     <div
       className={cn(
-        "bg-white border border-beroe-card-border rounded-card p-4",
+        "font-manrope bg-analytics-card border border-analytics-line",
+        "rounded-[13px] py-[14px] px-[15px]",
+        "shadow-[0_1px_2px_rgba(10,74,84,0.04),0_4px_14px_rgba(10,74,84,0.05)]",
+        "hover:shadow-[0_8px_28px_rgba(10,74,84,0.11)] transition-shadow",
         className,
       )}
     >
@@ -60,11 +93,18 @@ export function Card({
 }
 
 export function CardTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-[13px] font-bold mb-3">{children}</div>;
+  // Spec `.ttl`: 13px / 700 / line 1.25
+  return (
+    <div className="font-manrope text-[13px] font-bold leading-[1.25] text-analytics-ink mb-[10px]">
+      {children}
+    </div>
+  );
 }
 
 // ============================================================
-// KPI tile — one big metric, optional sub-label
+// KPI tile — spec `.kpi-val` 30px/800/-1px/tabular-nums, `.kpi-sub`
+// 11px/600/muted, `.kpi-unit` 15px/700/muted. Labels above value
+// in 13px/700 (the `.ttl` style).
 // ============================================================
 
 export function KpiTile({
@@ -82,20 +122,33 @@ export function KpiTile({
 }) {
   return (
     <div
-      className="bg-white border border-beroe-card-border rounded-card p-3 flex flex-col gap-1"
-      style={accent ? { borderLeftColor: accent, borderLeftWidth: 4 } : undefined}
+      className={cn(
+        "font-manrope bg-analytics-card border border-analytics-line",
+        "rounded-[13px] py-[14px] px-[15px]",
+        "shadow-[0_1px_2px_rgba(10,74,84,0.04),0_4px_14px_rgba(10,74,84,0.05)]",
+        "hover:shadow-[0_8px_28px_rgba(10,74,84,0.11)] transition-shadow",
+        "flex flex-col gap-0",
+      )}
+      style={accent ? { borderLeftColor: accent, borderLeftWidth: 3 } : undefined}
     >
-      <div className="text-[10px] uppercase tracking-wider text-text-muted font-semibold">
+      <div className="text-[13px] font-bold leading-[1.25] text-analytics-ink mb-[10px]">
         {label}
       </div>
       {na ? (
         <NaPill reason={na.reason} />
       ) : (
-        <div className="text-[20px] font-bold text-text-strong leading-tight">
+        <div
+          className="font-plex-mono text-[30px] font-extrabold leading-none text-analytics-ink"
+          style={{ letterSpacing: "-1px", fontVariantNumeric: "tabular-nums" }}
+        >
           {value}
         </div>
       )}
-      {sub && !na && <div className="text-[11px] text-text-muted">{sub}</div>}
+      {sub && !na && (
+        <div className="text-[11px] text-analytics-muted font-semibold mt-[6px]">
+          {sub}
+        </div>
+      )}
     </div>
   );
 }
@@ -113,17 +166,17 @@ export function InfraBanner({
   secondsAgo?: number;
 }) {
   return (
-    <div className="mb-3 flex items-center gap-3 px-3 py-2 rounded-md bg-amber-50 border border-amber-300">
+    <div className="font-manrope mb-3 flex items-center gap-3 px-3 py-2 rounded-[9px] bg-analytics-offline-bg border border-analytics-offline/30">
       <span className="relative flex h-2 w-2 flex-shrink-0">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75" />
-        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-analytics-offline opacity-75" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-analytics-offline" />
       </span>
-      <div className="text-[11px] text-amber-900 flex-1">
+      <div className="text-[11px] text-analytics-offline flex-1">
         <span className="font-semibold">Redshift tunnel recovering</span>
         {" — "}
         {message}
         {typeof secondsAgo === "number" && (
-          <span className="text-amber-700"> ({secondsAgo}s ago)</span>
+          <span className="opacity-80"> ({secondsAgo}s ago)</span>
         )}
       </div>
     </div>
@@ -131,17 +184,23 @@ export function InfraBanner({
 }
 
 // ============================================================
-// NaPill — surfaces "source_unavailable: true" markers from /intel/all
+// NaPill — surfaces "source_unavailable: true" markers from /intel/all.
+// Matches spec `.badge.b-pipeline`: 9px / 800 / uppercase / pipe colour.
 // ============================================================
 
 export function NaPill({ reason }: { reason: string }) {
   return (
     <span
       title={reason}
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 self-start"
+      className={cn(
+        "font-manrope inline-flex items-center gap-1 self-start",
+        "text-[9px] font-extrabold uppercase tracking-[0.4px]",
+        "bg-analytics-pipe-bg text-analytics-pipe",
+        "px-[7px] py-[3px] rounded-[6px]",
+      )}
     >
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-      data pipeline pending
+      <span className="w-1.5 h-1.5 rounded-full bg-analytics-pipe" />
+      Pipeline
     </span>
   );
 }
@@ -162,7 +221,7 @@ function shortMonth(label: string): string {
 export function LineChart({
   labels,
   values,
-  color = PALETTE.indigo,
+  color = PALETTE.teal600,
   height = 180,
   maxWidth = 560,
 }: {
@@ -192,17 +251,17 @@ export function LineChart({
   const stride = Math.max(1, Math.ceil(labels.length / 8));
   const shortLabels = labels.map(shortMonth);
   const lastIdx = labels.length - 1;
+  const axisFont = "'IBM Plex Mono', monospace";
 
   return (
     <div style={{ maxWidth }} className="mx-auto">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full">
-        <path d={area} fill={color} opacity={0.12} />
-        <path d={path} fill="none" stroke={color} strokeWidth={2} />
+        <path d={area} fill={color} opacity={0.14} />
+        <path d={path} fill="none" stroke={color} strokeWidth={2.2} />
         {pts.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={color} />
+          <circle key={i} cx={p.x} cy={p.y} r={2.8} fill={color} />
         ))}
         {shortLabels.map((l, i) => {
-          // Always show first + last; show every stride-th in between.
           const show = i === 0 || i === lastIdx || i % stride === 0;
           if (!show) return null;
           return (
@@ -211,17 +270,18 @@ export function LineChart({
               x={padding.left + i * stepX}
               y={H - 10}
               fontSize={9}
+              fontFamily={axisFont}
               textAnchor="middle"
-              fill={PALETTE.slate}
+              fill={PALETTE.muted}
             >
               {l}
             </text>
           );
         })}
-        <text x={4} y={padding.top + 8} fontSize={9} fill={PALETTE.slate}>
+        <text x={4} y={padding.top + 8} fontSize={9} fontFamily={axisFont} fill={PALETTE.muted}>
           {max}
         </text>
-        <text x={4} y={padding.top + innerH} fontSize={9} fill={PALETTE.slate}>
+        <text x={4} y={padding.top + innerH} fontSize={9} fontFamily={axisFont} fill={PALETTE.muted}>
           0
         </text>
       </svg>
@@ -241,26 +301,40 @@ export function BarChart({
   const max = Math.max(...rows.map((r) => r.value), 1);
   if (rows.length === 0) {
     return (
-      <div className="text-[11px] text-text-muted py-4 text-center">No data</div>
+      <div className="font-manrope text-[11px] text-analytics-muted py-4 text-center">
+        No data
+      </div>
     );
   }
+  // Spec `.hbar`: 6px gap, label-row above 6px bar with teal-400→teal-600
+  // linear gradient. Values rendered in IBM Plex Mono.
   return (
-    <div className="space-y-1.5">
+    <div className="font-manrope space-y-[6px]">
       {rows.map((r, i) => {
         const pct = Math.max(2, Math.round((r.value / max) * 100));
         const color = r.color ?? SERIES_COLORS[i % SERIES_COLORS.length];
+        // Use a gradient when no explicit color was passed; flat color
+        // otherwise so series-coded charts (e.g. risk levels) stay legible.
+        const bg = r.color
+          ? color
+          : `linear-gradient(90deg, ${PALETTE.teal400}, ${PALETTE.teal600})`;
         return (
           <div key={i}>
-            <div className="flex items-center justify-between text-[11px] mb-0.5">
-              <span className="font-medium truncate pr-2" title={r.label}>
+            <div className="flex items-center justify-between text-[11px] mb-[3px]">
+              <span
+                className="font-semibold text-analytics-ink-2 truncate pr-2"
+                title={r.label}
+              >
                 {r.label}
               </span>
-              <span className="font-semibold tabular-nums">{r.value}</span>
+              <span className="font-plex-mono font-medium text-analytics-ink tabular-nums">
+                {r.value}
+              </span>
             </div>
-            <div className="h-2 bg-beroe-bg rounded-full overflow-hidden">
+            <div className="h-[6px] bg-analytics-line-2 rounded-[4px] overflow-hidden">
               <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${pct}%`, background: color }}
+                className="h-full rounded-[4px] transition-all"
+                style={{ width: `${pct}%`, background: bg }}
               />
             </div>
           </div>
@@ -283,21 +357,22 @@ export function SplitBar({
 }) {
   const total = slices.reduce((s, x) => s + x.value, 0);
   if (total === 0) {
-    return <div className="text-[11px] text-text-muted py-3 text-center">No data</div>;
+    return (
+      <div className="font-manrope text-[11px] text-analytics-muted py-3 text-center">
+        No data
+      </div>
+    );
   }
-  // Sort large-first so labels-on-segment fit visually
   const ordered = [...slices]
     .map((s, i) => ({ ...s, _i: i }))
     .sort((a, b) => b.value - a.value);
   return (
-    <div>
-      {/* Tall enough (24px) to host an inline label on wide segments */}
-      <div className="flex h-7 w-full rounded-md overflow-hidden bg-beroe-bg">
+    <div className="font-manrope">
+      <div className="flex h-7 w-full rounded-[6px] overflow-hidden bg-analytics-line-2">
         {ordered.map((sl) => {
           if (sl.value === 0) return null;
           const pct = (sl.value / total) * 100;
           const color = sl.color ?? SERIES_COLORS[sl._i % SERIES_COLORS.length];
-          // Only show inline label if segment ≥ 12% — anything less is unreadable
           const inline = pct >= 12;
           return (
             <div
@@ -315,7 +390,6 @@ export function SplitBar({
           );
         })}
       </div>
-      {/* Compact legend ONLY for tiny segments that couldn't host an inline label */}
       {ordered.some((sl) => (sl.value / total) * 100 < 12 && sl.value > 0) && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
           {ordered.map((sl) => {
@@ -328,10 +402,15 @@ export function SplitBar({
                   className="w-2 h-2 rounded-sm flex-shrink-0"
                   style={{ background: color }}
                 />
-                <span className="text-text-secondary truncate max-w-[120px]" title={sl.label}>
+                <span
+                  className="text-analytics-ink-2 truncate max-w-[120px]"
+                  title={sl.label}
+                >
                   {sl.label}
                 </span>
-                <span className="font-semibold tabular-nums">{pct.toFixed(0)}%</span>
+                <span className="font-plex-mono font-medium tabular-nums">
+                  {pct.toFixed(0)}%
+                </span>
               </span>
             );
           })}
@@ -394,19 +473,17 @@ export function DonutChart({
         <circle cx={cx} cy={cy} r={34} fill="#fff" />
         <text
           x={cx}
-          y={cy + 4}
-          fontSize={13}
+          y={cy + 5}
+          fontSize={14}
           textAnchor="middle"
-          fontWeight="bold"
-          fill={PALETTE.midnight}
+          fontWeight="800"
+          fontFamily="'IBM Plex Mono', monospace"
+          fill={PALETTE.ink}
         >
           {centerLabel ?? fmtNumCompact(total)}
         </text>
       </svg>
-      {/* Compact pill legend below the donut, wraps naturally. Drops the
-          raw count (kept implicit via the centre total) — keeps just
-          `■ Label  pct%` per slice for a much cleaner read. */}
-      <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-1 mt-2 text-[11px] w-full">
+      <div className="font-manrope flex flex-wrap justify-center gap-x-2.5 gap-y-1 mt-2 text-[11px] w-full">
         {slices.map((sl, i) => {
           if (sl.value === 0) return null;
           const color = sl.color ?? SERIES_COLORS[i % SERIES_COLORS.length];
@@ -417,10 +494,12 @@ export function DonutChart({
                 className="w-2 h-2 rounded-sm flex-shrink-0"
                 style={{ background: color }}
               />
-              <span className="text-text-secondary truncate max-w-[140px]" title={sl.label}>
+              <span className="text-analytics-ink-2 truncate max-w-[140px]" title={sl.label}>
                 {sl.label}
               </span>
-              <span className="font-semibold tabular-nums">{pct}%</span>
+              <span className="font-plex-mono font-medium tabular-nums">
+                {pct}%
+              </span>
             </span>
           );
         })}
@@ -523,19 +602,24 @@ export function ParamRow({
   definition?: string;
   value: React.ReactNode;
 }) {
+  // Spec `.metatable` rows: 12.5px, 9px 4px padding, IBM Plex Mono for
+  // the right-aligned value, bottom-border var(--line-2).
   return (
-    <div className="flex items-start gap-3 py-1.5 border-b border-beroe-card-border/40 last:border-0">
+    <div className="font-manrope flex items-start gap-3 py-[9px] px-1 border-b border-analytics-line-2 last:border-0">
       <div className="flex-1 min-w-0">
-        <div className="text-[11px] font-semibold text-text-secondary truncate">
+        <div className="text-[12.5px] font-bold text-analytics-ink truncate">
           {label}
         </div>
         {definition && (
-          <div className="text-[10px] text-text-muted truncate" title={definition}>
+          <div
+            className="text-[10.5px] text-analytics-muted truncate mt-0.5"
+            title={definition}
+          >
             {definition}
           </div>
         )}
       </div>
-      <div className="flex-shrink-0 text-[11px] font-semibold tabular-nums">
+      <div className="flex-shrink-0 font-plex-mono text-[12.5px] font-medium text-analytics-ink-2 tabular-nums">
         {value}
       </div>
     </div>
@@ -557,19 +641,21 @@ export function SimpleTable({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="text-[11px] text-text-muted py-3 text-center">{empty}</div>
+      <div className="font-manrope text-[11px] text-analytics-muted py-3 text-center">
+        {empty}
+      </div>
     );
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[11px]">
+    <div className="font-manrope overflow-x-auto">
+      <table className="w-full text-[12px] border-collapse">
         <thead>
-          <tr className="text-[10px] uppercase tracking-wider text-text-muted border-b border-beroe-card-border">
+          <tr className="text-[10px] uppercase tracking-[0.4px] text-analytics-muted border-b border-analytics-line">
             {cols.map((c) => (
               <th
                 key={c.key}
                 className={cn(
-                  "py-1.5 px-2 font-semibold",
+                  "py-[8px] px-[6px] font-bold",
                   c.numeric ? "text-right" : "text-left",
                 )}
               >
@@ -580,13 +666,15 @@ export function SimpleTable({
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="border-b border-beroe-card-border/40 last:border-0">
+            <tr key={i} className="border-b border-analytics-line-2 last:border-0">
               {cols.map((c) => (
                 <td
                   key={c.key}
                   className={cn(
-                    "py-1.5 px-2",
-                    c.numeric ? "text-right tabular-nums" : "",
+                    "py-[8px] px-[6px] text-analytics-ink-2",
+                    c.numeric
+                      ? "text-right font-plex-mono font-medium tabular-nums"
+                      : "",
                   )}
                 >
                   {r[c.key] ?? "—"}
