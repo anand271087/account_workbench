@@ -48,34 +48,37 @@ const config: Config = {
           red: "#CF4548",             // Risk Red   (was #FD576B)
           coral: "#F0BC41",           // alias → Risk Amber (was duplicate of #EF9637)
         },
-        // 09-Jun · Spec palette from Account_Analytics_DevSpec_v3.html
-        // — scoped to the `analytics-*` namespace so it doesn't bleed
-        // into the global brand. Used by the Analytics charts only.
+        // 09-Jun · DevSpec v4 palette — re-anchored on Beroe brand
+        // Indigo (#4A00F8). The `teal-*` token NAMES are kept so JSX
+        // class strings don't churn; only the underlying hex values
+        // shift. Locked CLAUDE-memory brand palette ("Indigo /
+        // Midnight / Bumblebee / Fuscia / Aqua + risk RAG + neutrals")
+        // is the source of truth — this scale slots into it.
         analytics: {
-          "teal-950": "#063038",
-          "teal-900": "#0a4a54",
-          "teal-800": "#0b5e6b",
-          "teal-700": "#0c7c8c",
-          "teal-600": "#0e8fa3",
-          "teal-500": "#129aad",
-          "teal-400": "#3bb3c2",
-          "teal-300": "#7fd0db",
-          "teal-100": "#cdeef2",
-          "teal-50":  "#e9f7f9",
-          ink:        "#0f2228",
-          "ink-2":    "#3a5158",
-          muted:      "#6a8088",
-          line:       "#dce8ea",
-          "line-2":   "#eef4f5",
-          bg:         "#f3f7f8",
+          "teal-950": "#160550",
+          "teal-900": "#210772",
+          "teal-800": "#2e0a9e",
+          "teal-700": "#3a0cc4",
+          "teal-600": "#4a00f8",   // Beroe Indigo · primary
+          "teal-500": "#6a2bff",
+          "teal-400": "#8a5bff",
+          "teal-300": "#b49bff",
+          "teal-100": "#e2dafe",
+          "teal-50":  "#f2eefe",
+          ink:        "#171430",
+          "ink-2":    "#454166",
+          muted:      "#6f6a8e",
+          line:       "#e3def0",
+          "line-2":   "#f0edf8",
+          bg:         "#f5f3fb",
           card:       "#ffffff",
-          ok:         "#0e8fa3",
-          "ok-bg":    "#e9f7f9",
-          derived:    "#5b54c9",
-          "derived-bg":"#eeedfb",
-          offline:    "#c4811a",
+          ok:         "#4a00f8",      // Indigo — primary signal
+          "ok-bg":    "#f2eefe",
+          derived:    "#0b7c70",      // teal-green — app/AI-derived
+          "derived-bg":"#e3f4f2",
+          offline:    "#c4811a",      // amber — offline/SharePoint
           "offline-bg":"#fbf2e2",
-          pipe:       "#7a8a91",
+          pipe:       "#7a8a91",      // slate — pipeline needed
           "pipe-bg":  "#eef2f3",
           "danger":   "#c0392b",
           "danger-bg":"#fdecec",

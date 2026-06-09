@@ -15,54 +15,54 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 // ============================================================
-// Spec palette — Account_Analytics_DevSpec_v3.html
-// (was the locked Beroe brand mix; analytics now sits on the
-// teal-family per stakeholder design refresh).
+// Spec palette — Account_Analytics_DevSpec_v4.html
+// Re-anchored on Beroe brand Indigo (#4A00F8). Same token names
+// as v3 ("teal*") to keep call-sites stable; values are now the
+// Beroe Indigo scale.
 // ============================================================
 export const PALETTE = {
-  // Teal scale
-  teal950: "#063038",
-  teal900: "#0a4a54",
-  teal800: "#0b5e6b",
-  teal700: "#0c7c8c",
-  teal600: "#0e8fa3",
-  teal500: "#129aad",
-  teal400: "#3bb3c2",
-  teal300: "#7fd0db",
-  teal100: "#cdeef2",
-  teal50:  "#e9f7f9",
-  // Backwards-compat aliases — many existing callers still reference
-  // these names. Re-pointed to the closest spec colour so nothing
-  // visually drifts off-palette.
-  indigo:   "#0c7c8c",  // teal-700
-  midnight: "#063038",  // teal-950
-  fuscia:   "#5b54c9",  // spec --derived (purple-blue for "computed")
-  aqua:     "#3bb3c2",  // teal-400
-  bumblebee:"#c4811a",  // spec --offline (amber-brown)
-  green:    "#0e8fa3",  // spec --ok
-  amber:    "#c4811a",  // spec --offline
-  red:      "#c0392b",  // spec --danger
-  slate:    "#6a8088",  // spec --muted
-  ink:      "#0f2228",
-  ink2:     "#3a5158",
-  muted:    "#6a8088",
-  line:     "#dce8ea",
-  line2:    "#eef4f5",
-  bg:       "#f3f7f8",
+  // Indigo scale (kept "teal*" names so existing callers don't churn).
+  teal950: "#160550",
+  teal900: "#210772",
+  teal800: "#2e0a9e",
+  teal700: "#3a0cc4",
+  teal600: "#4a00f8",   // Beroe Indigo · primary
+  teal500: "#6a2bff",
+  teal400: "#8a5bff",
+  teal300: "#b49bff",
+  teal100: "#e2dafe",
+  teal50:  "#f2eefe",
+  // Brand-locked aliases. CLAUDE memory: only Indigo / Midnight /
+  // Bumblebee / Fuscia / Aqua + risk RAG + neutrals.
+  indigo:   "#4A00F8",  // Beroe Indigo
+  midnight: "#001137",  // Beroe Midnight
+  fuscia:   "#C344C7",  // Beroe Fuscia
+  aqua:     "#35E1D4",  // Beroe Aqua
+  bumblebee:"#FFE61E",  // Beroe Bumblebee
+  green:    "#6EC457",  // Risk Green
+  amber:    "#F0BC41",  // Risk Amber
+  red:      "#CF4548",  // Risk Red
+  slate:    "#6f6a8e",  // spec --muted
+  ink:      "#171430",
+  ink2:     "#454166",
+  muted:    "#6f6a8e",
+  line:     "#e3def0",
+  line2:    "#f0edf8",
+  bg:       "#f5f3fb",
   card:     "#ffffff",
 } as const;
 
 // Default series order for multi-colour charts (bar / split / donut)
-// — first three teal shades, then derived/offline/pipe for variety.
+// — Indigo + brand secondaries. Locked palette only.
 export const SERIES_COLORS = [
-  PALETTE.teal600,
-  PALETTE.teal400,
-  PALETTE.teal700,
-  PALETTE.fuscia,     // derived
-  PALETTE.teal800,
-  PALETTE.teal300,
-  PALETTE.bumblebee,  // offline
-  PALETTE.slate,
+  PALETTE.indigo,    // Beroe Indigo (primary)
+  PALETTE.aqua,      // Beroe Aqua
+  PALETTE.fuscia,    // Beroe Fuscia
+  PALETTE.teal400,   // Indigo-light
+  PALETTE.bumblebee, // Beroe Bumblebee
+  PALETTE.teal300,   // Indigo-lighter
+  PALETTE.amber,     // Risk Amber
+  PALETTE.slate,     // Neutral
 ];
 
 // ============================================================
@@ -82,8 +82,9 @@ export function Card({
       className={cn(
         "font-manrope bg-analytics-card border border-analytics-line",
         "rounded-[13px] py-[14px] px-[15px]",
-        "shadow-[0_1px_2px_rgba(10,74,84,0.04),0_4px_14px_rgba(10,74,84,0.05)]",
-        "hover:shadow-[0_8px_28px_rgba(10,74,84,0.11)] transition-shadow",
+        // v4 spec shadow — indigo-tinted RGBA.
+        "shadow-[0_1px_2px_rgba(36,12,120,0.05),0_4px_14px_rgba(36,12,120,0.06)]",
+        "hover:shadow-[0_8px_28px_rgba(36,12,120,0.13)] transition-shadow",
         className,
       )}
     >
@@ -125,8 +126,9 @@ export function KpiTile({
       className={cn(
         "font-manrope bg-analytics-card border border-analytics-line",
         "rounded-[13px] py-[14px] px-[15px]",
-        "shadow-[0_1px_2px_rgba(10,74,84,0.04),0_4px_14px_rgba(10,74,84,0.05)]",
-        "hover:shadow-[0_8px_28px_rgba(10,74,84,0.11)] transition-shadow",
+        // v4 spec shadow — indigo-tinted (was teal-tinted in v3)
+        "shadow-[0_1px_2px_rgba(36,12,120,0.05),0_4px_14px_rgba(36,12,120,0.06)]",
+        "hover:shadow-[0_8px_28px_rgba(36,12,120,0.13)] transition-shadow",
         "flex flex-col gap-0",
       )}
       style={accent ? { borderLeftColor: accent, borderLeftWidth: 3 } : undefined}
@@ -138,7 +140,11 @@ export function KpiTile({
         <NaPill reason={na.reason} />
       ) : (
         <div
-          className="font-plex-mono text-[30px] font-extrabold leading-none text-analytics-ink"
+          // v4 spec: 30px / 800 / -1px letter-spacing / line-height 1.
+          // Font inherits Manrope from parent (NOT Plex Mono — Plex
+          // Mono is only used for .kpi-delta in v4). tabular-nums
+          // keeps numerals aligned across rows.
+          className="text-[30px] font-extrabold leading-none text-analytics-ink"
           style={{ letterSpacing: "-1px", fontVariantNumeric: "tabular-nums" }}
         >
           {value}

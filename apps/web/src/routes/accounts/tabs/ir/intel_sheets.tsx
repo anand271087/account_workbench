@@ -958,9 +958,9 @@ function RadialGauge({
   const C = 2 * Math.PI * R;
   const arc = (clamped / 100) * C;
   return (
-    <div className="font-manrope rounded-[13px] border border-analytics-line bg-analytics-card py-[14px] px-[15px] flex items-center gap-3 shadow-[0_1px_2px_rgba(10,74,84,0.04),0_4px_14px_rgba(10,74,84,0.05)] hover:shadow-[0_8px_28px_rgba(10,74,84,0.11)] transition-shadow">
+    <div className="font-manrope rounded-[13px] border border-analytics-line bg-analytics-card py-[14px] px-[15px] flex items-center gap-3 shadow-[0_1px_2px_rgba(36,12,120,0.05),0_4px_14px_rgba(36,12,120,0.06)] hover:shadow-[0_8px_28px_rgba(36,12,120,0.13)] transition-shadow">
       <svg width={92} height={92} viewBox="0 0 92 92" className="flex-none">
-        <circle cx={46} cy={46} r={R} stroke="#dce8ea" strokeWidth={9} fill="none" />
+        <circle cx={46} cy={46} r={R} stroke="#e3def0" strokeWidth={9} fill="none" />
         <circle
           cx={46}
           cy={46}

@@ -100,12 +100,13 @@ export default function AnalyticsTab() {
 
   return (
     <div className="font-manrope bg-analytics-bg text-analytics-ink -mx-4 -my-4 px-4 py-4">
-      {/* 09-Jun · Repainted top stripe — spec topbar gradient
-          (teal-950 → teal-800), 58px tall, white text. */}
+      {/* v4 · Repainted top stripe — spec topbar gradient anchored
+          on Beroe Indigo (teal-950 #160550 → teal-800 #2e0a9e),
+          58px tall, white text. Indigo-tinted shadow. */}
       <div
-        className="mb-3 h-[58px] flex items-center gap-4 px-5 rounded-[10px] text-white shadow-[0_2px_12px_rgba(6,48,56,.22)]"
+        className="mb-3 h-[58px] flex items-center gap-4 px-5 rounded-[10px] text-white shadow-[0_2px_12px_rgba(22,5,80,.28)]"
         style={{
-          background: "linear-gradient(100deg, #063038, #0b5e6b)",
+          background: "linear-gradient(100deg, #160550, #2e0a9e)",
         }}
       >
         <div className="flex items-center gap-2.5">
@@ -131,9 +132,9 @@ export default function AnalyticsTab() {
         </div>
       </div>
 
-      {/* Spec tab bar: sticky white, horizontal scroll, 2px teal underline
-          on the active tab. */}
-      <div className="mb-3 -mx-4 px-4 bg-white border-y border-analytics-line shadow-[0_1px_3px_rgba(10,74,84,.04)]">
+      {/* Spec tab bar: sticky white, horizontal scroll, 2px indigo
+          underline on the active tab. v4-tinted shadow. */}
+      <div className="mb-3 -mx-4 px-4 bg-white border-y border-analytics-line shadow-[0_1px_3px_rgba(36,12,120,.05)]">
         <div className="flex items-center gap-2 overflow-x-auto">
           <div className="flex">
             {SUB_TABS.map((t) => (
