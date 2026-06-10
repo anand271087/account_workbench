@@ -97,10 +97,14 @@ class EngagementUpdate(BaseModel):
     engagement_objective: str | None = None
     procurement_maturity: MaturityLevel | None = None
     ai_penetration: MaturityLevel | None = None
-    # Procurement spend in million USD — non-negative.
+    # 10-Jun · Semantic shift — column kept as `_musd` for back-compat but
+    # the value is now treated as raw amount in the selected currency
+    # (any positive Decimal). Upper bound dropped per stakeholder ask;
+    # accounts that report procurement spend in billions+ no longer
+    # need a workaround.
     procurement_spend_musd: Decimal | None = Field(
-        None, ge=0, le=Decimal("999999.99"),
-        description="Total procurement spend in millions of the chosen currency (≥ 0)",
+        None, ge=0,
+        description="Total procurement spend in the chosen currency (≥ 0). No upper bound.",
     )
     procurement_spend_currency: SpendCurrency | None = None
     geographies: list[str] | None = None

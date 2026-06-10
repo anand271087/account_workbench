@@ -22,6 +22,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useConfirm, useNotify } from "@/components/DialogProvider";
+import { MoneyInput } from "@/components/MoneyInput";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   fmtK,
@@ -952,11 +953,12 @@ function EditPlayModal({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <ModalField label="Value (USD)">
-            <input
-              type="number"
-              value={form.value_usd ?? ""}
-              onChange={(e) => setForm({ ...form, value_usd: e.target.value })}
+            {/* 10-Jun · Live US-comma formatting; raw value flows to backend. */}
+            <MoneyInput
+              value={form.value_usd as string | number | null}
+              onChange={(v) => setForm({ ...form, value_usd: v ?? "" })}
               className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
+              placeholder="$ 0"
             />
           </ModalField>
           <ModalField label="Owner / role">
@@ -1081,11 +1083,12 @@ function AddPlayModal({
             <label className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">
               Value ($)
             </label>
-            <input
-              type="number"
-              value={form.value_usd as string}
-              onChange={(e) => setForm({ ...form, value_usd: e.target.value })}
+            {/* 10-Jun · Live US-comma formatting via MoneyInput. */}
+            <MoneyInput
+              value={form.value_usd as string | number | null}
+              onChange={(v) => setForm({ ...form, value_usd: v ?? "" })}
               className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5 mt-0.5"
+              placeholder="$ 0"
             />
           </div>
           <div>

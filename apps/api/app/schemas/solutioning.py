@@ -79,7 +79,8 @@ class SolutioningUpdate(BaseModel):
     trial_feedback: str | None = Field(None, max_length=4000)
     value_themes: list[str] | None = None
     value_definition: str | None = Field(None, max_length=4000)
-    estimated_value_musd: Decimal | None = Field(None, ge=0, le=100000)
+    # 10-Jun · Raw-amount semantic — upper bound removed (was 100,000).
+    estimated_value_musd: Decimal | None = Field(None, ge=0)
 
     # Sales Hand-off context. sh_value_from_solutioning + sh_value_received_at
     # are deliberately NOT patchable — they're set by the lock endpoint as

@@ -31,7 +31,9 @@ class AccountEngagement(Base):
     procurement_maturity: Mapped[str | None] = mapped_column(MaturityLevel, nullable=True)
     ai_penetration: Mapped[str | None] = mapped_column(MaturityLevel, nullable=True)
 
-    procurement_spend_musd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    # 10-Jun · NUMERIC(12,4) → NUMERIC(20,2) per migration 0071 — raw $
+    # amount, no upper bound.
+    procurement_spend_musd: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     procurement_spend_currency: Mapped[str | None] = mapped_column(String, nullable=True)
     geographies: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, server_default=text("'{}'")

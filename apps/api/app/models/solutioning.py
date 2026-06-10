@@ -48,7 +48,7 @@ class AccountSolutioning(Base):
         ARRAY(String), nullable=False, server_default=text("'{}'")
     )
     value_definition: Mapped[str | None] = mapped_column(String, nullable=True)
-    estimated_value_musd: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    estimated_value_musd: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
 
     ai_extracted_from_doc: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     ai_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

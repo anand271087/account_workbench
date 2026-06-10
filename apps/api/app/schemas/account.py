@@ -79,8 +79,11 @@ class AccountCreate(BaseModel):
     account_type: str | None = Field(None, max_length=40)
     segment: str | None = Field(None, max_length=40)
 
-    current_acv: Decimal | None = Field(None, ge=0, le=Decimal("99999999.99"))
-    target_acv: Decimal | None = Field(None, ge=0, le=Decimal("99999999.99"))
+    # 10-Jun · Upper bound dropped (was 99,999,999.99 ~= $100M). Any
+    # positive Decimal accepted — accounts at billions+ ACV no longer
+    # need a workaround.
+    current_acv: Decimal | None = Field(None, ge=0)
+    target_acv: Decimal | None = Field(None, ge=0)
     contract_start: date | None = None
     contract_end: date | None = None
     renewal_date: date | None = None

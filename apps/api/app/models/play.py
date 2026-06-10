@@ -26,7 +26,8 @@ class AccountPlay(Base):
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
     value_usd: Mapped[Decimal] = mapped_column(
-        Numeric(14, 2), nullable=False, server_default=text("0")
+        # 10-Jun · NUMERIC(14,2) → NUMERIC(20,2) per migration 0071.
+        Numeric(20, 2), nullable=False, server_default=text("0")
     )
     prob: Mapped[int] = mapped_column(nullable=False, server_default=text("0"))
     when_text: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -9,6 +9,7 @@ import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useConfirm } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
 import { HelpTooltip } from "@/components/HelpTooltip";
+import { MoneyInput } from "@/components/MoneyInput";
 import { MeetingBriefEditor } from "@/components/MeetingBriefEditor";
 import { MeetingBriefPresentation } from "@/components/MeetingBriefPresentation";
 import {
@@ -469,25 +470,22 @@ export default function PreSalesTab() {
                   }
                   disabled={!form.is_editable}
                 />
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={form.procurement_spend_musd ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    // Strip a leading minus on the fly so users can't even type
-                    // negatives (server enforces ge=0 too as belt-and-braces).
-                    const cleaned = v.replace(/^-/, "");
+                {/* 10-Jun · Live US-comma formatting via MoneyInput.
+                    Raw value (no commas) flows back through onChange;
+                    backend caps were dropped in this commit so any
+                    positive amount is accepted. */}
+                <MoneyInput
+                  value={form.procurement_spend_musd}
+                  onChange={(v) =>
                     setForm({
                       ...form,
-                      procurement_spend_musd: cleaned === "" ? null : cleaned,
+                      procurement_spend_musd: v,
                       // Default currency to USD if the user enters an amount
                       // before picking a currency, so the server gets a code.
                       procurement_spend_currency:
                         form.procurement_spend_currency ?? "USD",
-                    });
-                  }}
+                    })
+                  }
                   disabled={!form.is_editable}
                   className={cn(inputCls(form.is_editable), "flex-1 min-w-0")}
                   placeholder="0"

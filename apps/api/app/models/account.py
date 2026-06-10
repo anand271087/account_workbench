@@ -49,8 +49,9 @@ class Account(Base):
     account_type: Mapped[str | None] = mapped_column(String, nullable=True)
     segment: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    current_acv: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
-    target_acv: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    # 10-Jun · Widened NUMERIC(14,2) → NUMERIC(20,2) per migration 0071.
+    current_acv: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
+    target_acv: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
 
     contract_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     contract_end: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -73,7 +74,7 @@ class Account(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     gate_signed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    gate_contract_acv: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    gate_contract_acv: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     gate_contract_term: Mapped[str | None] = mapped_column(String, nullable=True)
     gate_renewal_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     gate_bvd_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
