@@ -225,6 +225,14 @@ function stagesFor(cat: CSGoalCategory): string[] {
 }
 
 const STAGE_LBL: Record<string, string> = {
+  // 10-Jun · Stakeholder-requested 4-stage universal pipeline for the
+  // post-lock initiative tracker.
+  identification: "Identification",
+  pipeline: "Pipeline",
+  in_progress: "In Progress",
+  delivered: "Delivered",
+  // Legacy category-aware values — kept so existing rows display
+  // correctly until the CSM saves them under the new vocabulary.
   identified: "Identified",
   committed: "Committed",
   implemented: "Implemented",
@@ -232,35 +240,48 @@ const STAGE_LBL: Record<string, string> = {
   deployed: "Deployed",
   evidenced: "Evidenced",
   baselined: "Baselined",
-  in_progress: "In Progress",
   achieved: "Achieved",
   activated: "Activated",
   growing: "Growing",
   embedded: "Embedded",
   baseline: "Baseline",
-  delivered: "Delivered",
   deferred: "Deferred",
   not_pursued: "Not Pursued",
+  not_started: "Identification",
 };
 
 const STAGE_COLOR: Record<string, string> = {
+  // 10-Jun · 4-stage palette (Identification = neutral, Pipeline =
+  // amber, In Progress = amber-strong, Delivered = green).
+  identification: BRAND.t3,
+  pipeline: BRAND.amber,
+  in_progress: BRAND.amber,
+  delivered: BRAND.green,
+  // Legacy
   identified: BRAND.t3,
   baselined: BRAND.t3,
   activated: BRAND.t3,
   baseline: BRAND.t3,
   assessed: BRAND.t3,
   committed: BRAND.amber,
-  in_progress: BRAND.amber,
   deployed: BRAND.amber,
   growing: BRAND.amber,
   implemented: BRAND.green,
   achieved: BRAND.green,
   evidenced: BRAND.green,
   embedded: BRAND.green,
-  delivered: BRAND.green,
   deferred: BRAND.t3,
   not_pursued: BRAND.red,
+  not_started: BRAND.t3,
 };
+
+// 10-Jun · The 4 universal post-lock stages, in order.
+const STAGES_4: readonly ["identification", "pipeline", "in_progress", "delivered"] = [
+  "identification",
+  "pipeline",
+  "in_progress",
+  "delivered",
+];
 
 // ---------------------------------------------------------------------------
 // Category metadata (icons)
@@ -377,14 +398,20 @@ interface ProtoInit {
   targetContribution: number;
   delivered: number;
   updatedAt: string;
-  // 09-Jun · G6 — value_flow_map Stage 9 gap-pill:
-  // "evidenceConfirmed field missing — every $ today is unverified,
-  // disputable at renewal." Persisted on Initiative.value_fields
-  // jsonb (extra="allow" on the backend Pydantic model — no migration
-  // needed). evidenceUrl is a free-text link the CSM pastes once the
-  // proof artefact is uploaded.
+  // 09-Jun · G6 — value_flow_map Stage 9 gap-pill.
   evidenceConfirmed: boolean;
   evidenceUrl: string;
+  // 10-Jun · Stakeholder ask — 4-stage universal pipeline + new
+  // Notes + % completion columns. `targetText` / `deliveredText` are
+  // the raw strings the CSM typed (no $ prefix) so the column can
+  // hold units / % / counts in addition to currency. Numeric
+  // `targetContribution` / `delivered` stay derived (via parseUsdNum)
+  // for the goal-vs-initiative target-delta math.
+  status: "identification" | "pipeline" | "in_progress" | "delivered";
+  notes: string | null;
+  completionPct: number | null;
+  targetText: string;
+  deliveredText: string;
 }
 function parseUsdNum(s: string | null | undefined): number {
   if (!s) return 0;
@@ -397,6 +424,18 @@ function parseUsdNum(s: string | null | undefined): number {
 }
 function readInit(it: Initiative, idx: number): ProtoInit {
   const vf = (it.value_fields ?? {}) as Record<string, unknown>;
+  // 10-Jun · Pull the 4-stage `status` from the backend Initiative if
+  // it's set to one of the new values; otherwise default to
+  // identification (legacy `not_started` rows surface here too).
+  const rawStatus = it.status as string | undefined;
+  const status: ProtoInit["status"] =
+    rawStatus === "pipeline" ||
+    rawStatus === "in_progress" ||
+    rawStatus === "delivered"
+      ? rawStatus
+      : "identification";
+  const targetText = (it.value_target ?? "").replace(/^\$/, "").trim();
+  const deliveredText = (it.value_delivered ?? "").replace(/^\$/, "").trim();
   return {
     id: (vf.id as string) ?? `i_${idx}`,
     name: it.name,
@@ -410,20 +449,38 @@ function readInit(it: Initiative, idx: number): ProtoInit {
       (vf.updatedAt as string) ?? new Date().toISOString().slice(0, 10),
     evidenceConfirmed: vf.evidenceConfirmed === true,
     evidenceUrl: typeof vf.evidenceUrl === "string" ? vf.evidenceUrl : "",
+    status,
+    notes: it.notes ?? null,
+    completionPct:
+      typeof it.completion_pct === "number" ? it.completion_pct : null,
+    targetText,
+    deliveredText,
   };
 }
 function writeInit(p: ProtoInit): Initiative {
   return {
     name: p.name,
-    status:
-      p.delivered >= p.targetContribution && p.targetContribution > 0
-        ? "delivered"
-        : p.delivered > 0
-          ? "in_progress"
-          : "not_started",
+    // 10-Jun · Status now comes from the explicit 4-stage selector,
+    // not derived from delivered/target.
+    status: p.status,
     value_stage: p.stage,
-    value_target: `$${p.targetContribution}`,
-    value_delivered: `$${p.delivered}`,
+    // 10-Jun · Save raw target/delivered text without the $ prefix
+    // so the column can hold any unit. Fall back to the numeric
+    // value (for back-compat with rows that still type via NumField).
+    value_target:
+      p.targetText && p.targetText.length > 0
+        ? p.targetText
+        : p.targetContribution
+          ? String(p.targetContribution)
+          : null,
+    value_delivered:
+      p.deliveredText && p.deliveredText.length > 0
+        ? p.deliveredText
+        : p.delivered
+          ? String(p.delivered)
+          : null,
+    notes: p.notes,
+    completion_pct: p.completionPct,
     client_acknowledged: "pending",
     value_fields: {
       id: p.id,
@@ -2789,7 +2846,9 @@ function InitiativeRow({
     <div
       className="grid items-center gap-2.5 p-2.5 rounded-card mb-1.5"
       style={{
-        gridTemplateColumns: "36px 1fr 110px 130px 90px 60px",
+        // 10-Jun · 7-column layout — icon · name · stage · target/delivered
+        // · % completion · notes · actions.
+        gridTemplateColumns: "36px 1fr 110px 140px 80px 1fr 60px",
         background: "#fff",
         border: `1px solid ${BRAND.cardBorder}`,
       }}
@@ -2834,28 +2893,25 @@ function InitiativeRow({
           </div>
         )}
       </div>
+      {/* 10-Jun · Stage column now shows the 4-stage universal pipeline. */}
       <span
         className="text-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
         style={{
-          background: `${STAGE_COLOR[init.stage] ?? BRAND.t3}15`,
-          color: STAGE_COLOR[init.stage] ?? BRAND.t3,
+          background: `${STAGE_COLOR[init.status] ?? BRAND.t3}15`,
+          color: STAGE_COLOR[init.status] ?? BRAND.t3,
         }}
       >
-        {STAGE_LBL[init.stage] ?? init.stage}
+        {STAGE_LBL[init.status] ?? init.status}
       </span>
+      {/* 10-Jun · Target / Delivered — raw text, no $ prefix. */}
       <div
         className="text-right text-[11px]"
         style={{ color: BRAND.t2 }}
       >
-        <b style={{ color: BRAND.t1 }}>{fmtUsd(init.delivered)}</b> /{" "}
-        {fmtUsd(init.targetContribution)}
+        <b style={{ color: BRAND.t1 }}>{init.deliveredText || "—"}</b>
+        <span style={{ color: BRAND.t3 }}> / {init.targetText || "—"}</span>
         <br />
-        <span style={{ fontSize: 9, color: BRAND.t3 }}>
-          delivered of target
-        </span>
-        {/* 09-Jun · G6 — Evidence confirmation badge. Confirmed = teal
-            ✓, unconfirmed = amber "?". Mirrors the spec's "$ unverified
-            disputable at renewal" framing. */}
+        <span style={{ fontSize: 9, color: BRAND.t3 }}>delivered / target</span>
         {init.delivered > 0 && (
           <div className="flex items-center justify-end gap-1 mt-0.5">
             {init.evidenceConfirmed ? (
@@ -2878,11 +2934,23 @@ function InitiativeRow({
           </div>
         )}
       </div>
+      {/* 10-Jun · % completion (0–100). */}
       <div
-        className="text-right text-[10px]"
-        style={{ color: BRAND.t3 }}
+        className="text-center text-[11px] font-bold"
+        style={{ color: BRAND.t1 }}
       >
-        {fd(init.updatedAt)}
+        {init.completionPct != null ? `${init.completionPct}%` : "—"}
+        <div style={{ fontSize: 9, fontWeight: 500, color: BRAND.t3 }}>
+          completion
+        </div>
+      </div>
+      {/* 10-Jun · Notes preview (1-line truncated). Hover via title for full text. */}
+      <div
+        className="text-left text-[10.5px] truncate"
+        style={{ color: BRAND.t2 }}
+        title={init.notes ?? undefined}
+      >
+        {init.notes ? init.notes : <span style={{ color: BRAND.t3 }}>—</span>}
       </div>
       <div className="flex gap-1 justify-end">
         <button
@@ -2918,17 +2986,19 @@ function InitiativeRow({
 
 function InitiativeEditRow({
   init,
-  cat,
+  cat: _cat,
   onClose,
   onSave,
 }: {
   init: ProtoInit;
+  // 10-Jun · `cat` no longer drives stage options (4-stage universal
+  // pipeline replaced the category-aware list). Kept on the signature
+  // so existing callers don't break.
   cat: CSGoalCategory;
   onClose: () => void;
   onSave: (next: ProtoInit) => void;
 }) {
   const [draft, setDraft] = useState<ProtoInit>(init);
-  const stages = stagesFor(cat);
 
   function commit<K extends keyof ProtoInit>(k: K, v: ProtoInit[K]) {
     setDraft({ ...draft, [k]: v });
@@ -2939,11 +3009,10 @@ function InitiativeEditRow({
       className="rounded-card p-3 mb-1.5"
       style={{ background: "#fafbff", border: `1.5px solid ${BRAND.indigo}40` }}
     >
+      {/* 10-Jun · Row 1 — name + type + 4-stage select. */}
       <div
-        className="grid gap-2 items-end"
-        style={{
-          gridTemplateColumns: "2fr 1.4fr 1.2fr 1fr 1fr auto",
-        }}
+        className="grid gap-2 items-end mb-2"
+        style={{ gridTemplateColumns: "2fr 1.4fr 1.2fr" }}
       >
         <Field
           label="Initiative"
@@ -2962,20 +3031,43 @@ function InitiativeEditRow({
         />
         <SelectField
           label="Stage"
-          value={draft.stage}
-          options={stages}
+          value={draft.status}
+          options={STAGES_4 as unknown as string[]}
           render={(s) => STAGE_LBL[s] ?? s}
-          onChange={(v) => commit("stage", v)}
+          onChange={(v) =>
+            commit("status", v as ProtoInit["status"])
+          }
+        />
+      </div>
+      {/* 10-Jun · Row 2 — Target / Delivered (text, no $) + % completion. */}
+      <div
+        className="grid gap-2 items-end mb-2"
+        style={{ gridTemplateColumns: "1fr 1fr 1fr auto" }}
+      >
+        <Field
+          label="Target"
+          value={draft.targetText}
+          onChange={(v) => {
+            const num = parseUsdNum(v);
+            setDraft({ ...draft, targetText: v, targetContribution: num });
+          }}
+          placeholder='e.g. 1M · "40 → 25" · "80%"'
+        />
+        <Field
+          label="Delivered"
+          value={draft.deliveredText}
+          onChange={(v) => {
+            const num = parseUsdNum(v);
+            setDraft({ ...draft, deliveredText: v, delivered: num });
+          }}
+          placeholder="Same unit as target"
         />
         <NumField
-          label="Target $"
-          value={draft.targetContribution}
-          onChange={(v) => commit("targetContribution", v)}
-        />
-        <NumField
-          label="Delivered $"
-          value={draft.delivered}
-          onChange={(v) => commit("delivered", v)}
+          label="% completion"
+          value={draft.completionPct ?? 0}
+          onChange={(v) =>
+            commit("completionPct", Math.max(0, Math.min(100, v)))
+          }
         />
         <button
           type="button"
@@ -2990,6 +3082,26 @@ function InitiativeEditRow({
         >
           Done
         </button>
+      </div>
+      {/* 10-Jun · Notes — free-form, 2-line textarea. */}
+      <div className="mb-1">
+        <label
+          className="text-[10px] font-semibold uppercase tracking-wider"
+          style={{ color: BRAND.t3 }}
+        >
+          Notes
+        </label>
+        <textarea
+          rows={2}
+          maxLength={4000}
+          value={draft.notes ?? ""}
+          onChange={(e) =>
+            commit("notes", e.target.value || null)
+          }
+          placeholder="Internal notes for this initiative"
+          className="w-full text-[11px] px-2 py-1 rounded-card border bg-white"
+          style={{ borderColor: BRAND.cardBorder, color: BRAND.t1 }}
+        />
       </div>
       {/* 09-Jun · G6 — Evidence confirmation row. CSM ticks the box
           when the delivered $ is backed by an artefact (report, email,
@@ -3043,7 +3155,7 @@ function AddInitiativeForm({
 }) {
   const [open, setOpen] = useState(false);
   const stages = stagesFor(cat);
-  const [draft, setDraft] = useState<ProtoInit>({
+  const blankDraft = (): ProtoInit => ({
     id: "",
     name: "",
     type: INIT_TYPES[0].label,
@@ -3055,7 +3167,14 @@ function AddInitiativeForm({
     updatedAt: "",
     evidenceConfirmed: false,
     evidenceUrl: "",
+    // 10-Jun · Defaults for the 4-stage + notes + % completion columns.
+    status: "identification",
+    notes: null,
+    completionPct: null,
+    targetText: "",
+    deliveredText: "",
   });
+  const [draft, setDraft] = useState<ProtoInit>(blankDraft);
 
   if (!open) {
     return (
@@ -3106,15 +3225,22 @@ function AddInitiativeForm({
         />
         <SelectField
           label="Stage"
-          value={draft.stage}
-          options={stages}
+          value={draft.status}
+          options={STAGES_4 as unknown as string[]}
           render={(s) => STAGE_LBL[s] ?? s}
-          onChange={(v) => setDraft({ ...draft, stage: v })}
+          onChange={(v) =>
+            setDraft({ ...draft, status: v as ProtoInit["status"] })
+          }
         />
-        <NumField
-          label="Target $"
-          value={draft.targetContribution}
-          onChange={(v) => setDraft({ ...draft, targetContribution: v })}
+        {/* 10-Jun · Target — text input (no $), value can be any unit. */}
+        <Field
+          label="Target"
+          value={draft.targetText}
+          onChange={(v) => {
+            const num = parseUsdNum(v);
+            setDraft({ ...draft, targetText: v, targetContribution: num });
+          }}
+          placeholder='e.g. 1M · "40 → 25" · "80%"'
         />
         <button
           type="button"
@@ -3126,19 +3252,7 @@ function AddInitiativeForm({
               updatedAt: new Date().toISOString().slice(0, 10),
             });
             setOpen(false);
-            setDraft({
-              id: "",
-              name: "",
-              type: INIT_TYPES[0].label,
-              module: INIT_TYPES[0].module,
-              owner: "",
-              stage: stages[0],
-              targetContribution: 0,
-              delivered: 0,
-              updatedAt: "",
-              evidenceConfirmed: false,
-              evidenceUrl: "",
-            });
+            setDraft(blankDraft());
           }}
           disabled={!draft.name.trim()}
           className="text-[11.5px] font-semibold px-3 py-1.5 rounded-card text-white disabled:opacity-40"
