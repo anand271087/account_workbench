@@ -176,6 +176,19 @@ export default function ValueTrackingTabV2() {
   // Portfolio rollup math — pool every initiative across every frozen goal.
   const allInits = frozenGoals.flatMap((g) => g.initiatives);
   const portfolioPct = avg(allInits.map(effectivePct));
+  // 10-Jun · Touchpoint roll-up is the SUM of per-initiative counts
+  // (stakeholder preference — not de-duplicated). One activity tagged
+  // to N initiatives counts as N touchpoints in the total.
+  const portfolioTpCount = frozenGoals.reduce(
+    (n, g) =>
+      n +
+      g.initiatives.reduce(
+        (m, it, idx) =>
+          m + (touchpointsByInit.get(initIdFor(it, idx)) ?? []).length,
+        0,
+      ),
+    0,
+  );
 
   return (
     <div className="space-y-3">
@@ -183,6 +196,7 @@ export default function ValueTrackingTabV2() {
         initCount={allInits.length}
         overallPct={portfolioPct}
         goalCount={frozenGoals.length}
+        touchpointCount={portfolioTpCount}
       />
 
       {/* 10-Jun · Per-goal cards — one per frozen goal, average % of that
@@ -206,10 +220,12 @@ function PortfolioRollup({
   initCount,
   overallPct,
   goalCount,
+  touchpointCount,
 }: {
   initCount: number;
   overallPct: number;
   goalCount: number;
+  touchpointCount: number;
 }) {
   return (
     <div
@@ -226,7 +242,8 @@ function PortfolioRollup({
           </div>
           <div className="text-[10.5px]" style={{ color: BRAND.t3 }}>
             {goalCount} frozen goal{goalCount === 1 ? "" : "s"} ·{" "}
-            {initCount} active initiative{initCount === 1 ? "" : "s"}
+            {initCount} active initiative{initCount === 1 ? "" : "s"} ·{" "}
+            {touchpointCount} touchpoint{touchpointCount === 1 ? "" : "s"}
           </div>
         </div>
         <div
@@ -237,7 +254,7 @@ function PortfolioRollup({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
         <Tile
           label="Active initiatives"
           value={String(initCount)}
@@ -248,6 +265,14 @@ function PortfolioRollup({
           value={`${overallPct}%`}
           accent={BRAND.green}
           progress={overallPct}
+        />
+        {/* 10-Jun · Total touchpoints — sum of per-initiative counts
+            across every frozen goal. Not de-duplicated; activity tagged
+            to N initiatives counts as N touchpoints. */}
+        <Tile
+          label="Touchpoints"
+          value={String(touchpointCount)}
+          accent={BRAND.fuscia}
         />
       </div>
     </div>
@@ -320,8 +345,10 @@ function GoalCard({
 
   const inits = goal.initiatives;
   const goalPct = avg(inits.map(effectivePct));
+  // Sum-of-per-initiative touchpoint counts (matches the portfolio
+  // rollup math — not deduplicated across initiatives).
   const tpCount = inits.reduce(
-    (n, it) => n + (touchpointsByInit.get(initIdFor(it)) ?? []).length,
+    (n, it, idx) => n + (touchpointsByInit.get(initIdFor(it, idx)) ?? []).length,
     0,
   );
 
@@ -369,8 +396,8 @@ function GoalCard({
           </div>
         </div>
 
-        {/* Per-goal % completion + bar */}
-        <div className="w-[220px] shrink-0">
+        {/* Per-goal % completion + bar + touchpoint pill */}
+        <div className="w-[260px] shrink-0">
           <div className="flex justify-between text-[10.5px] mb-1">
             <span style={{ color: BRAND.t3 }}>Completion</span>
             <b style={{ color: BRAND.t1 }}>{goalPct}%</b>
@@ -390,6 +417,17 @@ function GoalCard({
                     : BRAND.red,
               }}
             />
+          </div>
+          {/* 10-Jun · Touchpoint count adjacent to the bar — same
+              sum-of-counts math as the portfolio rollup. */}
+          <div className="flex justify-end mt-1">
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+              style={{ background: "#f5e0f6", color: "#8a1a90" }}
+              title="Sum of touchpoints across this goal's initiatives"
+            >
+              💬 {tpCount} touchpoint{tpCount === 1 ? "" : "s"}
+            </span>
           </div>
         </div>
 
