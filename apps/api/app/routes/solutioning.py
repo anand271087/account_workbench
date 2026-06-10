@@ -270,6 +270,26 @@ async def lock_solutioning(
             "Cannot lock without a value definition — fill it before passing to Sales.",
         )
 
+    # 10-Jun · "Goals = Success Metrics" — Solutioning lock additionally
+    # requires ≥ 1 active (non-deleted) Goal so the contract Sales
+    # receives has a measurable success target. The frontend catches
+    # this 422 and opens an inline Quick-Add Goal modal so the CSM
+    # never has to leave Solutioning.
+    from app.models.cs_goal import CSGoal
+    from sqlalchemy import func
+    goals_count = (
+        await db.execute(
+            select(func.count(CSGoal.id))
+            .where(CSGoal.account_id == account_id)
+            .where(CSGoal.deleted_at.is_(None))
+        )
+    ).scalar_one()
+    if not goals_count:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Add at least one Success Metric (Goal) before locking.",
+        )
+
     now = datetime.now(timezone.utc)
     row.locked_at = now
     row.locked_by = user.id

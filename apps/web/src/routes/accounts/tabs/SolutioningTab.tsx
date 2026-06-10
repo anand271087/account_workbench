@@ -8,6 +8,9 @@ import { HelpTooltip } from "@/components/HelpTooltip";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { KindUploadCard } from "@/components/KindUploadCard";
+import { VpdExtractionReview } from "@/components/VpdExtractionReview";
+import type { CSGoalCategory } from "@/types/cs_goal";
+import type { CsGoalsExtractionResult } from "@/types/cs_goals_extraction";
 import {
   EXTRACTION_APPLIED_EVENT,
   consumeSolutioningSlice,
@@ -124,6 +127,10 @@ export default function SolutioningTab() {
   // Sales Hand-off lock — separate POST so the UI can render a clear
   // "before/after locked" state independent of the regular save flow.
   const [lockError, setLockError] = useState<string | null>(null);
+  // 10-Jun · Quick-Add Success Metric modal — opens when the lock POST
+  // returns 422 because the account has zero goals. CSM types one,
+  // saves it, and clicks Lock again without leaving Solutioning.
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const lockMutation = useMutation({
     mutationFn: () =>
       api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/lock`),
@@ -148,7 +155,16 @@ export default function SolutioningTab() {
       setLockError(null);
       void res;
     },
-    onError: (e: ApiError) => setLockError(e.message),
+    onError: (e: ApiError) => {
+      setLockError(e.message);
+      // 10-Jun · Detect the "needs ≥1 Success Metric" 422 and open
+      // the inline Quick-Add modal. The matcher is the error string
+      // (server sends a stable phrase) — any other 422 just renders
+      // through the existing lockError banner.
+      if (e.status === 422 && /Success Metric/i.test(e.message)) {
+        setQuickAddOpen(true);
+      }
+    },
   });
   const unlockMutation = useMutation({
     mutationFn: () =>
@@ -514,6 +530,18 @@ export default function SolutioningTab() {
           {lockError && (
             <div className="mt-2 text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-lg px-2 py-1">
               {lockError}
+              {/* 10-Jun · If the 422 was about missing Success Metric,
+                  surface a one-click affordance to reopen the Quick-Add
+                  modal in case the user dismissed it. */}
+              {/Success Metric/i.test(lockError) && (
+                <button
+                  type="button"
+                  onClick={() => setQuickAddOpen(true)}
+                  className="ml-2 underline font-bold"
+                >
+                  Add one now →
+                </button>
+              )}
             </div>
           )}
         </Section>
@@ -521,6 +549,25 @@ export default function SolutioningTab() {
         {/* 28-May bug 28-07 — "How this works" explainer card removed
             per stakeholder feedback. */}
       </div>
+
+      {/* 10-Jun · Quick-Add Success Metric modal — see QuickAddGoalModal
+          definition at the bottom of this file. Opens on lock 422 OR
+          via the "Add one now" link above. */}
+      {quickAddOpen && (
+        <QuickAddGoalModal
+          accountId={account.id}
+          onClose={() => setQuickAddOpen(false)}
+          onCreated={() => {
+            // Goals query invalidates → Goal Alignment + any goal-count
+            // dependent surfaces stay fresh.
+            qc.invalidateQueries({ queryKey: ["cs-goals", account.id] });
+            setQuickAddOpen(false);
+            // Auto-retry the lock so the CSM doesn't have to click again.
+            setLockError(null);
+            lockMutation.mutate();
+          }}
+        />
+      )}
 
       {form.is_editable && (
         <div
@@ -1185,4 +1232,241 @@ function formatRelative(iso: string): string {
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
   if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d ago`;
   return new Date(iso).toLocaleDateString();
+}
+
+// 10-Jun · Quick-Add Success Metric (Goal) modal. Triggered when the
+// Solutioning "Lock and pass to Sales" returns 422 because the account
+// has zero goals. Posts to the existing /accounts/:id/cs-goals endpoint
+// so the new row shows up on Goal Alignment too. After save, the lock
+// auto-retries.
+//
+// If the most-recent VPD has unpromoted candidate goals
+// (`doc.cs_goals_extracted.goals` non-empty), a banner inside the
+// modal links to the full VPD review modal so the CSM can promote
+// them as a batch instead of typing one.
+
+const QUICK_ADD_CATEGORIES: { value: CSGoalCategory; label: string }[] = [
+  { value: "cost_savings", label: "Cost savings" },
+  { value: "risk_mitigation", label: "Risk mitigation" },
+  { value: "adoption", label: "Adoption" },
+  { value: "base_rationalization", label: "Base rationalization" },
+  { value: "other", label: "Other" },
+];
+
+function QuickAddGoalModal({
+  accountId,
+  onClose,
+  onCreated,
+}: {
+  accountId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<CSGoalCategory>("cost_savings");
+  const [targetValue, setTargetValue] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  // 10-Jun · Look up the latest VPD that still has unpromoted
+  // candidate goals. The endpoint returns one row per document; we
+  // filter client-side to the newest VPD with extracted goals.
+  const docsQ = useQuery<{ items: VpdDoc[] }>({
+    queryKey: ["docs", accountId, "vpd"],
+    queryFn: () =>
+      api.get<{ items: VpdDoc[] }>(
+        `/api/v1/accounts/${accountId}/documents?kind=vpd`,
+      ),
+    staleTime: 60_000,
+  });
+  const candidateDoc = useMemo(() => {
+    const items = docsQ.data?.items ?? [];
+    return items.find(
+      (d) =>
+        d.cs_goals_extracted &&
+        Array.isArray((d.cs_goals_extracted as { goals?: unknown[] }).goals) &&
+        ((d.cs_goals_extracted as { goals: unknown[] }).goals.length ?? 0) > 0,
+    );
+  }, [docsQ.data]);
+
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.post(`/api/v1/accounts/${accountId}/cs-goals`, {
+        title: title.trim(),
+        category,
+        target_value: targetValue.trim() || null,
+        target_date: targetDate || null,
+      }),
+    onSuccess: () => onCreated(),
+    onError: (e: ApiError) => setErr(e.message),
+  });
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-12 pb-8 overflow-y-auto"
+        onClick={onClose}
+      >
+        <div
+          className="bg-white rounded-lg shadow-xl w-[min(560px,95vw)]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-4 py-3 border-b border-beroe-card-border flex items-center justify-between">
+            <div>
+              <div className="text-[14px] font-bold">
+                Add a Success Metric
+              </div>
+              <div className="text-[11px] text-text-muted">
+                Solutioning can lock once at least one is on the account.
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-text-muted hover:text-text-primary text-lg leading-none px-1"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            {/* VPD candidates banner — only when an unpromoted set exists. */}
+            {candidateDoc && (
+              <div
+                className="rounded-md border border-beroe-purple/30 bg-beroe-purple/10 px-3 py-2 flex items-center justify-between gap-2"
+              >
+                <div className="text-[11.5px] text-text-primary">
+                  💡{" "}
+                  <b>
+                    {((candidateDoc.cs_goals_extracted as {
+                      goals: unknown[];
+                    }).goals.length) ?? 0}{" "}
+                    candidate goal
+                    {((candidateDoc.cs_goals_extracted as {
+                      goals: unknown[];
+                    }).goals.length ?? 0) === 1
+                      ? ""
+                      : "s"}
+                  </b>{" "}
+                  available from your latest VPD.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReviewOpen(true)}
+                  className="text-[11px] font-bold px-2 py-1 rounded-md bg-beroe-purple text-white hover:opacity-90 shrink-0"
+                >
+                  Review and add
+                </button>
+              </div>
+            )}
+
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+                Title
+              </label>
+              <input
+                type="text"
+                maxLength={200}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Save $5M in cocoa procurement for FY26"
+                className="w-full text-[12px] mt-0.5 px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue outline-none"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+                  Category
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) =>
+                    setCategory(e.target.value as CSGoalCategory)
+                  }
+                  className="w-full text-[12px] mt-0.5 px-2 py-1.5 rounded-md border border-beroe-card-border bg-white focus:border-beroe-blue outline-none"
+                >
+                  {QUICK_ADD_CATEGORIES.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+                  Target value
+                </label>
+                <input
+                  type="text"
+                  maxLength={200}
+                  value={targetValue}
+                  onChange={(e) => setTargetValue(e.target.value)}
+                  placeholder='e.g. 5M · "80%"'
+                  className="w-full text-[12px] mt-0.5 px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-text-muted">
+                  Target date
+                </label>
+                <input
+                  type="date"
+                  value={targetDate}
+                  onChange={(e) => setTargetDate(e.target.value)}
+                  className="w-full text-[12px] mt-0.5 px-2 py-1.5 rounded-md border border-beroe-card-border focus:border-beroe-blue outline-none"
+                />
+              </div>
+            </div>
+            {err && (
+              <div className="text-[11px] text-beroe-red bg-beroe-red/10 border border-beroe-red/30 rounded-md px-2 py-1">
+                {err}
+              </div>
+            )}
+          </div>
+          <div className="px-4 py-2.5 border-t border-beroe-card-border flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[12px] font-semibold rounded-md border border-beroe-card-border px-3 py-1.5 hover:bg-beroe-bg/40"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!title.trim() || save.isPending}
+              onClick={() => save.mutate()}
+              className="text-[12px] font-bold rounded-md px-3 py-1.5 bg-beroe-blue text-white hover:opacity-90 disabled:opacity-40"
+            >
+              {save.isPending ? "Adding…" : "Add Success Metric"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Embedded VPD review modal — opens on top of this one when the
+          banner button is clicked. Goals tab only (Success Metrics tab
+          was removed on 10-Jun). */}
+      {reviewOpen && candidateDoc && (
+        <VpdExtractionReview
+          accountId={accountId}
+          documentName={candidateDoc.file_name ?? undefined}
+          goals={
+            candidateDoc.cs_goals_extracted as unknown as CsGoalsExtractionResult
+          }
+          onClose={() => {
+            setReviewOpen(false);
+            // After the review modal closes, refresh goals + close the
+            // quick-add modal so the lock retry fires.
+            onCreated();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+interface VpdDoc {
+  id: string;
+  file_name: string | null;
+  cs_goals_extracted: unknown;
 }
