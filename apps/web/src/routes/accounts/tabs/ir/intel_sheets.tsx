@@ -127,34 +127,22 @@ function barRows(items: LabelCount[]): Array<{ label: string; value: number; col
 // metadata card. Mirrors the prototype HTML the stakeholder is
 // comparing against.
 type KpiSource = "redshift" | "app" | "offline";
-const SOURCE_LABEL: Record<KpiSource, string> = {
-  redshift: "In Redshift",
-  app: "App layer",
-  offline: "Offline",
-};
-const SOURCE_TONE: Record<KpiSource, { bg: string; fg: string }> = {
-  redshift: { bg: "#dcfce7", fg: "#166534" },
-  app: { bg: "#fef3c7", fg: "#92400e" },
-  offline: { bg: "#f1f5f9", fg: "#475569" },
-};
+// 10-Jun · Per-chart source badges hidden by stakeholder request — the
+// SOURCE_LABEL / SOURCE_TONE maps are no longer rendered. Kept the
+// KpiSource union so existing prop types still typecheck.
 
-function SourcePill({ source }: { source: KpiSource }) {
-  const t = SOURCE_TONE[source];
-  return (
-    <span
-      className="inline-block text-[8.5px] font-extrabold uppercase tracking-[0.4px] px-1.5 py-[1.5px] rounded-[5px]"
-      style={{ background: t.bg, color: t.fg }}
-    >
-      {SOURCE_LABEL[source]}
-    </span>
-  );
+// 10-Jun · Stakeholder request — drop the per-chart "In Redshift" /
+// "Offline" badges so the page reads cleaner. SourcePill, SourcedKpi
+// (its badge overlay), SourceLegend and SourcePillCounter all render
+// nothing; every existing call site keeps compiling without churn.
+function SourcePill(_: { source: KpiSource }) {
+  return null;
 }
 
 function SourcedKpi({
   label,
   value,
   sub,
-  source,
   accent,
 }: {
   label: string;
@@ -163,33 +151,11 @@ function SourcedKpi({
   source: KpiSource;
   accent?: string;
 }) {
-  return (
-    <div className="relative">
-      <div className="absolute top-1.5 right-1.5 z-10">
-        <SourcePill source={source} />
-      </div>
-      <KpiTile label={label} value={value} sub={sub} accent={accent} />
-    </div>
-  );
+  return <KpiTile label={label} value={value} sub={sub} accent={accent} />;
 }
 
 function SourceLegend() {
-  return (
-    <div className="mt-3 pt-2 border-t border-analytics-line-2 flex gap-3 flex-wrap text-[10px] text-analytics-muted">
-      <span className="flex items-center gap-1">
-        <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#166534" }} />
-        In Redshift today
-      </span>
-      <span className="flex items-center gap-1">
-        <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#92400e" }} />
-        App layer / AI-derived
-      </span>
-      <span className="flex items-center gap-1">
-        <span className="inline-block w-2 h-2 rounded-full" style={{ background: "#475569" }} />
-        Offline / SharePoint
-      </span>
-    </div>
-  );
+  return null;
 }
 
 function fmtMonth(iso: string | null): string {
@@ -1476,29 +1442,10 @@ export function SMSheet({ data: s, mode }: { data: SupplierMonitoring; mode?: Sh
   );
 }
 
-// 09-Jun · Header pill that shows "N In Redshift" / "N Offline" etc.
-// Used at the top of each section to summarise data-source mix.
-function SourcePillCounter({ count, source }: { count: number; source: KpiSource }) {
-  const SOURCE_LABEL: Record<KpiSource, string> = {
-    redshift: "In Redshift",
-    app: "App layer",
-    offline: "Offline",
-  };
-  const SOURCE_TONE: Record<KpiSource, { bg: string; fg: string }> = {
-    redshift: { bg: "#dcfce7", fg: "#166534" },
-    app: { bg: "#fef3c7", fg: "#92400e" },
-    offline: { bg: "#f1f5f9", fg: "#475569" },
-  };
-  const t = SOURCE_TONE[source];
-  return (
-    <div
-      className="inline-flex items-center gap-1.5 text-[10.5px] font-bold rounded-[6px] px-2 py-0.5"
-      style={{ background: t.bg, color: t.fg }}
-    >
-      <span className="text-[12.5px] font-extrabold">{count}</span>
-      <span className="uppercase tracking-[0.4px]">{SOURCE_LABEL[source]}</span>
-    </div>
-  );
+// 10-Jun · Stakeholder request — hide the section-level "N In Redshift
+// / N Offline" counter chip so it doesn't show on any tab.
+function SourcePillCounter(_: { count: number; source: KpiSource }) {
+  return null;
 }
 
 // ============================================================

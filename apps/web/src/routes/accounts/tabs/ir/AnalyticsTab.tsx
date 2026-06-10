@@ -60,7 +60,7 @@ interface SubMeta {
 const SUB_TABS: SubMeta[] = [
   // Order mirrors the XLSX v11 sheet order — Auto-computed Scores is
   // sheet 17 (the last one), so it sits at the tail.
-  { id: "account-subscribers", label: "Account & Subscribers", count: 10 },
+  { id: "account-subscribers", label: "Account Summary",       count: 10 },
   { id: "category-watch",      label: "Category Watch",        count: 29 },
   { id: "abi",                 label: "Abi",                   count: 19 },
   { id: "supplier-discovery",  label: "Supplier Discovery",    count: 11 },
@@ -100,31 +100,26 @@ export default function AnalyticsTab() {
 
   return (
     <div className="font-manrope bg-analytics-bg text-analytics-ink -mx-4 -my-4 px-4 py-4">
-      {/* v4 · Repainted top stripe — spec topbar gradient anchored
-          on Beroe Indigo (teal-950 #160550 → teal-800 #2e0a9e),
-          58px tall, white text. Indigo-tinted shadow. */}
-      <div
-        className="mb-3 h-[58px] flex items-center gap-4 px-5 rounded-[10px] text-white shadow-[0_2px_12px_rgba(22,5,80,.28)]"
-        style={{
-          background: "linear-gradient(100deg, #160550, #2e0a9e)",
-        }}
-      >
+      {/* 10-Jun · Header restyled to match Documents & Reports — white
+          card, thin border, dark text. Keeps the Live indicator + the
+          window pill but loses the indigo gradient. */}
+      <div className="mb-3 bg-white border border-beroe-card-border rounded-card p-4 flex items-center gap-4">
         <div className="flex items-center gap-2.5">
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-analytics-teal-300 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-analytics-teal-300" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-analytics-teal-500 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-analytics-teal-700" />
           </span>
-          <span className="text-[12.5px] font-extrabold tracking-[0.4px] uppercase">
+          <span className="text-[12.5px] font-extrabold tracking-[0.4px] uppercase text-analytics-teal-800">
             Live
           </span>
         </div>
-        <div className="text-[12.5px] opacity-90 flex-1 truncate">
+        <div className="text-[12.5px] text-analytics-ink flex-1 truncate">
           Pulled from Redshift ·{" "}
           <span className="font-bold">
             {account.redshift_company_name ?? account.name}
           </span>
         </div>
-        <div className="flex items-center gap-2.5 bg-white/10 border border-white/20 rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold">
+        <div className="flex items-center gap-2.5 bg-analytics-line-2 border border-beroe-card-border rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold text-analytics-ink">
           <span className="opacity-70 text-[10.5px] uppercase tracking-wider">
             Window
           </span>
@@ -150,16 +145,6 @@ export default function AnalyticsTab() {
                 )}
               >
                 {t.label}
-                <span
-                  className={cn(
-                    "text-[9px] font-extrabold uppercase tracking-[0.4px] px-[5px] py-[1px] rounded-[6px]",
-                    sub === t.id
-                      ? "bg-analytics-teal-100 text-analytics-teal-800"
-                      : "bg-analytics-line-2 text-analytics-muted",
-                  )}
-                >
-                  {t.count}
-                </span>
               </button>
             ))}
           </div>
