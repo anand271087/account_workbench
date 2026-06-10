@@ -97,7 +97,15 @@ export interface PhaseC {
   [k: string]: unknown;
 }
 
-export type InitiativeStatus = "not_started" | "in_progress" | "delivered";
+// 10-Jun · 4-stage pipeline for the post-lock Initiative tracker.
+// "not_started" kept as a legacy alias so server payloads parse;
+// fresh rows always start at "identification".
+export type InitiativeStatus =
+  | "identification"
+  | "pipeline"
+  | "in_progress"
+  | "delivered"
+  | "not_started";
 export type ClientAck = "pending" | "yes" | "not_yet";
 
 export interface Initiative {
@@ -107,6 +115,9 @@ export interface Initiative {
   value_stage?: string | null;
   value_target?: string | null;
   value_delivered?: string | null;
+  // 10-Jun · New initiative columns — free-form notes + 0..100 %.
+  notes?: string | null;
+  completion_pct?: number | null;
   client_acknowledged: ClientAck;
   evidence?: string | null;
   implementation_status?: string | null;

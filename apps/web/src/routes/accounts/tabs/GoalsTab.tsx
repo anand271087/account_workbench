@@ -354,7 +354,7 @@ function GoalEditor({ goal }: { goal: CSGoal }) {
               type="text"
               maxLength={200}
               value={form.target_value ?? ""}
-              placeholder='e.g. $1M · "40 suppliers → 25" · "80% MAU"'
+              placeholder='e.g. 1M · "40 suppliers → 25" · "80% MAU"'
               onChange={(e) =>
                 setForm({ ...form, target_value: e.target.value || null })
               }
@@ -1095,7 +1095,11 @@ function InitiativeList({
               compactness. */}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-2 mb-2">
             <select
-              value={it.status}
+              value={
+                /* 10-Jun · Map legacy `not_started` rows to
+                   `identification` so the dropdown isn't blank. */
+                it.status === "not_started" ? "identification" : it.status
+              }
               onChange={(e) =>
                 onChange(
                   items.map((x, j) =>
@@ -1111,7 +1115,8 @@ function InitiativeList({
               disabled={!editable}
               className={inputCls(editable)}
             >
-              <option value="not_started">Not started</option>
+              <option value="identification">Identification</option>
+              <option value="pipeline">Pipeline</option>
               <option value="in_progress">In progress</option>
               <option value="delivered">Delivered</option>
             </select>
@@ -1163,11 +1168,14 @@ function InitiativeList({
               </select>
             </Field>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Field label="Value target">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* 10-Jun · Target column — free-form text, no $ prefix
+                (value can be units / % / count / anything). */}
+            <Field label="Target">
               <input
                 type="text"
                 maxLength={200}
+                placeholder='e.g. 1M · "40 → 25" · "80%"'
                 value={it.value_target ?? ""}
                 onChange={(e) =>
                   onChange(
@@ -1182,7 +1190,7 @@ function InitiativeList({
                 className={inputCls(editable)}
               />
             </Field>
-            <Field label="Value delivered">
+            <Field label="Delivered">
               <input
                 type="text"
                 maxLength={200}
@@ -1200,7 +1208,47 @@ function InitiativeList({
                 className={inputCls(editable)}
               />
             </Field>
+            {/* 10-Jun · Completion % column — 0..100 int, clamped. */}
+            <Field label="% completion">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                placeholder="0–100"
+                value={it.completion_pct ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const parsed = raw === "" ? null : Math.max(0, Math.min(100, parseInt(raw, 10) || 0));
+                  onChange(
+                    items.map((x, j) =>
+                      j === i ? { ...x, completion_pct: parsed } : x,
+                    ),
+                  );
+                }}
+                disabled={!editable}
+                className={inputCls(editable)}
+              />
+            </Field>
           </div>
+          {/* 10-Jun · Notes column — free-form, 2-line textarea. */}
+          <Field label="Notes">
+            <textarea
+              rows={2}
+              maxLength={4000}
+              placeholder="Internal notes for this initiative"
+              value={it.notes ?? ""}
+              onChange={(e) =>
+                onChange(
+                  items.map((x, j) =>
+                    j === i ? { ...x, notes: e.target.value || null } : x,
+                  ),
+                )
+              }
+              disabled={!editable}
+              className={textareaCls(editable)}
+            />
+          </Field>
           <Field label="Client acknowledgement">
             <select
               value={it.client_acknowledged}
@@ -1250,10 +1298,12 @@ function InitiativeList({
               {
                 name: "",
                 sub_initiatives: null,
-                status: "not_started",
+                status: "identification",
                 value_stage: null,
                 value_target: null,
                 value_delivered: null,
+                notes: null,
+                completion_pct: null,
                 client_acknowledged: "pending",
                 evidence: null,
                 implementation_status: null,

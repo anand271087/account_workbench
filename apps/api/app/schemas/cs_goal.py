@@ -113,10 +113,22 @@ class Initiative(BaseModel):
 
     name: str = Field(..., max_length=200)
     sub_initiatives: str | None = Field(None, max_length=2000)
-    status: Literal["not_started", "in_progress", "delivered"] = "not_started"
+    # 10-Jun · Initiative stage vocabulary widened to a 4-stage pipeline
+    # matching the post-lock spec (identification → pipeline → in_progress
+    # → delivered). `not_started` kept as accepted alias so existing data
+    # round-trips; the UI offers the 4 new values only and surfaces
+    # legacy rows as "Identification" until edited.
+    status: Literal[
+        "identification", "pipeline", "in_progress", "delivered",
+        "not_started",
+    ] = "identification"
     value_stage: str | None = Field(None, max_length=40)
     value_target: str | None = Field(None, max_length=200)
     value_delivered: str | None = Field(None, max_length=200)
+    # 10-Jun · New columns per stakeholder ask: free-form notes +
+    # 0–100 completion %. Both optional so older rows keep saving.
+    notes: str | None = Field(None, max_length=4000)
+    completion_pct: int | None = Field(None, ge=0, le=100)
     client_acknowledged: Literal["pending", "yes", "not_yet"] = "pending"
     evidence: str | None = Field(None, max_length=4000)
     implementation_status: str | None = Field(None, max_length=80)
