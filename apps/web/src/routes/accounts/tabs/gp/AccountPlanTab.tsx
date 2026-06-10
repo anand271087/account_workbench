@@ -30,10 +30,15 @@ import {
   stageColor,
   stageName,
   type Appetite,
+  type AiPlaySuggestion,
+  type GrowthContext,
+  type PeerBenchmark,
+  type PeerPlaySuggestion,
   type Play,
   type PlayCreate,
   type PlayListResponse,
   type PlayMode,
+  type TopPeerModule,
 } from "@/types/play";
 
 const MODE_TITLES: Record<PlayMode, string> = {
@@ -57,6 +62,14 @@ export default function AccountPlanTab() {
   const { data: playsData } = useQuery<PlayListResponse>({
     queryKey: playsKey,
     queryFn: () => api.get<PlayListResponse>(`/api/v1/accounts/${account.id}/plays`),
+  });
+
+  // 10-Jun · Growth & Pipeline prototype v3 — peer benchmark + AI / peer
+  // play suggestions. Single endpoint; degrades to nulls on empty cohort.
+  const { data: growthCtx } = useQuery<GrowthContext>({
+    queryKey: ["growth-context", account.id],
+    queryFn: () =>
+      api.get<GrowthContext>(`/api/v1/accounts/${account.id}/growth-context`),
   });
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -125,39 +138,30 @@ export default function AccountPlanTab() {
               Services Saturation moved ABOVE Expansion Plays (per spec
               feedback: "Product & Services Saturation should come before
               Expansion Plays and after ARR Growth Tracker"). */}
-          <ProductSaturation accountId={account.id} />
+          {/* 10-Jun · Growth & Pipeline v3 prototype — Saturation now
+              includes the peer-benchmark sub-panel (you / industry
+              median / revenue bucket / top-quartile) + top-peer-modules
+              grid. Driven by /growth-context. */}
+          <ProductSaturation
+            accountId={account.id}
+            peerBenchmark={growthCtx?.peer_benchmark}
+            topPeerModules={growthCtx?.top_peer_modules ?? []}
+          />
 
-          {/* Plays section — 27-May Row 61: stable literal "Expansion Plays" heading. */}
-          <div className="bg-white border border-beroe-card-border rounded-card p-4">
-            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <div>
-                <div className="text-[13px] font-bold">Expansion Plays</div>
-                <div className="text-[10px] text-text-muted mt-0.5">
-                  {mode === "expand"
-                    ? "Showing expand-mode plays"
-                    : `Mode-aware view: ${MODE_TITLES[mode]} (toggle "Show all plays" to see expansion plays here)`}
-                </div>
-              </div>
-              <label className="text-[11px] text-text-muted flex items-center gap-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showAllPlays}
-                  onChange={(e) => setShowAllPlays(e.target.checked)}
-                />
-                Show all plays
-              </label>
-            </div>
-            <PlayList
-              plays={visiblePlays}
-              mode={mode}
-              editable={editable}
-              accountId={account.id}
-              showAllPlays={showAllPlays}
-            />
-          </div>
-
-          {/* Recommended Plays from Similar Accounts */}
-          <RecommendedPlays plays={allPlays} mode={mode} />
+          {/* 10-Jun · Growth & Pipeline v3 — Expansion Plays now lives in
+              a 3-tab strip (Active · AI recommended · From peer CSMs)
+              matching the prototype layout. */}
+          <PlayTabsSection
+            mode={mode}
+            editable={editable}
+            accountId={account.id}
+            plays={visiblePlays}
+            allPlays={allPlays}
+            showAllPlays={showAllPlays}
+            onToggleShowAll={(v) => setShowAllPlays(v)}
+            aiPlays={growthCtx?.ai_plays ?? []}
+            peerPlays={growthCtx?.peer_plays ?? []}
+          />
         </div>
 
         {/* RIGHT — sticky sidebar */}
@@ -1515,7 +1519,15 @@ const BEROE_MODULES = [
   "Diverse Supplier Directory",
 ];
 
-function ProductSaturation({ accountId }: { accountId: string }) {
+function ProductSaturation({
+  accountId,
+  peerBenchmark,
+  topPeerModules,
+}: {
+  accountId: string;
+  peerBenchmark?: PeerBenchmark;
+  topPeerModules: TopPeerModule[];
+}) {
   const { data, isLoading } = useQuery<{
     gate_contract_modules: string[];
     gate_platform_tier: string | null;
@@ -1607,136 +1619,497 @@ function ProductSaturation({ accountId }: { accountId: string }) {
           })}
         </div>
       )}
-    </div>
-  );
-}
 
-// 3. Recommended Plays — top 3 ideas the CSM should add. Pulled from a
-//    static catalog for now; future revision can layer AI suggest via the
-//    existing brief-AI scaffold.
-const PLAY_CATALOG: { mode: string; title: string; trigger: string; value: string }[] = [
-  {
-    mode: "expand",
-    title: "Sustainability module upsell",
-    trigger: "Most procurement teams add ESG benchmarking in year 2.",
-    value: "Typical $120K–$250K incremental ACV",
-  },
-  {
-    mode: "expand",
-    title: "Supplier risk monitoring add-on",
-    trigger: "Tightens the renewal narrative on exposure.",
-    value: "Typical $80K–$150K incremental ACV",
-  },
-  {
-    mode: "expand",
-    title: "Multi-year enterprise renewal lock",
-    trigger: "Buyer locks pricing; vendor locks tenure.",
-    value: "20–35% premium over single-year renewal",
-  },
-  {
-    mode: "retain",
-    title: "QBR + champion alignment session",
-    trigger: "Pre-renewal trust check.",
-    value: "Reduces churn risk by ~30% (Beroe avg)",
-  },
-  {
-    mode: "retain",
-    title: "Custom benchmark on top category",
-    trigger: "Highest-conviction value moment.",
-    value: "Adds documented savings to renewal case",
-  },
-  {
-    mode: "rescue",
-    title: "Executive escalation w/ sponsor",
-    trigger: "Re-sets relationship before churn signal hardens.",
-    value: "Avoided-churn play; no $ uplift",
-  },
-];
-
-function RecommendedPlays({ plays, mode }: { plays: Play[]; mode: PlayMode }) {
-  const account = useAccountFromLayout();
-  const qc = useQueryClient();
-  const livePlays = plays.filter((p) => !p.hidden);
-  const haveTitles = new Set(livePlays.map((p) => p.title.toLowerCase()));
-  const recs = PLAY_CATALOG.filter((r) => r.mode === mode)
-    .concat(PLAY_CATALOG.filter((r) => r.mode !== mode))
-    .filter((r) => !haveTitles.has(r.title.toLowerCase()))
-    .slice(0, 3);
-  // 29-May bug 29-47 — "+ Add to Expansion Plays" button per row that
-  // POSTs to /accounts/:id/plays so the CSM doesn't have to retype.
-  const addPlay = useMutation({
-    mutationFn: (r: PlayCatalogEntry) =>
-      api.post(`/api/v1/accounts/${account.id}/plays`, {
-        title: r.title,
-        value_usd: "0",
-        prob: 50,
-        when_text: null,
-        trigger_text: r.trigger,
-        modes: [r.mode],
-        role: null,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["plays", account.id] });
-      qc.invalidateQueries({ queryKey: ["appetite", account.id] });
-    },
-  });
-  return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      <div className="text-[13px] font-bold mb-1">
-        {/* 29-May bug 29-47 — section title updated to make the source
-            of the suggestions explicit ("Similar Accounts"). */}
-        ✨ Recommended Plays from Similar Accounts
-      </div>
-      <div className="text-[10px] text-text-muted mb-3">
-        Drawn from playbooks that worked for accounts in the same
-        industry · suggestions for {mode} mode
-      </div>
-      {recs.length === 0 ? (
-        <div className="text-[12px] text-text-muted italic">
-          You've already added the most-common plays for this mode — nice work.
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {recs.map((r) => (
-            <li
-              key={r.title}
-              className="rounded-md border border-beroe-card-border px-3 py-2"
-            >
-              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-                <span className="text-[12px] font-bold">{r.title}</span>
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                    style={{ background: "#f4f3fe", color: "#4A00F8" }}
-                  >
-                    {r.mode}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => addPlay.mutate(r)}
-                    disabled={addPlay.isPending}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-beroe-blue text-white hover:opacity-90 disabled:opacity-50"
-                    title="Add this play to Expansion Plays"
-                  >
-                    + Add
-                  </button>
-                </div>
-              </div>
-              <div className="text-[11px] text-text-secondary leading-snug">
-                {r.trigger}
-              </div>
-              <div className="text-[11px] text-text-muted italic mt-1">
-                💰 {r.value}
-              </div>
-            </li>
-          ))}
-        </ul>
+      {/* 10-Jun · Growth & Pipeline v3 prototype — Peer benchmark
+          sub-panel. Renders empty-state copy when the cohort has no
+          peers; the API contract is stable so the panel always paints. */}
+      {peerBenchmark && (
+        <PeerBenchmarkPanel
+          benchmark={peerBenchmark}
+          topPeerModules={topPeerModules}
+        />
       )}
     </div>
   );
 }
 
-type PlayCatalogEntry = (typeof PLAY_CATALOG)[number];
+// 10-Jun · Peer-benchmark sub-panel inside ProductSaturation. Fuscia-
+// themed (#C344C7) per the prototype to differentiate from the green
+// "owned" / amber "gap" colors used in the saturation grid above.
+function PeerBenchmarkPanel({
+  benchmark,
+  topPeerModules,
+}: {
+  benchmark: PeerBenchmark;
+  topPeerModules: TopPeerModule[];
+}) {
+  const empty = benchmark.cohort_size === 0;
+  return (
+    <div
+      className="mt-3 rounded-card p-3.5 border"
+      style={{
+        background: "linear-gradient(180deg, #fdf5ff, #ffffff)",
+        borderColor: "#e9c0ec",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="text-[15px]" style={{ color: "#C344C7" }}>👥</span>
+        <span className="text-[11.5px] font-extrabold flex-1" style={{ color: "#8a1a90" }}>
+          Peer benchmark
+        </span>
+        <span className="text-[10px] text-text-muted">{benchmark.cohort_label}</span>
+      </div>
+
+      {empty ? (
+        <div className="text-[11px] text-text-muted italic py-2">
+          {benchmark.insight}
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <PeerBar
+              label="You"
+              pct={benchmark.you_pct}
+              fill="linear-gradient(90deg, #4A00F8, #C344C7)"
+              labelClass="text-beroe-indigo font-extrabold"
+              valueClass="text-beroe-indigo"
+            />
+            <PeerBar
+              label="Peer median (industry)"
+              pct={benchmark.peer_industry_pct ?? 0}
+              fill="#e9c0ec"
+            />
+            <PeerBar
+              label="Peer median (tier bucket)"
+              pct={benchmark.peer_revenue_pct ?? 0}
+              fill="#e9c0ec"
+            />
+            <PeerBar
+              label="Top quartile"
+              pct={benchmark.top_quartile_pct ?? 0}
+              fill="#40CC8F"
+              valueClass="text-beroe-green font-bold"
+            />
+          </div>
+
+          <div
+            className="mt-2.5 rounded-md p-2 flex gap-2 items-start text-[11.5px] leading-snug"
+            style={{ background: "#fff", border: "1px solid #e9c0ec" }}
+          >
+            <span style={{ color: "#C344C7" }}>💡</span>
+            <span className="text-text-primary">{benchmark.insight}</span>
+          </div>
+
+          {topPeerModules.length > 0 && (
+            <>
+              <div
+                className="mt-3 text-[10px] font-bold uppercase tracking-wider"
+                style={{ color: "#8a1a90" }}
+              >
+                Top modules adopted by peers
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 mt-1.5">
+                {topPeerModules.map((m) => (
+                  <div
+                    key={m.name}
+                    className={cn(
+                      "rounded-md p-2 text-[10.5px] border",
+                      m.you_own
+                        ? "border-beroe-green/40 bg-beroe-green/15/30"
+                        : "bg-white",
+                    )}
+                    style={!m.you_own ? { borderColor: "#e9c0ec" } : undefined}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[11px] font-bold flex-1 truncate text-text-primary">
+                        {m.name}
+                      </span>
+                      {m.you_own && (
+                        <span
+                          className="text-[8px] font-extrabold uppercase tracking-wider px-1 py-px rounded"
+                          style={{ background: "#40CC8F", color: "#fff" }}
+                        >
+                          you own
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex justify-between text-[9.5px] text-text-muted">
+                      <span>Owned by</span>
+                      <span
+                        className="font-bold"
+                        style={{ color: m.you_own ? "#146a45" : "#8a1a90" }}
+                      >
+                        {m.adoption_pct}% of peers
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function PeerBar({
+  label,
+  pct,
+  fill,
+  labelClass,
+  valueClass,
+}: {
+  label: string;
+  pct: number;
+  fill: string;
+  labelClass?: string;
+  valueClass?: string;
+}) {
+  const w = Math.max(0, Math.min(100, pct));
+  return (
+    <div className="grid grid-cols-[140px_1fr_44px] gap-2 items-center text-[11px]">
+      <span className={cn("text-text-muted", labelClass)}>{label}</span>
+      <div className="h-2 rounded-full bg-beroe-bg overflow-hidden relative">
+        <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${w}%`, background: fill }} />
+      </div>
+      <span className={cn("text-right text-[10.5px] font-mono font-bold", valueClass)}>
+        {pct.toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
+// 10-Jun · Growth & Pipeline v3 prototype — 3-tab Plays section.
+// ⚡ Active (existing PlayList) · ✨ AI recommended (from /growth-context
+// ai_plays) · 👥 From peer CSMs (from /growth-context peer_plays).
+type PlayTab = "active" | "ai" | "peer";
+
+function PlayTabsSection({
+  mode,
+  editable,
+  accountId,
+  plays,
+  allPlays,
+  showAllPlays,
+  onToggleShowAll,
+  aiPlays,
+  peerPlays,
+}: {
+  mode: PlayMode;
+  editable: boolean;
+  accountId: string;
+  plays: Play[];
+  allPlays: Play[];
+  showAllPlays: boolean;
+  onToggleShowAll: (v: boolean) => void;
+  aiPlays: AiPlaySuggestion[];
+  peerPlays: PeerPlaySuggestion[];
+}) {
+  const [tab, setTab] = useState<PlayTab>("active");
+  const counts: Record<PlayTab, number> = {
+    active: plays.length,
+    ai: aiPlays.length,
+    peer: peerPlays.length,
+  };
+  const tabs: Array<{ id: PlayTab; label: string; icon: string }> = [
+    { id: "active", label: "Active", icon: "⚡" },
+    { id: "ai", label: "AI recommended", icon: "✨" },
+    { id: "peer", label: "From peer CSMs", icon: "👥" },
+  ];
+
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="text-[13px] font-bold">Expansion Plays</div>
+        {tab === "active" && (
+          <label className="text-[11px] text-text-muted flex items-center gap-1 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showAllPlays}
+              onChange={(e) => onToggleShowAll(e.target.checked)}
+            />
+            Show all plays
+          </label>
+        )}
+      </div>
+
+      <div className="flex gap-1.5 mb-3 flex-wrap">
+        {tabs.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-[11.5px] font-bold border inline-flex items-center gap-1.5 transition-colors",
+                active
+                  ? "bg-beroe-indigo/10 border-beroe-indigo text-beroe-indigo"
+                  : "bg-white border-beroe-card-border text-text-muted hover:border-beroe-indigo hover:text-beroe-indigo",
+              )}
+            >
+              <span>{t.icon}</span>
+              <span>{t.label}</span>
+              <span
+                className={cn(
+                  "ml-1 px-1.5 py-px rounded-full text-[10px] font-extrabold",
+                  active ? "bg-white text-beroe-indigo" : "bg-beroe-bg text-text-muted",
+                )}
+              >
+                {counts[t.id]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "active" ? (
+        <>
+          {mode !== "expand" && (
+            <div className="text-[10.5px] text-text-muted mb-2">
+              Mode-aware view: {MODE_TITLES[mode]} (toggle "Show all plays" to see expansion plays here)
+            </div>
+          )}
+          <PlayList
+            plays={plays}
+            mode={mode}
+            editable={editable}
+            accountId={accountId}
+            showAllPlays={showAllPlays}
+          />
+        </>
+      ) : tab === "ai" ? (
+        <AiPlaysList plays={aiPlays} accountId={accountId} editable={editable} />
+      ) : (
+        <PeerPlaysList plays={peerPlays} accountId={accountId} editable={editable} allPlays={allPlays} />
+      )}
+    </div>
+  );
+}
+
+function probPill(tier: "high" | "med" | "low"): { cls: string; label: string } {
+  if (tier === "high") return { cls: "bg-beroe-green/20 text-beroe-green", label: "High prob" };
+  if (tier === "med") return { cls: "bg-beroe-amber/20 text-beroe-amber", label: "Med prob" };
+  return { cls: "bg-beroe-bg text-text-muted", label: "Low prob" };
+}
+
+function AiPlaysList({
+  plays,
+  accountId,
+  editable,
+}: {
+  plays: AiPlaySuggestion[];
+  accountId: string;
+  editable: boolean;
+}) {
+  const qc = useQueryClient();
+  const notify = useNotify();
+  const addMutation = useMutation({
+    mutationFn: (s: AiPlaySuggestion) =>
+      api.post(`/api/v1/accounts/${accountId}/plays`, {
+        title: s.name,
+        value_usd: s.est_acv_k * 1000,
+        prob: s.prob_tier === "high" ? 80 : 50,
+        modes: ["expand"],
+        trigger_text: s.rationale,
+      } satisfies PlayCreate),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plays", accountId] });
+      qc.invalidateQueries({ queryKey: ["appetite", accountId] });
+      notify({ title: "Added to your active plays", tone: "success" });
+    },
+    onError: (e) =>
+      notify({
+        title: "Could not add play",
+        body: e instanceof ApiError ? e.message : "Unknown error",
+        tone: "error",
+      }),
+  });
+
+  if (plays.length === 0) {
+    return (
+      <div className="text-[11px] text-text-muted italic py-4 text-center">
+        No AI suggestions yet — peers in this cohort have fully overlapping module ownership.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {plays.map((p, i) => {
+        const pp = probPill(p.prob_tier);
+        return (
+          <div
+            key={p.id}
+            className="rounded-card border bg-white p-3 grid grid-cols-[28px_1fr_84px_70px_60px] gap-2 items-center"
+            style={{ borderLeftWidth: "4px", borderLeftColor: "#C344C7", borderColor: "var(--card-border, #e4eaf6)" }}
+          >
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-extrabold"
+              style={{ background: "#C344C7" }}
+            >
+              A{i + 1}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-bold flex items-center gap-1.5 flex-wrap">
+                {p.name}
+                <span
+                  className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-px rounded"
+                  style={{
+                    background: "linear-gradient(135deg, #C344C7, #8a1a90)",
+                    color: "#fff",
+                  }}
+                >
+                  ✨ AI · {p.match_pct}% match
+                </span>
+              </div>
+              <div className="text-[10.5px] text-text-muted mt-0.5">{p.rationale}</div>
+            </div>
+            <div className="text-right font-mono text-[12.5px] font-extrabold">
+              ${p.est_acv_k}K
+              <div className="text-[9px] font-normal text-text-muted font-sans">est. ACV</div>
+            </div>
+            <span
+              className={cn(
+                "text-[9.5px] font-bold uppercase rounded-full px-2 py-1 text-center",
+                pp.cls,
+              )}
+            >
+              {pp.label}
+            </span>
+            <button
+              type="button"
+              disabled={!editable || addMutation.isPending}
+              onClick={() => addMutation.mutate(p)}
+              className="text-[10.5px] font-bold rounded-md px-2 py-1 bg-beroe-indigo/10 text-beroe-indigo border border-beroe-indigo/30 hover:bg-beroe-indigo/15 disabled:opacity-50"
+            >
+              + Add
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PeerPlaysList({
+  plays,
+  accountId,
+  editable,
+  allPlays,
+}: {
+  plays: PeerPlaySuggestion[];
+  accountId: string;
+  editable: boolean;
+  allPlays: Play[];
+}) {
+  const qc = useQueryClient();
+  const notify = useNotify();
+  const ownedTitles = new Set(allPlays.map((p) => p.title.toLowerCase().trim()));
+  const addMutation = useMutation({
+    mutationFn: (s: PeerPlaySuggestion) =>
+      api.post(`/api/v1/accounts/${accountId}/plays`, {
+        title: s.name,
+        value_usd: s.median_acv_k * 1000,
+        prob: s.prob_tier === "high" ? 80 : 50,
+        modes: ["expand"],
+        trigger_text: s.rationale,
+      } satisfies PlayCreate),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plays", accountId] });
+      qc.invalidateQueries({ queryKey: ["appetite", accountId] });
+      notify({ title: "Peer play added to your account plan", tone: "success" });
+    },
+    onError: (e) =>
+      notify({
+        title: "Could not add play",
+        body: e instanceof ApiError ? e.message : "Unknown error",
+        tone: "error",
+      }),
+  });
+
+  if (plays.length === 0) {
+    return (
+      <div className="text-[11px] text-text-muted italic py-4 text-center">
+        No peer plays yet — no other accounts in this cohort have plays recorded.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {plays.map((p, i) => {
+        const pp = probPill(p.prob_tier);
+        const already = ownedTitles.has(p.name.toLowerCase().trim());
+        return (
+          <div
+            key={p.id}
+            className="rounded-card border bg-white p-3 grid grid-cols-[28px_1fr_84px_70px_60px] gap-2 items-center"
+            style={{ borderLeftWidth: "4px", borderLeftColor: "#4A00F8", borderColor: "var(--card-border, #e4eaf6)" }}
+          >
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-extrabold"
+              style={{ background: "#4A00F8" }}
+            >
+              P{i + 1}
+            </div>
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-bold">{p.name}</div>
+              <div className="text-[10.5px] text-text-muted mt-0.5">{p.rationale}</div>
+              <div className="text-[10px] text-text-muted mt-1 flex flex-wrap gap-1.5 items-center">
+                <span
+                  className="w-[18px] h-[18px] rounded-full text-white text-[9px] font-extrabold flex items-center justify-center"
+                  style={{ background: "#4A00F8" }}
+                >
+                  {p.cohort_size}
+                </span>
+                <span>CSMs ran this · {p.cohort}</span>
+                <span
+                  className="text-[9.5px] font-bold rounded px-1.5 py-px"
+                  style={{ background: "#d4f5e5", color: "#146a45" }}
+                >
+                  {p.wins}
+                </span>
+              </div>
+            </div>
+            <div className="text-right font-mono text-[12.5px] font-extrabold">
+              ${p.median_acv_k}K
+              <div className="text-[9px] font-normal text-text-muted font-sans">peer median</div>
+            </div>
+            <span
+              className={cn(
+                "text-[9.5px] font-bold uppercase rounded-full px-2 py-1 text-center",
+                pp.cls,
+              )}
+            >
+              {pp.label}
+            </span>
+            {already ? (
+              <span
+                className="text-[10px] font-bold rounded-md px-2 py-1 text-center"
+                style={{ background: "#d4f5e5", color: "#146a45" }}
+              >
+                ✓ Added
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={!editable || addMutation.isPending}
+                onClick={() => addMutation.mutate(p)}
+                className="text-[10.5px] font-bold rounded-md px-2 py-1 bg-beroe-indigo/10 text-beroe-indigo border border-beroe-indigo/30 hover:bg-beroe-indigo/15 disabled:opacity-50"
+              >
+                + Add
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// 3. Recommended Plays — superseded by the AI / Peer tabs of
+//    PlayTabsSection (10-Jun). The data path is now cohort-aware
+//    via GET /accounts/:id/growth-context — see PlayTabsSection above.
 
 // ============================================================
 // Plan Inputs — 26-May Row 60

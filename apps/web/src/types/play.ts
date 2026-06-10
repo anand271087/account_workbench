@@ -156,3 +156,51 @@ export function fmtK(usd: string | number | null | undefined): string {
   if (n === 0) return "$0";
   return `$${Math.round(n / 1000).toLocaleString()}K`;
 }
+
+// ============================================================
+// 10-Jun — Growth context types (peer benchmark + AI / peer plays)
+// Returned by GET /api/v1/accounts/:id/growth-context.
+// ============================================================
+
+export interface PeerBenchmark {
+  cohort_label: string;
+  cohort_size: number;
+  you_pct: number;
+  peer_industry_pct: number | null;
+  peer_revenue_pct: number | null;
+  top_quartile_pct: number | null;
+  insight: string;
+}
+
+export interface TopPeerModule {
+  name: string;
+  adoption_pct: number;
+  you_own: boolean;
+}
+
+export interface AiPlaySuggestion {
+  id: string;
+  name: string;
+  match_pct: number;
+  rationale: string;
+  est_acv_k: number;
+  prob_tier: "high" | "med" | "low";
+}
+
+export interface PeerPlaySuggestion {
+  id: string;
+  name: string;
+  cohort_size: number;
+  cohort: string;
+  median_acv_k: number;
+  wins: string;
+  prob_tier: "high" | "med" | "low";
+  rationale: string;
+}
+
+export interface GrowthContext {
+  peer_benchmark: PeerBenchmark;
+  top_peer_modules: TopPeerModule[];
+  ai_plays: AiPlaySuggestion[];
+  peer_plays: PeerPlaySuggestion[];
+}

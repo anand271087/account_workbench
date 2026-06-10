@@ -200,6 +200,26 @@ async def delete_play(
 # ============================================================
 
 
+# ============================================================
+# GET /accounts/:id/growth-context
+# 10-Jun — Powers the new prototype sections on AccountPlanTab:
+# peer-cohort benchmark + AI-suggested plays + cross-account plays
+# from peer CSMs. View-gated (same scope as appetite-score).
+# ============================================================
+
+
+@account_router.get("/{account_id}/growth-context")
+async def get_growth_context(
+    account_id: Annotated[UUID, Path()],
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    from app.services.growth_context import build_growth_context
+
+    acc, _, _ = await _scope(db, user, account_id)
+    return await build_growth_context(db, acc)
+
+
 @account_router.get(
     "/{account_id}/appetite-score", response_model=AppetiteOut
 )
