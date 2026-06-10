@@ -30,6 +30,10 @@ interface RowState extends ExtractedGoal {
   _selected: boolean;
   _status: RowStatus;
   _message?: string;
+  // 10-Jun · "manual" rows are added by the CSM directly in this modal
+  // via the footer button. Same POST shape; the chip just reads
+  // "✋ Manual" instead of the AI confidence pill.
+  _source?: "manual";
 }
 
 interface Props {
@@ -187,6 +191,34 @@ export function VpdGoalsExtractionReview({
             )}
           </div>
           <div className="flex gap-2">
+            {/* 10-Jun · CSM escape hatch — if none of the AI candidates
+                fit, type your own here without leaving the modal. The
+                new row is created in the same fan-out as the AI ones. */}
+            <button
+              type="button"
+              onClick={() =>
+                setRows((prev) => [
+                  ...prev,
+                  {
+                    title: "",
+                    category: "other",
+                    target_value: null,
+                    target_date: null,
+                    owner: null,
+                    initiatives: [],
+                    confidence: undefined,
+                    rationale: null,
+                    _selected: true,
+                    _status: "idle",
+                    _source: "manual",
+                  },
+                ])
+              }
+              className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-blue text-beroe-blue font-semibold hover:bg-beroe-blue/10"
+              title="Add a Success Metric manually if none of the AI candidates fit"
+            >
+              + Add Success Metric
+            </button>
             <button
               onClick={onClose}
               className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border hover:bg-beroe-bg/60"
@@ -273,10 +305,17 @@ function GoalRow({
               onChange={(e) => onChange({ title: e.target.value })}
               disabled={disabled}
               maxLength={200}
+              placeholder={row._source === "manual" ? "Type a Success Metric (Goal) title…" : undefined}
               className="flex-1 text-[13px] font-medium border-b border-transparent focus:border-beroe-card-border focus:outline-none px-1 py-0.5"
             />
             <div className="flex gap-1.5 flex-shrink-0">
-              {row.confidence && (
+              {/* 10-Jun · Manual rows added via the footer button get
+                  an "✋ Manual" chip in place of the AI confidence pill. */}
+              {row._source === "manual" ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-semibold bg-beroe-blue/10 text-beroe-blue border-beroe-blue/30">
+                  ✋ Manual
+                </span>
+              ) : row.confidence && (
                 <span
                   className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-semibold",
