@@ -113,11 +113,8 @@ export default function AnalyticsTab() {
             Live
           </span>
         </div>
-        <div className="text-[12.5px] text-analytics-ink flex-1 truncate">
-          Pulled from Redshift ·{" "}
-          <span className="font-bold">
-            {account.redshift_company_name ?? account.name}
-          </span>
+        <div className="text-[12.5px] text-analytics-ink flex-1 truncate font-bold">
+          {account.redshift_company_name ?? account.name}
         </div>
         <div className="flex items-center gap-2.5 bg-analytics-line-2 border border-beroe-card-border rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold text-analytics-ink">
           <span className="opacity-70 text-[10.5px] uppercase tracking-wider">
