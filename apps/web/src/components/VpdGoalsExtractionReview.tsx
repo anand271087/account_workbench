@@ -193,18 +193,23 @@ export function VpdGoalsExtractionReview({
             >
               Close
             </button>
-            {/* 08-Jun · Once anything got created, surface a one-click jump
-                to Success Management → Contract & Goals so users don't have
-                to hunt for where the goals landed. */}
+            {/* 10-Jun · Once anything got created, jump to Success
+                Management → Validation & Alignment (the live Goal
+                Alignment route). Previously this navigated to
+                /contract-goals which is now a redirect — the redirect
+                path resolved incorrectly under nested routing and
+                landed users on the main account page. Linking direct
+                to /goal-alignment is the canonical route. */}
             {summary.done > 0 && (
               <button
                 onClick={() => {
                   onClose();
-                  navigate(`/accounts/${accountId}/success-management/contract-goals`);
+                  navigate(`/accounts/${accountId}/success-management/goal-alignment`);
                 }}
                 className="text-[12px] px-3 py-1.5 rounded-md bg-beroe-green text-white font-semibold hover:bg-beroe-green/90"
               >
-                View {summary.done} goal{summary.done === 1 ? "" : "s"} →
+                View {summary.done} Success Metric
+                {summary.done === 1 ? "" : "s"} →
               </button>
             )}
             <button

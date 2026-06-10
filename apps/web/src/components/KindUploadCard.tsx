@@ -636,19 +636,13 @@ function DocumentRow({
               impossible to overlook. */}
           {doc.kind === "vpd" &&
             (() => {
-              // 09-Jun · Unified VPD review — single pill carries both
-              // candidate Goals and candidate Success Metrics counts
-              // (replaces two separate CTAs). One modal with tabs.
+              // 10-Jun · Goals = Success Metrics — Metrics tab was removed
+              // from the VPD review modal. The CTA now shows only the
+              // goal count (the same row IS the success metric) and
+              // skips the metric count entirely.
               const goalsExtracted = doc.cs_goals_extracted as unknown as CsGoalsExtractionResult | null;
-              const metricsExtracted = doc.metrics_extracted as unknown as VpdMetricsExtractionResult | null;
               const goalCount = goalsExtracted?.goals?.length ?? 0;
-              const metricCount = metricsExtracted?.metrics?.length ?? 0;
-              if (goalCount === 0 && metricCount === 0) return null;
-              const parts: string[] = [];
-              if (goalCount > 0)
-                parts.push(`${goalCount} goal${goalCount === 1 ? "" : "s"}`);
-              if (metricCount > 0)
-                parts.push(`${metricCount} metric${metricCount === 1 ? "" : "s"}`);
+              if (goalCount === 0) return null;
               return (
                 <button
                   onClick={() => setGoalsModalOpen(true)}
@@ -658,7 +652,7 @@ function DocumentRow({
                     borderColor: "#C344C7",
                     color: "#7a1a90",
                   }}
-                  title="AI extracted candidate goals and success metrics from this VPD — review and create"
+                  title="AI extracted candidate Success Metrics (Goals) from this VPD — review and create"
                 >
                   <span className="relative flex h-2 w-2 flex-shrink-0">
                     <span
@@ -671,7 +665,7 @@ function DocumentRow({
                     />
                   </span>
                   <span className="text-[12px] font-bold">
-                    🎯 {parts.join(" + ")} extracted
+                    🎯 {goalCount} Success Metric{goalCount === 1 ? "" : "s"} extracted
                   </span>
                   <span className="text-[11px] opacity-80 hidden sm:inline">
                     — review and create
