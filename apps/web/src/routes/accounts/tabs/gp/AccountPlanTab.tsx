@@ -175,19 +175,16 @@ export default function AccountPlanTab() {
             mode={mode}
           />
 
-          {/* 09-Jun bug (Bug Tracker · Jun-8 #6 part 2) — Mode-aware
-              checklist now covers ALL THREE modes (Expand / Retain /
-              Rescue). Previously rescue mode fell back to the retain
-              checklist; tester said "this should be a dynamic box. The
-              box should be changed to Rescue checklist if I change mode
-              to Rescue from Retain". */}
-          {mode === "expand" ? (
-            <ExpandChecklist plays={allPlays} appetite={appetite} />
-          ) : mode === "rescue" ? (
-            <RescueChecklist plays={allPlays} appetite={appetite} />
-          ) : (
-            <RetainChecklist plays={allPlays} appetite={appetite} />
-          )}
+          {/* 10-Jun · Prototype-faithful checklist. One shared
+              ModeChecklist with filter tabs (All/Pending/Done), AI
+              accept/dismiss, CSM custom items + add-input + legend.
+              State persists in localStorage per-account-per-mode. */}
+          <ModeChecklist
+            mode={mode}
+            plays={allPlays}
+            appetite={appetite}
+            accountId={account.id}
+          />
         </aside>
       </div>
 
@@ -1233,274 +1230,658 @@ function ModalShell({
 }
 
 // ============================================================
-// Row 51 (25-May-2026) — three prototype sections added below Plays
+// Mode Checklist — 10-Jun · Prototype-faithful rewrite
 // ============================================================
+//
+// One shared component (replaces ExpandChecklist / RetainChecklist /
+// RescueChecklist) that matches `beroe_growth_pipeline_proto_revised.html`:
+//   * Filter tabs: All / Pending / Done (with counts)
+//   * SYS items (engine-derived from appetite + plays + mode)
+//   * AI items with ✓ accept / ✕ dismiss actions
+//   * CSM custom items with delete + add-input at the bottom
+//   * Source legend (SYS · AI · CSM)
+//
+// All state — checked SYS items + accepted/dismissed AI ids + CSM custom
+// items — persists in `localStorage` per-account-per-mode. No backend.
+//
+// Beroe palette: SYS = Indigo tint · AI = Fuscia tint · CSM = Aqua tint
+// (verbatim from the prototype CSS root vars).
 
-// 1. Retain Checklist — 6 retention hygiene items derived from the existing
-//    appetite + plays + mode. Each item is "✓ done" or "⚠ open" — no new
-//    state, just a snapshot of what needs attention to hold the renewal.
-function RetainChecklist({
-  plays,
-  appetite,
-}: {
-  plays: Play[];
-  appetite: Appetite;
-}) {
+type ChkSource = "sys" | "ai" | "csm";
+type ChkStatus = "pending" | "warn" | "done";
+
+interface SysSpec {
+  id: string;
+  label: string;
+  status: ChkStatus;
+  hint?: string;
+}
+
+interface AiSpec {
+  id: string;
+  label: string;
+  hint?: string;
+}
+
+interface CsmEntry {
+  id: string;
+  text: string;
+  createdAt: string;
+  status: "pending" | "done";
+}
+
+interface ChkRow {
+  id: string;
+  source: ChkSource;
+  label: string;
+  hint?: string;
+  status: ChkStatus;
+  acceptedFromAi?: boolean;
+}
+
+const MODE_CHK_CONF: Record<
+  PlayMode,
+  { title: string; tail: string; ai: AiSpec[] }
+> = {
+  expand: {
+    title: "🚀 Expand Checklist",
+    tail: "ready",
+    ai: [
+      {
+        id: "ai-touchpoint-week",
+        label: "Log first touchpoint this week",
+        hint: "No touchpoints in last 30d — even a status email lifts the score",
+      },
+      {
+        id: "ai-peer-shareback",
+        label: "Schedule peer-benchmark share-back with sponsor",
+        hint: "Top peer CSMs open with the saturation gap — drives Sustainability play close in 65d avg",
+      },
+    ],
+  },
+  retain: {
+    title: "🛡️ Retain Checklist",
+    tail: "healthy",
+    ai: [
+      {
+        id: "ai-qbr-renewal",
+        label: "Run a QBR before the renewal window",
+        hint: "Pre-renewal trust check — peers see ~30% churn drop after QBR",
+      },
+      {
+        id: "ai-value-recap",
+        label: "Document value delivered for renewal narrative",
+        hint: "Pull from Success Management → Value Delivery Document",
+      },
+    ],
+  },
+  rescue: {
+    title: "🚑 Rescue Checklist",
+    tail: "stable",
+    ai: [
+      {
+        id: "ai-exec-escalation",
+        label: "Schedule executive escalation with sponsor",
+        hint: "Re-sets relationship before churn signal hardens",
+      },
+      {
+        id: "ai-root-cause",
+        label: "Document root-cause + 2-week recovery plan",
+        hint: "Surface in next leadership review",
+      },
+    ],
+  },
+};
+
+const CHK_TAG_TONE: Record<ChkSource, string> = {
+  // 10-Jun · Beroe palette — Indigo / Fuscia / Aqua tints matching the
+  // prototype CSS root vars (#3800CC / #8a1a90 / #0f7770).
+  sys: "bg-beroe-indigo/10 text-beroe-indigo",
+  ai: "bg-beroe-fuscia/10 text-beroe-fuscia",
+  csm: "bg-beroe-aqua/10 text-beroe-aqua-deep",
+};
+
+function _sysItems(mode: PlayMode, plays: Play[], appetite: Appetite): SysSpec[] {
   const livePlays = plays.filter((p) => !p.hidden);
-  const items: { label: string; done: boolean; hint?: string }[] = [
+  if (mode === "expand") {
+    const xp = livePlays.filter((p) => p.modes.includes("expand"));
+    return [
+      {
+        id: "sys-x-1",
+        label: "≥1 expand play in motion",
+        status: xp.length > 0 ? "done" : "warn",
+        hint: xp.length === 0 ? "Add at least one expand-tagged play" : undefined,
+      },
+      {
+        id: "sys-x-2",
+        label: "≥1 high-probability expand play (≥60%)",
+        status: xp.some((p) => p.prob >= 60) ? "done" : "warn",
+        hint: "Bring an expand play above 60% confidence",
+      },
+      {
+        id: "sys-x-3",
+        label: "Pipeline meets ARR-growth target",
+        status: appetite.breakdown.arr_status === "on_track" ? "done" : "warn",
+        hint: "Pipeline below target — add value to expand plays",
+      },
+      {
+        id: "sys-x-4",
+        label: "Health ≥70 (expand-ready band)",
+        status: appetite.breakdown.health_pts >= 28 ? "done" : "warn",
+        hint: "Stabilise health before pushing expand",
+      },
+      {
+        id: "sys-x-5",
+        label: "Signal mix tilted positive / neutral",
+        status: appetite.breakdown.sig_pts >= 15 ? "done" : "warn",
+        hint: "Resolve open risks before pushing expand",
+      },
+      { id: "sys-x-6", label: "Mode confirmed (auto or manual)", status: "done" },
+    ];
+  }
+  if (mode === "rescue") {
+    const rp = livePlays.filter((p) => p.modes.includes("rescue"));
+    return [
+      {
+        id: "sys-r-1",
+        label: "≥1 rescue play in motion",
+        status: rp.length > 0 ? "done" : "warn",
+        hint: rp.length === 0 ? "Add at least one rescue-tagged play" : undefined,
+      },
+      {
+        id: "sys-r-2",
+        label: "Executive sponsor engaged",
+        status: rp.some(
+          (p) =>
+            (p.title || "").toLowerCase().includes("exec") ||
+            (p.trigger_text || "").toLowerCase().includes("sponsor"),
+        )
+          ? "done"
+          : "warn",
+        hint: "Schedule an exec-sponsor touchpoint",
+      },
+      {
+        id: "sys-r-3",
+        label: "Open critical / risk signals being worked",
+        status:
+          appetite.breakdown.sig_pts > 0 && appetite.breakdown.sig_pts < 15
+            ? "done"
+            : "warn",
+        hint: "Resolve open risks (signal mix is risk-heavy)",
+      },
+      {
+        id: "sys-r-4",
+        label: "Health-recovery plan documented",
+        status:
+          appetite.breakdown.health_pts < 16 && rp.length > 0 ? "done" : "warn",
+        hint: "Document the health-recovery plan as a play below",
+      },
+      {
+        id: "sys-r-5",
+        label: "Stabilise ARR — pause expansion asks",
+        status: appetite.breakdown.arr_status !== "declining" ? "done" : "warn",
+        hint: "ARR is declining — pull back any expand commitments",
+      },
+      { id: "sys-r-6", label: "Mode confirmed (auto or manual)", status: "done" },
+    ];
+  }
+  // retain (default)
+  return [
     {
+      id: "sys-t-1",
       label: "Active plays in motion (≥1)",
-      done: livePlays.length > 0,
+      status: livePlays.length > 0 ? "done" : "warn",
       hint: livePlays.length === 0 ? "Add at least one play below" : undefined,
     },
     {
+      id: "sys-t-2",
       label: "Renewal play within 90 days",
-      done: livePlays.some(
+      status: livePlays.some(
         (p) =>
           (p.when_text || "").toLowerCase().includes("q") ||
           (p.when_text || "").toLowerCase().includes("renewal"),
-      ),
+      )
+        ? "done"
+        : "warn",
       hint: "Schedule the renewal-anchor play",
     },
     {
+      id: "sys-t-3",
       label: "Health ≥40 (out of risk band)",
-      done: appetite.breakdown.health_pts >= 16, // health_pts is health*0.4
+      status: appetite.breakdown.health_pts >= 16 ? "done" : "warn",
     },
     {
+      id: "sys-t-4",
       label: "Pipeline weighted ≥30% of target gap",
-      done: appetite.breakdown.arr_status !== "behind",
+      status: appetite.breakdown.arr_status !== "behind" ? "done" : "warn",
       hint: "Build pipeline to close the ARR gap",
     },
     {
+      id: "sys-t-5",
       label: "Signal mix not risk-dominant",
-      done: appetite.breakdown.sig_pts >= 15,
+      status: appetite.breakdown.sig_pts >= 15 ? "done" : "warn",
       hint: "Resolve open risks / surface positive signals",
     },
-    {
-      label: "Mode confirmed (auto or manual)",
-      done: true,
-    },
+    { id: "sys-t-6", label: "Mode confirmed (auto or manual)", status: "done" },
   ];
-  const done = items.filter((i) => i.done).length;
+}
+
+function _lsKey(accountId: string, mode: PlayMode, slot: string): string {
+  return `awb:checklist:${accountId}:${mode}:${slot}`;
+}
+
+function _readLs<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function _writeLs(key: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* localStorage quota / private mode — silently skip */
+  }
+}
+
+function ModeChecklist({
+  mode,
+  plays,
+  appetite,
+  accountId,
+}: {
+  mode: PlayMode;
+  plays: Play[];
+  appetite: Appetite;
+  accountId: string;
+}) {
+  const cfg = MODE_CHK_CONF[mode];
+  const [filter, setFilter] = useState<"all" | "pending" | "done">("all");
+  const [draft, setDraft] = useState("");
+
+  // ── Persistent state ───────────────────────────────────────────
+  // sysOverrides: SYS items the user manually checked (overrides
+  //   engine `warn` → `done`); shape Record<sys-id, boolean>
+  // dismissedAi: AI ids the user dismissed (✕)
+  // acceptedAi:  AI ids the user accepted (moved to CSM list)
+  // csm:         CsmEntry[] — custom items the user typed
+  const sysKey = _lsKey(accountId, mode, "sys-checked");
+  const dismissedKey = _lsKey(accountId, mode, "ai-dismissed");
+  const acceptedKey = _lsKey(accountId, mode, "ai-accepted");
+  const csmKey = _lsKey(accountId, mode, "csm");
+
+  const [sysChecked, setSysChecked] = useState<Record<string, boolean>>(() =>
+    _readLs<Record<string, boolean>>(sysKey, {}),
+  );
+  const [dismissedAi, setDismissedAi] = useState<string[]>(() =>
+    _readLs<string[]>(dismissedKey, []),
+  );
+  const [acceptedAi, setAcceptedAi] = useState<string[]>(() =>
+    _readLs<string[]>(acceptedKey, []),
+  );
+  const [csmItems, setCsmItems] = useState<CsmEntry[]>(() =>
+    _readLs<CsmEntry[]>(csmKey, []),
+  );
+
+  // ── Compose final rows ────────────────────────────────────────
+  const sysRows: ChkRow[] = _sysItems(mode, plays, appetite).map((s) => ({
+    id: s.id,
+    source: "sys",
+    label: s.label,
+    hint: s.hint,
+    status: sysChecked[s.id] ? "done" : s.status,
+  }));
+
+  const aiRows: ChkRow[] = cfg.ai
+    .filter((a) => !dismissedAi.includes(a.id) && !acceptedAi.includes(a.id))
+    .map((a) => ({
+      id: a.id,
+      source: "ai",
+      label: a.label,
+      hint: a.hint,
+      status: "pending",
+    }));
+
+  const csmRows: ChkRow[] = csmItems.map((c) => ({
+    id: c.id,
+    source: "csm",
+    label: c.text,
+    hint: `Added ${c.createdAt}`,
+    status: c.status === "done" ? "done" : "pending",
+    acceptedFromAi: c.id.startsWith("ai-"),
+  }));
+
+  const rows: ChkRow[] = [...sysRows, ...aiRows, ...csmRows];
+  const all = rows.length;
+  const done = rows.filter((r) => r.status === "done").length;
+  const pending = all - done;
+  const visible = rows.filter((r) =>
+    filter === "all"
+      ? true
+      : filter === "done"
+        ? r.status === "done"
+        : r.status !== "done",
+  );
+
+  // ── Actions ───────────────────────────────────────────────────
+  const toggleRow = (row: ChkRow) => {
+    if (row.source === "sys") {
+      const next = { ...sysChecked, [row.id]: row.status !== "done" };
+      setSysChecked(next);
+      _writeLs(sysKey, next);
+    } else if (row.source === "csm") {
+      const next = csmItems.map((c) =>
+        c.id === row.id
+          ? { ...c, status: c.status === "done" ? ("pending" as const) : ("done" as const) }
+          : c,
+      );
+      setCsmItems(next);
+      _writeLs(csmKey, next);
+    }
+    // AI items aren't toggleable — accept (→ CSM) or dismiss.
+  };
+
+  const acceptAi = (row: ChkRow) => {
+    const acc = [...acceptedAi, row.id];
+    setAcceptedAi(acc);
+    _writeLs(acceptedKey, acc);
+    const csm = [
+      ...csmItems,
+      {
+        id: row.id,
+        text: row.label,
+        createdAt: new Date().toISOString().slice(0, 10),
+        status: "pending" as const,
+      },
+    ];
+    setCsmItems(csm);
+    _writeLs(csmKey, csm);
+  };
+
+  const dismissAi = (row: ChkRow) => {
+    const next = [...dismissedAi, row.id];
+    setDismissedAi(next);
+    _writeLs(dismissedKey, next);
+  };
+
+  const deleteCsm = (row: ChkRow) => {
+    const next = csmItems.filter((c) => c.id !== row.id);
+    setCsmItems(next);
+    _writeLs(csmKey, next);
+  };
+
+  const addCustom = () => {
+    const text = draft.trim();
+    if (!text) return;
+    const entry: CsmEntry = {
+      id: `csm-${Date.now()}`,
+      text,
+      createdAt: new Date().toISOString().slice(0, 10),
+      status: "pending",
+    };
+    const next = [...csmItems, entry];
+    setCsmItems(next);
+    _writeLs(csmKey, next);
+    setDraft("");
+  };
+
+  // ── Render ────────────────────────────────────────────────────
   return (
     <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[13px] font-bold">🛡️ Retain Checklist</div>
-        <span
-          className={cn(
-            "text-[11px] font-bold px-2 py-0.5 rounded-full",
-            done === items.length
-              ? "bg-beroe-green/20 text-beroe-green"
-              : done >= items.length - 2
-                ? "bg-beroe-amber/20 text-beroe-amber"
-                : "bg-beroe-red/15 text-beroe-red",
-          )}
-        >
-          {done} / {items.length} healthy
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="text-[13px] font-bold">{cfg.title}</div>
+        <span className="text-[10px] font-bold text-text-muted bg-beroe-bg px-2 py-0.5 rounded">
+          {done} / {all} {cfg.tail}
         </span>
       </div>
-      <ul className="space-y-1.5">
-        {items.map((it) => (
-          <li
-            key={it.label}
-            className="flex items-start gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 mb-2.5 bg-beroe-bg rounded-md p-0.5">
+        {([
+          ["all", "All", all],
+          ["pending", "Pending", pending],
+          ["done", "Done", done],
+        ] as const).map(([id, label, count]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setFilter(id)}
+            className={cn(
+              "flex-1 px-2 py-1.5 rounded text-[10.5px] font-bold transition-colors",
+              filter === id
+                ? "bg-white text-beroe-indigo shadow-sm"
+                : "text-text-muted hover:text-text-primary",
+            )}
           >
-            <span className={it.done ? "text-beroe-green" : "text-beroe-amber"}>
-              {it.done ? "✓" : "⚠"}
-            </span>
-            <span className="flex-1">
-              {it.label}
-              {!it.done && it.hint && (
-                <span className="text-text-muted italic ml-2">
-                  — {it.hint}
-                </span>
+            {label}
+            <span
+              className={cn(
+                "ml-1 px-1.5 py-px rounded-full text-[9px] font-extrabold",
+                filter === id
+                  ? "bg-beroe-indigo/10 text-beroe-indigo"
+                  : "bg-beroe-bg text-text-muted",
               )}
+            >
+              {count}
             </span>
-          </li>
+          </button>
         ))}
-      </ul>
+      </div>
+
+      {/* Item list */}
+      <div className="space-y-1.5">
+        {visible.length === 0 ? (
+          <div className="text-[11px] text-text-muted italic py-4 text-center">
+            Nothing here.
+          </div>
+        ) : (
+          visible.map((row) => (
+            <ChecklistRow
+              key={row.id}
+              row={row}
+              onToggle={() => toggleRow(row)}
+              onAccept={() => acceptAi(row)}
+              onDismiss={() => dismissAi(row)}
+              onDelete={() => deleteCsm(row)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* AI banner */}
+      {aiRows.length > 0 && (
+        <div
+          className="mt-2 rounded-md p-2 flex gap-2 items-start text-[10.5px] leading-snug"
+          style={{
+            background: "linear-gradient(135deg, #fdf5ff, #fafbff)",
+            border: "1px dashed #c9b5ff",
+          }}
+        >
+          <span style={{ color: "#C344C7" }}>✨</span>
+          <span>
+            <b style={{ color: "#8a1a90" }}>AI suggested items</b> above are
+            based on the gap pattern in your account state. Accept to add to
+            your list, dismiss to ignore.
+          </span>
+        </div>
+      )}
+
+      {/* Add-your-own input */}
+      <div className="flex gap-1.5 mt-2.5">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") addCustom();
+          }}
+          placeholder="+ Add your own checklist item…"
+          className="flex-1 px-2 py-1.5 text-[11px] rounded-md border border-dashed border-beroe-card-border bg-white focus:border-beroe-indigo focus:border-solid outline-none"
+        />
+        <button
+          type="button"
+          onClick={addCustom}
+          className="text-[11px] font-bold rounded-md px-3 py-1.5 bg-beroe-indigo text-white hover:opacity-90"
+        >
+          Add
+        </button>
+      </div>
+
+      {/* Legend */}
+      <div className="text-[9.5px] text-text-muted mt-2.5 leading-relaxed">
+        <b>Legend:</b>{" "}
+        <span className={cn("font-bold px-1.5 py-px rounded uppercase tracking-wide", CHK_TAG_TONE.sys)}>
+          SYS
+        </span>{" "}
+        engine ·{" "}
+        <span className={cn("font-bold px-1.5 py-px rounded uppercase tracking-wide", CHK_TAG_TONE.ai)}>
+          AI
+        </span>{" "}
+        ·{" "}
+        <span className={cn("font-bold px-1.5 py-px rounded uppercase tracking-wide", CHK_TAG_TONE.csm)}>
+          CSM
+        </span>{" "}
+        custom
+      </div>
     </div>
   );
 }
 
-// 1b. Expand Checklist — 6 expansion-readiness items derived from the
-//     existing appetite + plays. Mirrors RetainChecklist shape. Surfaces
-//     when mode === "expand" so the CSM sees expansion-specific hygiene
-//     instead of the retention list. (28-May bug 28-36.)
-function ExpandChecklist({
-  plays,
-  appetite,
+function ChecklistRow({
+  row,
+  onToggle,
+  onAccept,
+  onDismiss,
+  onDelete,
 }: {
-  plays: Play[];
-  appetite: Appetite;
+  row: ChkRow;
+  onToggle: () => void;
+  onAccept: () => void;
+  onDismiss: () => void;
+  onDelete: () => void;
 }) {
-  const livePlays = plays.filter((p) => !p.hidden);
-  const expandPlays = livePlays.filter((p) => p.modes.includes("expand"));
-  const items: { label: string; done: boolean; hint?: string }[] = [
-    {
-      label: "≥1 expand play in motion",
-      done: expandPlays.length > 0,
-      hint:
-        expandPlays.length === 0
-          ? "Add at least one expand-tagged play below"
-          : undefined,
-    },
-    {
-      label: "≥1 high-probability expand play (≥60%)",
-      done: expandPlays.some((p) => p.prob >= 60),
-      hint: "Bring an expand play above 60% confidence",
-    },
-    {
-      label: "Pipeline meets ARR-growth target",
-      done: appetite.breakdown.arr_status === "on_track",
-      hint: "Pipeline below target — add value to expand plays",
-    },
-    {
-      label: "Health ≥70 (expand-ready band)",
-      done: appetite.breakdown.health_pts >= 28, // health_pts is health*0.4
-      hint: "Stabilise health before pushing expand",
-    },
-    {
-      label: "Signal mix tilted positive / neutral",
-      done: appetite.breakdown.sig_pts >= 20,
-      hint: "Resolve open risks before pushing expand",
-    },
-    {
-      label: "Mode confirmed (auto or manual)",
-      done: true,
-    },
-  ];
-  const done = items.filter((i) => i.done).length;
-  return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[13px] font-bold">🚀 Expand Checklist</div>
-        <span
-          className={cn(
-            "text-[11px] font-bold px-2 py-0.5 rounded-full",
-            done === items.length
-              ? "bg-beroe-green/20 text-beroe-green"
-              : done >= items.length - 2
-                ? "bg-beroe-amber/20 text-beroe-amber"
-                : "bg-beroe-red/15 text-beroe-red",
-          )}
-        >
-          {done} / {items.length} ready
-        </span>
-      </div>
-      <ul className="space-y-1.5">
-        {items.map((it) => (
-          <li
-            key={it.label}
-            className="flex items-start gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
-          >
-            <span className={it.done ? "text-beroe-green" : "text-beroe-amber"}>
-              {it.done ? "✓" : "⚠"}
-            </span>
-            <span className="flex-1">
-              {it.label}
-              {!it.done && it.hint && (
-                <span className="text-text-muted text-[11px] ml-1.5">
-                  — {it.hint}
-                </span>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+  const tag =
+    row.source === "sys" ? "SYS" : row.source === "ai" ? "✨ AI" : "CSM";
 
-// 1c. Rescue Checklist — 09-Jun bug (Bug Tracker · Jun-8 #6 part 2).
-//     Surfaces when mode === "rescue" so the CSM sees rescue-specific
-//     hygiene instead of falling back to the retain checklist. Mirrors
-//     RetainChecklist / ExpandChecklist shape — items are derived from
-//     existing appetite + plays state; no new persistence.
-function RescueChecklist({
-  plays,
-  appetite,
-}: {
-  plays: Play[];
-  appetite: Appetite;
-}) {
-  const livePlays = plays.filter((p) => !p.hidden);
-  const rescuePlays = livePlays.filter((p) => p.modes.includes("rescue"));
-  const items: { label: string; done: boolean; hint?: string }[] = [
-    {
-      label: "≥1 rescue play in motion",
-      done: rescuePlays.length > 0,
-      hint:
-        rescuePlays.length === 0
-          ? "Add at least one rescue-tagged play below"
-          : undefined,
-    },
-    {
-      label: "Executive sponsor engaged",
-      done: rescuePlays.some(
-        (p) => (p.title || "").toLowerCase().includes("exec") ||
-               (p.trigger_text || "").toLowerCase().includes("sponsor"),
-      ),
-      hint: "Schedule an exec-sponsor touchpoint",
-    },
-    {
-      label: "Open critical / risk signals being worked",
-      done: appetite.breakdown.sig_pts > 0 && appetite.breakdown.sig_pts < 15,
-      hint: "Resolve open risks (signal mix is risk-heavy)",
-    },
-    {
-      label: "Health-recovery plan documented",
-      done: appetite.breakdown.health_pts < 16 && rescuePlays.length > 0,
-      hint: "Document the health-recovery plan as a play below",
-    },
-    {
-      label: "Stabilise ARR — pause expansion asks",
-      done: appetite.breakdown.arr_status !== "declining",
-      hint: "ARR is declining — pull back any expand commitments",
-    },
-    {
-      label: "Mode confirmed (auto or manual)",
-      done: true,
-    },
-  ];
-  const done = items.filter((i) => i.done).length;
+  // Background tint + left-border by status / source
+  const rowStyle: React.CSSProperties = {};
+  let leftBorder: string | undefined;
+  if (row.status === "done") {
+    rowStyle.background = "#f0fdf4";
+    rowStyle.borderColor = "#a8e5c4";
+  } else if (row.status === "warn") {
+    rowStyle.background = "#fff8eb";
+    rowStyle.borderColor = "#fde2a0";
+  } else if (row.source === "ai") {
+    rowStyle.background = "linear-gradient(180deg, #fdf5ff, #fff)";
+    rowStyle.borderColor = "#e9c0ec";
+    leftBorder = "#C344C7";
+  } else if (row.source === "csm") {
+    leftBorder = "#4A00F8";
+  }
+
   return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[13px] font-bold">🚑 Rescue Checklist</div>
-        <span
+    <div
+      className="group flex gap-2 px-2.5 py-2 rounded-md border bg-white relative transition-colors"
+      style={{
+        ...rowStyle,
+        ...(leftBorder ? { borderLeftWidth: "3px", borderLeftColor: leftBorder } : {}),
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "w-[18px] h-[18px] rounded border-2 shrink-0 mt-0.5 flex items-center justify-center text-[11px] font-bold transition-colors",
+          row.status === "done"
+            ? "bg-beroe-green border-beroe-green text-white"
+            : row.status === "warn"
+              ? "border-beroe-amber text-beroe-amber bg-white"
+              : "border-beroe-card-border text-transparent bg-white hover:border-beroe-indigo",
+        )}
+        title="Toggle"
+      >
+        {row.status === "done" ? "✓" : row.status === "warn" ? "!" : ""}
+      </button>
+
+      <div className="flex-1 min-w-0">
+        <div
           className={cn(
-            "text-[11px] font-bold px-2 py-0.5 rounded-full",
-            done === items.length
-              ? "bg-beroe-green/20 text-beroe-green"
-              : done >= items.length - 2
-                ? "bg-beroe-amber/20 text-beroe-amber"
-                : "bg-beroe-red/15 text-beroe-red",
+            "text-[11.5px] font-semibold leading-snug",
+            row.status === "done" ? "line-through text-text-muted" : "text-text-primary",
           )}
         >
-          {done} / {items.length} stable
-        </span>
-      </div>
-      <ul className="space-y-1.5">
-        {items.map((it) => (
-          <li
-            key={it.label}
-            className="flex items-start gap-2 text-[12px] py-1 border-b border-beroe-card-border/60 last:border-b-0"
+          {row.label}
+        </div>
+        {row.hint && (
+          <div
+            className={cn(
+              "text-[10px] mt-0.5 leading-snug text-text-muted",
+              row.status === "done" ? "opacity-60" : "",
+            )}
           >
-            <span className={it.done ? "text-beroe-green" : "text-beroe-amber"}>
-              {it.done ? "✓" : "⚠"}
-            </span>
-            <span className="flex-1">
-              {it.label}
-              {!it.done && it.hint && (
-                <span className="text-text-muted text-[11px] ml-1.5">
-                  — {it.hint}
-                </span>
+            {row.hint}
+          </div>
+        )}
+        <div className="flex gap-1 mt-1 flex-wrap">
+          <span
+            className={cn(
+              "text-[8.5px] font-extrabold uppercase tracking-wide px-1.5 py-px rounded",
+              CHK_TAG_TONE[row.source],
+            )}
+          >
+            {tag}
+          </span>
+          {row.acceptedFromAi && (
+            <span
+              className={cn(
+                "text-[8.5px] font-extrabold uppercase tracking-wide px-1.5 py-px rounded",
+                CHK_TAG_TONE.ai,
               )}
+            >
+              from AI
             </span>
-          </li>
-        ))}
-      </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Action menu */}
+      <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {row.source === "ai" && row.status !== "done" && (
+          <>
+            <button
+              type="button"
+              onClick={onAccept}
+              className="w-[22px] h-[22px] rounded text-beroe-green border border-beroe-green/40 bg-white hover:bg-beroe-green hover:text-white text-[11px] flex items-center justify-center"
+              title="Accept"
+            >
+              ✓
+            </button>
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="w-[22px] h-[22px] rounded text-text-muted border border-beroe-card-border bg-white hover:text-beroe-red hover:border-beroe-red text-[11px] flex items-center justify-center"
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </>
+        )}
+        {row.source === "csm" && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="w-[22px] h-[22px] rounded text-text-muted border border-beroe-card-border bg-white hover:text-beroe-red hover:border-beroe-red text-[11px] flex items-center justify-center"
+            title="Delete"
+          >
+            🗑
+          </button>
+        )}
+      </div>
     </div>
   );
 }
