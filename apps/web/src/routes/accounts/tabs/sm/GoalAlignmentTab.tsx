@@ -52,7 +52,11 @@ import type { CSOnboarding, Stakeholder } from "@/types/cs_onboarding";
 import type { Contact, ContactListResponse } from "@/types/contact";
 // 09-Jun · G7 — touchpoint counts per initiative come from
 // account_activities.linked_initiatives.
-import type { Activity } from "@/types/signal";
+import type { Activity, ActivityCreate } from "@/types/signal";
+// 10-Jun · Per-initiative touchpoint modal — uses the same ACT_CONF +
+// ACTIVITY_TYPES vocabulary as the account-level Log Activity surface.
+import { ACT_CONF, ACTIVITY_TYPES } from "@/types/signal";
+import { cn } from "@/lib/utils";
 // 09-Jun bug (Bug Tracker · Jun-8 #5) — surface VPD-extracted candidate
 // goals on this tab so the CSM doesn't have to hunt for them on the
 // document row.
@@ -2627,6 +2631,29 @@ function GoalFrozenBody({
     return map;
   }, [activitiesQ.data]);
 
+  // 10-Jun · Full activity list per initiative (newest first). Drives
+  // the per-initiative Touchpoints expander on each row.
+  const touchpointListByInit = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    for (const a of activitiesQ.data?.items ?? []) {
+      if (a.hidden) continue;
+      for (const initId of a.linked_initiatives ?? []) {
+        const arr = map.get(initId) ?? [];
+        arr.push(a);
+        map.set(initId, arr);
+      }
+    }
+    // Newest first
+    for (const arr of map.values()) {
+      arr.sort((x, y) => {
+        const xt = x.occurred_at ?? x.created_at ?? "";
+        const yt = y.occurred_at ?? y.created_at ?? "";
+        return yt.localeCompare(xt);
+      });
+    }
+    return map;
+  }, [activitiesQ.data]);
+
   return (
     <div
       className="px-4 pt-3 pb-3.5 border-t"
@@ -2739,6 +2766,8 @@ function GoalFrozenBody({
             init={it}
             cat={goal.category}
             touchpoints={touchpointsByInit.get(it.id) ?? null}
+            touchpointList={touchpointListByInit.get(it.id) ?? []}
+            accountId={goal.account_id}
             onSave={(next) => {
               saveInits(inits.map((x) => (x.id === it.id ? next : x)));
             }}
@@ -2746,6 +2775,7 @@ function GoalFrozenBody({
               if (!confirm("Remove this initiative?")) return;
               saveInits(inits.filter((x) => x.id !== it.id));
             }}
+            onTouchpointSaved={() => activitiesQ.refetch()}
           />
         ))
       )}
@@ -2815,17 +2845,27 @@ function InitiativeRow({
   init,
   cat,
   touchpoints,
+  touchpointList,
+  accountId,
   onSave,
   onDelete,
+  onTouchpointSaved,
 }: {
   init: ProtoInit;
   cat: CSGoalCategory;
   // 09-Jun · G7 — null when no activities reference this init yet.
   touchpoints: { count: number; lastAt: string | null } | null;
+  // 10-Jun · Full list of touchpoints for this initiative (newest first).
+  touchpointList: Activity[];
+  accountId: string;
   onSave: (next: ProtoInit) => void;
   onDelete: () => void;
+  onTouchpointSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  // 10-Jun · Per-initiative touchpoint expander + modal state.
+  const [showTouchpoints, setShowTouchpoints] = useState(false);
+  const [logTouchpoint, setLogTouchpoint] = useState(false);
   const itype = INIT_TYPES.find((t) => t.label === init.type) ?? INIT_TYPES[0];
 
   if (editing) {
@@ -2843,14 +2883,18 @@ function InitiativeRow({
   }
 
   return (
+    <div className="mb-1.5">
     <div
-      className="grid items-center gap-2.5 p-2.5 rounded-card mb-1.5"
+      className="grid items-center gap-2.5 p-2.5 rounded-card"
       style={{
         // 10-Jun · 7-column layout — icon · name · stage · target/delivered
-        // · % completion · notes · actions.
-        gridTemplateColumns: "36px 1fr 110px 140px 80px 1fr 60px",
+        // · % completion · notes · actions (3 buttons now).
+        gridTemplateColumns: "36px 1fr 110px 140px 80px 1fr 96px",
         background: "#fff",
         border: `1px solid ${BRAND.cardBorder}`,
+        // Round only top corners when expanded (touchpoint list sits below).
+        borderBottomLeftRadius: showTouchpoints ? 0 : undefined,
+        borderBottomRightRadius: showTouchpoints ? 0 : undefined,
       }}
     >
       <div
@@ -2875,22 +2919,25 @@ function InitiativeRow({
             link to this initiative; surfaces as a compact pill once
             CSMs start tagging activities with the init id. */}
         {touchpoints && touchpoints.count > 0 && (
-          <div className="mt-1 inline-flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-wider"
+          <button
+            type="button"
+            onClick={() => setShowTouchpoints((v) => !v)}
+            className="mt-1 inline-flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-wider cursor-pointer hover:opacity-80"
             style={{ color: BRAND.t2 }}
+            title={touchpoints.lastAt ? `Last touchpoint ${touchpoints.lastAt.slice(0, 10)}` : ""}
           >
             <span
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full"
               style={{ background: "#f3f0ff", color: BRAND.indigo }}
-              title={touchpoints.lastAt ? `Last touchpoint ${touchpoints.lastAt.slice(0, 10)}` : ""}
             >
-              💬 {touchpoints.count} touchpoint{touchpoints.count === 1 ? "" : "s"}
+              {showTouchpoints ? "▾" : "▸"} 💬 {touchpoints.count} touchpoint{touchpoints.count === 1 ? "" : "s"}
             </span>
             {touchpoints.lastAt && (
               <span style={{ color: BRAND.t3, textTransform: "none" }}>
                 · last {touchpoints.lastAt.slice(0, 10)}
               </span>
             )}
-          </div>
+          </button>
         )}
       </div>
       {/* 10-Jun · Stage column now shows the 4-stage universal pipeline. */}
@@ -2955,6 +3002,19 @@ function InitiativeRow({
       <div className="flex gap-1 justify-end">
         <button
           type="button"
+          onClick={() => setLogTouchpoint(true)}
+          className="text-[11px] px-2 py-1 rounded-card border"
+          style={{
+            borderColor: BRAND.indigo + "40",
+            background: "#f3f0ff",
+            color: BRAND.indigo,
+          }}
+          title="Log touchpoint"
+        >
+          💬
+        </button>
+        <button
+          type="button"
           onClick={() => setEditing(true)}
           className="text-[11px] px-2 py-1 rounded-card border"
           style={{
@@ -2981,6 +3041,298 @@ function InitiativeRow({
         </button>
       </div>
     </div>
+    {/* 10-Jun · Per-initiative Touchpoints expansion — shows when the
+        CSM clicks the 💬 count pill in the row above. Lists every
+        activity linked to this initiative, newest first. */}
+    {showTouchpoints && touchpointList.length > 0 && (
+      <div
+        className="border border-t-0 rounded-b-card px-3 py-2.5"
+        style={{ borderColor: BRAND.cardBorder, background: "#fafbff" }}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div
+            className="text-[11px] font-bold uppercase tracking-wider"
+            style={{ color: BRAND.t2 }}
+          >
+            Touchpoints · {touchpointList.length}
+          </div>
+          <button
+            type="button"
+            onClick={() => setLogTouchpoint(true)}
+            className="text-[10.5px] font-semibold px-2 py-1 rounded-card"
+            style={{ background: BRAND.indigo, color: "#fff" }}
+          >
+            + Log touchpoint
+          </button>
+        </div>
+        <div className="space-y-1.5">
+          {touchpointList.map((a) => (
+            <TouchpointRow key={a.id} act={a} />
+          ))}
+        </div>
+      </div>
+    )}
+    {logTouchpoint && (
+      <TouchpointModal
+        accountId={accountId}
+        initId={init.id}
+        initName={init.name}
+        onClose={() => setLogTouchpoint(false)}
+        onSaved={() => {
+          setLogTouchpoint(false);
+          setShowTouchpoints(true);
+          onTouchpointSaved();
+        }}
+      />
+    )}
+    </div>
+  );
+}
+
+// 10-Jun · Single touchpoint row inside the per-initiative expander.
+function TouchpointRow({ act }: { act: Activity }) {
+  const conf = ACT_CONF[act.type];
+  const when = act.occurred_at ?? act.created_at ?? "";
+  return (
+    <div
+      className="rounded-card border px-2.5 py-2"
+      style={{ borderColor: BRAND.cardBorder, background: "#fff" }}
+    >
+      <div className="flex items-start gap-2">
+        <span
+          className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0"
+          style={{ background: conf.bg, color: conf.col }}
+        >
+          {conf.ic} {conf.label}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div
+            className="text-[12px] font-bold leading-snug"
+            style={{ color: BRAND.t1 }}
+          >
+            {act.title}
+          </div>
+          {act.summary && (
+            <div
+              className="text-[11px] leading-snug mt-0.5"
+              style={{ color: BRAND.t2 }}
+            >
+              {act.summary}
+            </div>
+          )}
+          {act.attendees && (
+            <div
+              className="text-[10px] mt-1"
+              style={{ color: BRAND.t3 }}
+            >
+              👥 {act.attendees}
+            </div>
+          )}
+        </div>
+        <div
+          className="text-[10px] font-mono shrink-0"
+          style={{ color: BRAND.t3 }}
+        >
+          {when ? when.slice(0, 10) : "—"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 10-Jun · Local copies of FormRow + ModalShell from SignalsActivityTab.
+// Both surfaces share the same chrome; lifting these to a shared module
+// is a follow-up cleanup. Kept inline to keep this change contained.
+function FormRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-wider font-semibold text-text-muted">
+        {label}
+      </label>
+      <div className="mt-0.5">{children}</div>
+    </div>
+  );
+}
+
+function ModalShell({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-12 pb-8 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-[min(560px,95vw)]">
+        <div className="px-4 py-3 border-b border-beroe-card-border flex items-center justify-between">
+          <div className="text-[14px] font-bold text-text-primary">{title}</div>
+          <button
+            onClick={onClose}
+            className="text-text-muted hover:text-text-primary text-lg leading-none px-1"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="px-4 py-3">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// 10-Jun · Touchpoint modal — clone of the LogActivityModal in
+// SignalsActivityTab but pre-fills linked_initiatives = [initId] so
+// the resulting activity row is anchored to this initiative.
+function TouchpointModal({
+  accountId,
+  initId,
+  initName,
+  onClose,
+  onSaved,
+}: {
+  accountId: string;
+  initId: string;
+  initName: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<ActivityCreate>({
+    type: "csm_call",
+    title: "",
+    summary: "",
+    items: "",
+    attendees: "",
+    occurred_at: new Date().toISOString().slice(0, 10),
+    linked_metrics: [],
+    linked_initiatives: [initId],
+  });
+  const [err, setErr] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (body: ActivityCreate) =>
+      api.post(`/api/v1/accounts/${accountId}/activities`, body),
+    onSuccess: () => onSaved(),
+    onError: (e: ApiError) => setErr(e.message),
+  });
+  return (
+    <ModalShell
+      onClose={onClose}
+      title={`Log touchpoint — ${initName || "Initiative"}`}
+    >
+      <div className="space-y-2.5">
+        <div
+          className="text-[10.5px] px-2 py-1 rounded-card inline-flex items-center gap-1.5"
+          style={{ background: "#f3f0ff", color: BRAND.indigo }}
+        >
+          🔗 Linked to initiative <b>{initName}</b>
+        </div>
+        <FormRow label="Type">
+          <div className="flex gap-1 flex-wrap">
+            {ACTIVITY_TYPES.map((t) => {
+              const c = ACT_CONF[t];
+              const on = form.type === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setForm({ ...form, type: t })}
+                  className={cn(
+                    "text-[11px] px-2 py-1 rounded-md border-[1.5px]",
+                    on ? "" : "bg-white border-beroe-card-border text-text-muted",
+                  )}
+                  style={
+                    on
+                      ? { background: c.bg, color: c.col, borderColor: c.col + "60" }
+                      : {}
+                  }
+                >
+                  {c.ic} {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </FormRow>
+        <div className="grid grid-cols-2 gap-2">
+          <FormRow label="Title">
+            <input
+              type="text"
+              maxLength={200}
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full text-[12px] px-2 py-1.5 rounded-card border bg-white"
+              style={{ borderColor: BRAND.cardBorder }}
+              placeholder="e.g. Q3 progress call with Ramesh"
+            />
+          </FormRow>
+          <FormRow label="Date">
+            <input
+              type="date"
+              value={form.occurred_at ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, occurred_at: e.target.value || null })
+              }
+              className="w-full text-[12px] px-2 py-1.5 rounded-card border bg-white"
+              style={{ borderColor: BRAND.cardBorder }}
+            />
+          </FormRow>
+        </div>
+        <FormRow label="Summary">
+          <textarea
+            rows={3}
+            maxLength={4000}
+            value={form.summary ?? ""}
+            onChange={(e) => setForm({ ...form, summary: e.target.value })}
+            className="w-full text-[12px] px-2 py-1.5 rounded-card border bg-white"
+            style={{ borderColor: BRAND.cardBorder }}
+            placeholder="What was discussed / decided / committed."
+          />
+        </FormRow>
+        <FormRow label="Attendees">
+          <input
+            type="text"
+            maxLength={400}
+            value={form.attendees ?? ""}
+            onChange={(e) => setForm({ ...form, attendees: e.target.value })}
+            className="w-full text-[12px] px-2 py-1.5 rounded-card border bg-white"
+            style={{ borderColor: BRAND.cardBorder }}
+            placeholder="Comma-separated names"
+          />
+        </FormRow>
+        {err && (
+          <div
+            className="text-[11px] p-2 rounded-card"
+            style={{ background: "#fde7ea", color: BRAND.red }}
+          >
+            {err}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[11.5px] font-semibold px-3 py-1.5 rounded-card border"
+            style={{ borderColor: BRAND.cardBorder, color: BRAND.t3, background: "#fff" }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!form.title.trim() || save.isPending}
+            onClick={() => save.mutate(form)}
+            className="text-[11.5px] font-semibold px-3 py-1.5 rounded-card text-white disabled:opacity-40"
+            style={{ background: BRAND.indigo }}
+          >
+            {save.isPending ? "Logging…" : "Log touchpoint"}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
