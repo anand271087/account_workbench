@@ -32,8 +32,13 @@
 //   • Stakeholders → M14 cs_stakeholders (champion=SPOC, commercial=Budget Owner)
 //   • Power users  → client_contacts filtered to seniority ∈ {cxo,vp,director}
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// 10-Jun · Deep-link support — Value Tracking's "✏️ Edit" sends users
+// here with ?goal=<id>&init=<initId>. We read those params, auto-expand
+// the goal, scroll to it, and pass editInitId down so InitiativeRow
+// opens its editor on landing.
+import { useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/lib/api";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
@@ -668,6 +673,36 @@ export default function GoalAlignmentTab() {
   const [addOpen, setAddOpen] = useState(false);
   const [editingStakeholders, setEditingStakeholders] = useState(false);
 
+  // 10-Jun · Deep-link from Value Tracking — read ?goal=<id>&init=<id>.
+  // editInitId persists in component state (not URL) so refreshing the
+  // tab doesn't keep re-opening the editor after the user has closed it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [editInitId, setEditInitId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const goalId = searchParams.get("goal");
+    const initId = searchParams.get("init");
+    if (!goalId) return;
+    // Expand the target goal so the initiative is rendered.
+    setExpanded((s) => {
+      if (s.has(goalId)) return s;
+      const next = new Set(s);
+      next.add(goalId);
+      return next;
+    });
+    if (initId) setEditInitId(initId);
+    // Scroll the goal into view on the next paint.
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`goal-${goalId}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    // Strip the query params so subsequent toggles don't re-trigger.
+    const next = new URLSearchParams(searchParams);
+    next.delete("goal");
+    next.delete("init");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const goalsQ = useQuery<{ items: CSGoal[] }>({
     queryKey: ["cs-goals", account.id, false],
     queryFn: () =>
@@ -893,6 +928,8 @@ export default function GoalAlignmentTab() {
                 })
               }
               onChanged={invalidate}
+              editInitId={editInitId}
+              onEditInitConsumed={() => setEditInitId(null)}
             />
           ))}
         </div>
@@ -1377,6 +1414,8 @@ function GoalCard({
   setOpenQ,
   onToggle,
   onChanged,
+  editInitId,
+  onEditInitConsumed,
 }: {
   goal: CSGoal;
   expanded: boolean;
@@ -1384,6 +1423,11 @@ function GoalCard({
   setOpenQ: (n: 1 | 2 | 3 | null) => void;
   onToggle: () => void;
   onChanged: () => void;
+  // 10-Jun · Deep-link from Value Tracking — set when this goal is the
+  // landing target. Threaded down to FrozenView → InitiativeRow which
+  // opens its editor when init.id matches editInitId.
+  editInitId?: string | null;
+  onEditInitConsumed?: () => void;
 }) {
   const status = statusOf(goal);
   const isFrozen = status === "frozen";
@@ -1523,7 +1567,12 @@ function GoalCard({
 
       {expanded &&
         (isFrozen ? (
-          <GoalFrozenBody goal={goal} onChanged={onChanged} />
+          <GoalFrozenBody
+            goal={goal}
+            onChanged={onChanged}
+            editInitId={editInitId}
+            onEditInitConsumed={onEditInitConsumed}
+          />
         ) : (
           <GoalAlignmentBody
             goal={goal}
@@ -2575,9 +2624,15 @@ function trunc(s: string, n: number): string {
 function GoalFrozenBody({
   goal,
   onChanged,
+  editInitId,
+  onEditInitConsumed,
 }: {
   goal: CSGoal;
   onChanged: () => void;
+  // 10-Jun · Deep-link target — passed to the InitiativeRow whose id
+  // matches editInitId so the editor opens automatically.
+  editInitId?: string | null;
+  onEditInitConsumed?: () => void;
 }) {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const q1 = readQ1(goal.phase_a);
@@ -2776,6 +2831,8 @@ function GoalFrozenBody({
               saveInits(inits.filter((x) => x.id !== it.id));
             }}
             onTouchpointSaved={() => activitiesQ.refetch()}
+            forceEdit={editInitId === it.id}
+            onForceEditConsumed={onEditInitConsumed}
           />
         ))
       )}
@@ -2850,6 +2907,8 @@ function InitiativeRow({
   onSave,
   onDelete,
   onTouchpointSaved,
+  forceEdit,
+  onForceEditConsumed,
 }: {
   init: ProtoInit;
   cat: CSGoalCategory;
@@ -2861,11 +2920,30 @@ function InitiativeRow({
   onSave: (next: ProtoInit) => void;
   onDelete: () => void;
   onTouchpointSaved: () => void;
+  // 10-Jun · Deep-link from Value Tracking — open the editor and
+  // scroll the row into view when this initiative is the landing
+  // target. Consumed (cleared) once handled so closing the editor
+  // doesn't re-open it.
+  forceEdit?: boolean;
+  onForceEditConsumed?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   // 10-Jun · Per-initiative touchpoint expander + modal state.
   const [showTouchpoints, setShowTouchpoints] = useState(false);
   const [logTouchpoint, setLogTouchpoint] = useState(false);
+
+  // 10-Jun · React to a deep-link landing — open the editor, scroll
+  // into view, then notify the parent to clear the flag so subsequent
+  // edits stay user-driven.
+  useEffect(() => {
+    if (!forceEdit) return;
+    setEditing(true);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`init-row-${init.id}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    onForceEditConsumed?.();
+  }, [forceEdit, init.id, onForceEditConsumed]);
   const itype = INIT_TYPES.find((t) => t.label === init.type) ?? INIT_TYPES[0];
 
   if (editing) {
@@ -2883,7 +2961,7 @@ function InitiativeRow({
   }
 
   return (
-    <div className="mb-1.5">
+    <div className="mb-1.5" id={`init-row-${init.id}`}>
     <div
       className="grid items-center gap-2.5 p-2.5 rounded-card"
       style={{

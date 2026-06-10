@@ -424,16 +424,19 @@ function GoalCard({
             </div>
           ) : (
             <div className="space-y-2 mt-2">
-              {inits.map((it, idx) => (
-                <InitiativeCard
-                  key={initIdFor(it, idx)}
-                  init={it}
-                  accountId={accountId}
-                  touchpoints={
-                    touchpointsByInit.get(initIdFor(it, idx)) ?? []
-                  }
-                />
-              ))}
+              {inits.map((it, idx) => {
+                const id = initIdFor(it, idx);
+                return (
+                  <InitiativeCard
+                    key={id}
+                    init={it}
+                    initId={id}
+                    goalId={goal.id}
+                    accountId={accountId}
+                    touchpoints={touchpointsByInit.get(id) ?? []}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -456,10 +459,14 @@ function initIdFor(it: Initiative, idx?: number): string {
 // ============================================================
 function InitiativeCard({
   init,
+  initId,
+  goalId,
   accountId,
   touchpoints,
 }: {
   init: Initiative;
+  initId: string;
+  goalId: string;
   accountId: string;
   touchpoints: Activity[];
 }) {
@@ -532,9 +539,10 @@ function InitiativeCard({
           </div>
         </div>
         {/* Edit → deep-link to Goal Alignment tab. Query string carries
-            the goal id so that tab can auto-scroll/expand on landing. */}
+            both the goal id (for scroll + expand) and the initiative id
+            (so InitiativeRow opens its editor automatically on landing). */}
         <Link
-          to={`/accounts/${accountId}/success-management/goal-alignment`}
+          to={`/accounts/${accountId}/success-management/goal-alignment?goal=${encodeURIComponent(goalId)}&init=${encodeURIComponent(initId)}`}
           className="text-[10.5px] font-bold rounded-card border px-2 py-1.5 text-center"
           style={{
             borderColor: BRAND.indigo + "40",
