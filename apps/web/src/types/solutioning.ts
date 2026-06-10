@@ -31,6 +31,18 @@ export const TRIAL_MODULES = [
 ] as const;
 export type TrialModuleName = (typeof TRIAL_MODULES)[number];
 
+// 10-Jun · One Value Definition revision snapshot. Append-only on the
+// server; the UI renders the list in a right-side history panel and
+// can restore any prior version via PATCH.
+export interface ValueDefVersion {
+  value: string;
+  source: "vpd" | "user";
+  edited_by: string | null;
+  edited_by_name: string | null;
+  edited_at: string;
+  document_id: string | null;
+}
+
 export interface Solutioning {
   account_id: string;
   proposed_solution: string | null;
@@ -46,6 +58,10 @@ export interface Solutioning {
   trial_feedback: string | null;
   value_themes: string[];
   value_definition: string | null;
+  // 10-Jun · Revision history (newest last). Server-controlled —
+  // never patched by the client. Each entry distinguishes AI (VPD
+  // upload) writes from manual CSM edits.
+  value_definition_history?: ValueDefVersion[];
   estimated_value_musd: string | number | null;
 
   ai_extracted_from_doc: string | null;

@@ -161,6 +161,28 @@ async def patch_solutioning(
                 "trial_feedback",
             )
         )
+        # 10-Jun · Versioned value_definition — push a `source='user'`
+        # snapshot onto value_definition_history when the new value
+        # genuinely differs from the current one. Idempotent re-PATCHes
+        # (same content) do NOT bloat the history list. The append
+        # happens BEFORE the actual setattr so the snapshot reflects
+        # the new value the CSM is committing.
+        if "value_definition" in sol_fields:
+            new_vd = sol_fields["value_definition"]
+            cur_vd = row.value_definition
+            if (new_vd or "").strip() != (cur_vd or "").strip():
+                import copy
+                history = copy.deepcopy(list(row.value_definition_history or []))
+                history.append({
+                    "value": new_vd or "",
+                    "source": "user",
+                    "edited_by": str(user.id),
+                    "edited_by_name": user.full_name or user.email,
+                    "edited_at": datetime.now(timezone.utc).isoformat(),
+                    "document_id": None,
+                })
+                row.value_definition_history = history
+
         for field, value in sol_fields.items():
             setattr(row, field, value)
         if user_touched_ai_field and row.ai_extracted_at is not None:

@@ -13,6 +13,21 @@ EngagementType = Literal["one_time", "retainer", "subscription", "pilot", "other
 ShValidation = Literal["confirmed", "partially_confirmed", "revised"]
 
 
+# 10-Jun · Single Value Definition revision entry. Append-only on
+# account_solutioning.value_definition_history. Source distinguishes
+# AI-from-VPD writes from manual CSM edits so the UI can pill them
+# differently.
+class ValueDefVersion(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    value: str
+    source: Literal["vpd", "user"]
+    edited_by: UUID | None = None
+    edited_by_name: str | None = None
+    edited_at: datetime
+    document_id: UUID | None = None
+
+
 class SolutioningOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,6 +49,10 @@ class SolutioningOut(BaseModel):
     trial_feedback: str | None = None
     value_themes: list[str]
     value_definition: str | None
+    # 10-Jun · Revision history surfaced read-only in the response.
+    # Write path is server-controlled (worker on VPD; PATCH handler on
+    # manual edit). Tolerate older rows where the column hadn't existed.
+    value_definition_history: list[ValueDefVersion] = Field(default_factory=list)
     estimated_value_musd: Decimal | None
 
     ai_extracted_from_doc: UUID | None

@@ -127,11 +127,40 @@ async def _process(job_id: UUID) -> dict:
         if doc.kind == "vpd":
             try:
                 vpd_extracted = extract_vpd_fields(text)
+                # 10-Jun · The prominent AI summary now IS the value
+                # definition (per stakeholder). Replace the structured
+                # extract's value_definition with the summary so the
+                # frontend polling + Solutioning row read the same
+                # content — prevents flip-flop between two sources.
+                summary_text = (result.get("summary") or "").strip()
+                if summary_text:
+                    vpd_extracted["value_definition"] = summary_text
                 doc.vpd_extracted_fields = vpd_extracted
                 doc.vpd_extracted_at = datetime.now(timezone.utc)
                 await db.commit()
             except Exception:
                 logger.exception("VPD field extraction failed (non-fatal)")
+
+            # 10-Jun · Stakeholder ask — the prominent VPD AI summary
+            # (which is now a bullet list, see _real_doc_summary for
+            # kind='vpd') overwrites Solutioning.value_definition on
+            # every upload. Newest VPD wins; the prior value is pushed
+            # onto value_definition_history so the CSM can restore it
+            # from the right-side history panel on the Solutioning tab.
+            try:
+                summary_text = (result.get("summary") or "").strip()
+                if summary_text:
+                    await _apply_vpd_summary_to_solutioning(
+                        db=db,
+                        account_id=doc.account_id,
+                        document_id=doc.id,
+                        summary=summary_text,
+                    )
+                    await db.commit()
+            except Exception:
+                logger.exception(
+                    "Overwriting Solutioning.value_definition from VPD summary failed (non-fatal)"
+                )
 
             # M15.1 — also pull candidate Goals so the CSM can promote a
             # subset into cs_goals via the review modal. Independent of
@@ -280,5 +309,57 @@ async def _mark_failed_db(db, job: Job, message: str) -> None:
     job.error = message[:1000]
     job.finished_at = datetime.now(timezone.utc)
     await db.commit()
+
+
+# 10-Jun · Apply the VPD AI bullet-list summary to the per-account
+# Solutioning row. Overwrites value_definition (newest VPD wins) and
+# appends a `source='vpd'` snapshot onto value_definition_history.
+async def _apply_vpd_summary_to_solutioning(
+    *, db, account_id: UUID, document_id: UUID, summary: str
+) -> None:
+    """Write the VPD summary into account_solutioning.value_definition
+    and append a versioned snapshot to value_definition_history.
+
+    Creates the account_solutioning row on demand (some accounts never
+    visited the Solutioning tab manually). Always overwrites — the
+    stakeholder spec is "newest VPD wins"; prior value is preserved on
+    the history list and restorable from the UI."""
+    import copy
+    from app.models.solutioning import AccountSolutioning
+
+    row = (
+        await db.execute(
+            select(AccountSolutioning).where(
+                AccountSolutioning.account_id == account_id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = AccountSolutioning(
+            account_id=account_id,
+            value_themes=[],
+            value_definition_history=[],
+        )
+        db.add(row)
+        await db.flush()
+
+    history = copy.deepcopy(list(row.value_definition_history or []))
+    history.append({
+        "value": summary,
+        "source": "vpd",
+        "edited_by": None,
+        "edited_by_name": "AI · VPD summary",
+        "edited_at": datetime.now(timezone.utc).isoformat(),
+        "document_id": str(document_id),
+    })
+    row.value_definition = summary
+    row.value_definition_history = history
+    # Stamp the AI-extracted bookkeeping fields so the existing
+    # `ai_edited` badge wiring keeps working — when the CSM later
+    # edits the field manually, ai_edited flips to True via the
+    # PATCH route handler.
+    row.ai_extracted_from_doc = document_id
+    row.ai_extracted_at = datetime.now(timezone.utc)
+    row.ai_edited = False
 
 

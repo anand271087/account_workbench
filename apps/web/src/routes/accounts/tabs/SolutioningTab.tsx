@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
@@ -17,6 +17,7 @@ import {
   type Solutioning,
   type SolutioningLockResponse,
   type SolutioningUpdate,
+  type ValueDefVersion,
   TRIAL_CLIENT_TYPE_OPTIONS,
   TRIAL_TYPE_OPTIONS,
   TRIAL_PAYMENT_TYPE_OPTIONS,
@@ -317,16 +318,30 @@ export default function SolutioningTab() {
               How the value will be measured · primary Solutioning deliverable.
             </span>
           </div>
-          <textarea
-            rows={4}
-            value={form.value_definition ?? ""}
-            placeholder="Auto-extracted from the latest VPD upload — review and refine."
-            onChange={(e) =>
-              setForm({ ...form, value_definition: e.target.value })
-            }
-            disabled={!form.is_editable}
-            className="w-full text-[13px] leading-relaxed rounded-md px-3 py-2 bg-beroe-amber/10 border border-beroe-amber/40 focus:outline-none focus:border-beroe-amber disabled:bg-beroe-amber/10 disabled:text-text-secondary"
-          />
+          {/* 10-Jun · Value Definition editor + right-side revision
+              history panel. Every VPD upload overwrites the textarea
+              with the new AI bullet summary; every prior version
+              (AI or CSM-edited) stays restorable from the right pane. */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-3 items-start">
+            <textarea
+              rows={6}
+              value={form.value_definition ?? ""}
+              placeholder="Auto-extracted from the latest VPD upload — review and refine."
+              onChange={(e) =>
+                setForm({ ...form, value_definition: e.target.value })
+              }
+              disabled={!form.is_editable}
+              className="w-full text-[13px] leading-relaxed rounded-md px-3 py-2 bg-beroe-amber/10 border border-beroe-amber/40 focus:outline-none focus:border-beroe-amber disabled:bg-beroe-amber/10 disabled:text-text-secondary font-mono whitespace-pre-wrap"
+            />
+            <ValueDefHistoryPanel
+              history={form.value_definition_history ?? []}
+              editable={form.is_editable}
+              currentValue={form.value_definition ?? ""}
+              onRestore={(v) =>
+                setForm({ ...form, value_definition: v })
+              }
+            />
+          </div>
         </div>
 
         <Section title="Value themes" subtitle="Short tags — what kinds of value the engagement will deliver.">
@@ -1014,4 +1029,160 @@ function TrialModuleOtherInput({ onAdd }: { onAdd: (name: string) => void }) {
       </button>
     </span>
   );
+}
+
+// 10-Jun · Right-side revision history panel for Value Definition.
+// Lists every prior snapshot — VPD bullet summaries (✨ AI · VPD)
+// and manual CSM edits (👤 user) — newest first. Click any entry
+// to open a modal showing the full text + a "Restore" button that
+// drops the snapshot back into the textarea as a dirty draft.
+function ValueDefHistoryPanel({
+  history,
+  editable,
+  currentValue,
+  onRestore,
+}: {
+  history: ValueDefVersion[];
+  editable: boolean;
+  currentValue: string;
+  onRestore: (v: string) => void;
+}) {
+  const [viewing, setViewing] = useState<ValueDefVersion | null>(null);
+  // Newest first for display.
+  const ordered = useMemo(
+    () => [...history].sort((a, b) => b.edited_at.localeCompare(a.edited_at)),
+    [history],
+  );
+  return (
+    <>
+      <div className="rounded-md border border-beroe-card-border bg-beroe-bg/40 p-2.5">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
+          Revision history
+          {ordered.length > 0 && (
+            <span className="ml-1 text-text-secondary font-mono">
+              ({ordered.length})
+            </span>
+          )}
+        </div>
+        {ordered.length === 0 ? (
+          <div className="text-[10.5px] text-text-muted italic">
+            No prior versions yet. Upload a VPD or save an edit to
+            start tracking.
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-[260px] overflow-y-auto">
+            {ordered.map((v, i) => {
+              const isVpd = v.source === "vpd";
+              const isCurrent = v.value.trim() === currentValue.trim();
+              return (
+                <button
+                  key={`${v.edited_at}-${i}`}
+                  type="button"
+                  onClick={() => setViewing(v)}
+                  className={cn(
+                    "w-full text-left rounded-md border px-2 py-1.5 hover:border-beroe-blue transition-colors",
+                    isCurrent
+                      ? "border-beroe-green/40 bg-beroe-green/15/40"
+                      : "border-beroe-card-border bg-white",
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span
+                      className={cn(
+                        "text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                        isVpd
+                          ? "bg-beroe-purple/15 text-beroe-purple"
+                          : "bg-beroe-blue/10 text-beroe-blue",
+                      )}
+                    >
+                      {isVpd ? "✨ AI · VPD" : "👤 User"}
+                    </span>
+                    {isCurrent && (
+                      <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-1 py-px rounded bg-beroe-green/20 text-beroe-green">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10.5px] text-text-primary font-semibold truncate">
+                    {v.edited_by_name || "—"}
+                  </div>
+                  <div className="text-[9.5px] text-text-muted font-mono">
+                    {formatRelative(v.edited_at)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {viewing && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-12 pb-8 overflow-y-auto"
+          onClick={() => setViewing(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-[min(640px,95vw)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-beroe-card-border flex items-center justify-between">
+              <div>
+                <div className="text-[13px] font-bold">
+                  {viewing.source === "vpd" ? "✨ AI · VPD summary" : "👤 Manual edit"}
+                </div>
+                <div className="text-[11px] text-text-muted">
+                  By <b>{viewing.edited_by_name || "—"}</b> ·{" "}
+                  {new Date(viewing.edited_at).toLocaleString()}
+                </div>
+              </div>
+              <button
+                onClick={() => setViewing(null)}
+                className="text-text-muted hover:text-text-primary text-lg leading-none px-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-4 py-3">
+              <pre className="text-[13px] leading-relaxed whitespace-pre-wrap font-mono bg-beroe-bg/40 border border-beroe-card-border rounded-md p-3 max-h-[55vh] overflow-y-auto">
+                {viewing.value || "(empty)"}
+              </pre>
+            </div>
+            <div className="px-4 py-2 border-t border-beroe-card-border flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setViewing(null)}
+                className="text-[12px] font-semibold rounded-md border border-beroe-card-border px-3 py-1.5 hover:bg-beroe-bg/40"
+              >
+                Close
+              </button>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onRestore(viewing.value);
+                    setViewing(null);
+                  }}
+                  className="text-[12px] font-bold rounded-md px-3 py-1.5 bg-beroe-blue text-white hover:opacity-90"
+                  title="Replace the current Value Definition with this version (becomes a dirty edit until you click Save)"
+                >
+                  ↩ Restore this version
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function formatRelative(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return iso;
+  const diffSec = Math.floor((Date.now() - t) / 1000);
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString();
 }

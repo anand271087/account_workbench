@@ -48,6 +48,13 @@ class AccountSolutioning(Base):
         ARRAY(String), nullable=False, server_default=text("'{}'")
     )
     value_definition: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 10-Jun · Revision history (newest last) — every overwrite of
+    # value_definition (VPD upload or manual edit) appends one entry
+    # here. Shape: list[{value, source, edited_by, edited_by_name,
+    # edited_at, document_id}]. See migration 0072.
+    value_definition_history: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     estimated_value_musd: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
 
     ai_extracted_from_doc: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
