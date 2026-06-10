@@ -373,6 +373,15 @@ function GoalCard({
           {emoji}
         </div>
         <div className="flex-1 min-w-0">
+          {/* 10-Jun · Section label so the CSM reads this block as a
+              Goal (paired with the "Initiatives" label inside the
+              body when expanded). */}
+          <div
+            className="text-[9.5px] font-extrabold uppercase tracking-wider mb-0.5"
+            style={{ color: BRAND.t3 }}
+          >
+            Goal
+          </div>
           <div
             className="text-[13px] font-bold leading-snug"
             style={{ color: BRAND.t1 }}
@@ -461,8 +470,17 @@ function GoalCard({
               .
             </div>
           ) : (
-            <div className="space-y-2 mt-2">
-              {inits.map((it, idx) => {
+            <>
+              {/* 10-Jun · Section label paired with the "Goal" label
+                  in the header above. */}
+              <div
+                className="text-[9.5px] font-extrabold uppercase tracking-wider mt-2 mb-1.5"
+                style={{ color: BRAND.t3 }}
+              >
+                Initiatives
+              </div>
+              <div className="space-y-2">
+                {inits.map((it, idx) => {
                 const id = initIdFor(it, idx);
                 return (
                   <InitiativeCard
@@ -474,8 +492,9 @@ function GoalCard({
                     touchpoints={touchpointsByInit.get(id) ?? []}
                   />
                 );
-              })}
-            </div>
+                })}
+              </div>
+            </>
           )}
         </div>
       )}
