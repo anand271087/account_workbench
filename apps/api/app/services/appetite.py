@@ -114,18 +114,30 @@ def compute_appetite(
     has_risk = sig_counts["risk"] > 0 or sig_counts["critical"] > 0
 
     # 3. Renewal proximity (15%)
+    # 10-Jun · Re-aligned with beroe_mode_classification_map.html.
+    # The map's bands describe URGENCY (closer renewal = more urgent =
+    # higher points), so the worked-example account 30d from renewal
+    # with no risk scores the full 15/15. The previous implementation
+    # inverted this — `dtr>180 → 15` and `dtr<90 → 0–6` — which dragged
+    # close-but-healthy accounts out of the Expand band.
+    #
+    # Map scale (0–15 pts):
+    #   0–5   "Far out, no pressure"
+    #   6–10  "Approaching"
+    #   11–15 "In window / urgent" (worked example lands here)
+    #
+    # Risk pressure modulates within the upper band: open risk/critical
+    # signals knock 4 pts off so a close-but-troubled account doesn't
+    # earn the full urgency bonus.
     dtr = _days_to_renewal(acc, today)
-    if dtr is None:
-        renew_pts = 15
-    elif dtr > 180:
-        renew_pts = 15
+    if dtr is None or dtr > 180:
+        renew_pts = 3   # far out — no urgency contribution
     elif dtr >= 90:
-        renew_pts = 10
-    elif not has_risk:
-        # Close to renewal but no risk on the board → still some buffer.
-        renew_pts = 6
+        renew_pts = 8   # approaching mid-band
+    elif has_risk:
+        renew_pts = 11  # in window with risk pressure
     else:
-        renew_pts = 0
+        renew_pts = 15  # in window, aligned (matches worked example)
 
     # 4. ARR growth (20%)
     acct_type = acc.account_type or "Existing"

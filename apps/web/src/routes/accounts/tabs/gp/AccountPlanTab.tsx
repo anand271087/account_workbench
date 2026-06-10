@@ -1336,9 +1336,9 @@ const MODE_CHK_CONF: Record<
 const CHK_TAG_TONE: Record<ChkSource, string> = {
   // 10-Jun · Beroe palette — Indigo / Fuscia / Aqua tints matching the
   // prototype CSS root vars (#3800CC / #8a1a90 / #0f7770).
-  sys: "bg-beroe-indigo/10 text-beroe-indigo",
-  ai: "bg-beroe-fuscia/10 text-beroe-fuscia",
-  csm: "bg-beroe-aqua/10 text-beroe-aqua-deep",
+  sys: "bg-beroe-blue/10 text-beroe-blue",
+  ai: "bg-beroe-purple/10 text-beroe-purple",
+  csm: "bg-beroe-aqua/10 text-beroe-teal",
 };
 
 function _sysItems(mode: PlayMode, plays: Play[], appetite: Appetite): SysSpec[] {
@@ -1654,7 +1654,7 @@ function ModeChecklist({
             className={cn(
               "flex-1 px-2 py-1.5 rounded text-[10.5px] font-bold transition-colors",
               filter === id
-                ? "bg-white text-beroe-indigo shadow-sm"
+                ? "bg-white text-beroe-blue shadow-sm"
                 : "text-text-muted hover:text-text-primary",
             )}
           >
@@ -1663,7 +1663,7 @@ function ModeChecklist({
               className={cn(
                 "ml-1 px-1.5 py-px rounded-full text-[9px] font-extrabold",
                 filter === id
-                  ? "bg-beroe-indigo/10 text-beroe-indigo"
+                  ? "bg-beroe-blue/10 text-beroe-blue"
                   : "bg-beroe-bg text-text-muted",
               )}
             >
@@ -1712,7 +1712,7 @@ function ModeChecklist({
       )}
 
       {/* Add-your-own input */}
-      <div className="flex gap-1.5 mt-2.5">
+      <div className="flex gap-1.5 mt-2.5 items-stretch">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -1720,12 +1720,12 @@ function ModeChecklist({
             if (e.key === "Enter") addCustom();
           }}
           placeholder="+ Add your own checklist item…"
-          className="flex-1 px-2 py-1.5 text-[11px] rounded-md border border-dashed border-beroe-card-border bg-white focus:border-beroe-indigo focus:border-solid outline-none"
+          className="flex-1 min-w-0 px-2 py-1.5 text-[11px] rounded-md border border-dashed border-beroe-card-border bg-white focus:border-beroe-blue focus:border-solid outline-none"
         />
         <button
           type="button"
           onClick={addCustom}
-          className="text-[11px] font-bold rounded-md px-3 py-1.5 bg-beroe-indigo text-white hover:opacity-90"
+          className="shrink-0 text-[11px] font-bold rounded-md px-3 py-1.5 bg-beroe-blue text-white hover:opacity-90"
         >
           Add
         </button>
@@ -1801,7 +1801,7 @@ function ChecklistRow({
             ? "bg-beroe-green border-beroe-green text-white"
             : row.status === "warn"
               ? "border-beroe-amber text-beroe-amber bg-white"
-              : "border-beroe-card-border text-transparent bg-white hover:border-beroe-indigo",
+              : "border-beroe-card-border text-transparent bg-white hover:border-beroe-blue",
         )}
         title="Toggle"
       >
@@ -2052,8 +2052,8 @@ function PeerBenchmarkPanel({
               label="You"
               pct={benchmark.you_pct}
               fill="linear-gradient(90deg, #4A00F8, #C344C7)"
-              labelClass="text-beroe-indigo font-extrabold"
-              valueClass="text-beroe-indigo"
+              labelClass="text-beroe-blue font-extrabold"
+              valueClass="text-beroe-blue"
             />
             <PeerBar
               label="Peer median (industry)"
@@ -2226,8 +2226,8 @@ function PlayTabsSection({
               className={cn(
                 "px-3 py-1.5 rounded-md text-[11.5px] font-bold border inline-flex items-center gap-1.5 transition-colors",
                 active
-                  ? "bg-beroe-indigo/10 border-beroe-indigo text-beroe-indigo"
-                  : "bg-white border-beroe-card-border text-text-muted hover:border-beroe-indigo hover:text-beroe-indigo",
+                  ? "bg-beroe-blue/10 border-beroe-blue text-beroe-blue"
+                  : "bg-white border-beroe-card-border text-text-muted hover:border-beroe-blue hover:text-beroe-blue",
               )}
             >
               <span>{t.icon}</span>
@@ -2235,7 +2235,7 @@ function PlayTabsSection({
               <span
                 className={cn(
                   "ml-1 px-1.5 py-px rounded-full text-[10px] font-extrabold",
-                  active ? "bg-white text-beroe-indigo" : "bg-beroe-bg text-text-muted",
+                  active ? "bg-white text-beroe-blue" : "bg-beroe-bg text-text-muted",
                 )}
               >
                 {counts[t.id]}
@@ -2362,7 +2362,7 @@ function AiPlaysList({
               type="button"
               disabled={!editable || addMutation.isPending}
               onClick={() => addMutation.mutate(p)}
-              className="text-[10.5px] font-bold rounded-md px-2 py-1 bg-beroe-indigo/10 text-beroe-indigo border border-beroe-indigo/30 hover:bg-beroe-indigo/15 disabled:opacity-50"
+              className="text-[10.5px] font-bold rounded-md px-2 py-1 bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30 hover:bg-beroe-blue/15 disabled:opacity-50"
             >
               + Add
             </button>
@@ -2476,7 +2476,7 @@ function PeerPlaysList({
                 type="button"
                 disabled={!editable || addMutation.isPending}
                 onClick={() => addMutation.mutate(p)}
-                className="text-[10.5px] font-bold rounded-md px-2 py-1 bg-beroe-indigo/10 text-beroe-indigo border border-beroe-indigo/30 hover:bg-beroe-indigo/15 disabled:opacity-50"
+                className="text-[10.5px] font-bold rounded-md px-2 py-1 bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30 hover:bg-beroe-blue/15 disabled:opacity-50"
               >
                 + Add
               </button>
