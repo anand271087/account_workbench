@@ -145,11 +145,17 @@ export default function SolutioningTab() {
       // reappear right after locking. Fix: refetch the full solutioning
       // shape synchronously, then replace form with the new server
       // state so form === data and dirty stays false.
-      const fresh = await qc.fetchQuery({
-        queryKey: ["solutioning", account.id],
-        queryFn: () =>
-          api.get<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`),
-      });
+      //
+      // 11-Jun · `qc.fetchQuery` was returning cached pre-lock data
+      // because the query was within its staleTime window — the lock
+      // POST committed but the UI never saw `locked_at` flip. Going
+      // straight to the network here + writing the result into both
+      // the cache (so other consumers refresh) and local form state
+      // (so this component re-renders immediately).
+      const fresh = await api.get<Solutioning>(
+        `/api/v1/accounts/${account.id}/solutioning`,
+      );
+      qc.setQueryData(["solutioning", account.id], fresh);
       setForm(fresh);
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
       setLockError(null);
@@ -170,14 +176,13 @@ export default function SolutioningTab() {
     mutationFn: () =>
       api.post<SolutioningLockResponse>(`/api/v1/accounts/${account.id}/solutioning/unlock`),
     onSuccess: async (res) => {
-      // Same shape as lock — fetch + replace form so the un-locked
-      // state (is_editable=true + locked_at=null + any sh_* fields
-      // that the unlock route may touch) is in form on the first tick.
-      const fresh = await qc.fetchQuery({
-        queryKey: ["solutioning", account.id],
-        queryFn: () =>
-          api.get<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`),
-      });
+      // Same shape as lock — go straight to the network (qc.fetchQuery
+      // returned cached pre-unlock data, leaving locked_at non-null in
+      // the UI). See the matching comment on lockMutation.onSuccess.
+      const fresh = await api.get<Solutioning>(
+        `/api/v1/accounts/${account.id}/solutioning`,
+      );
+      qc.setQueryData(["solutioning", account.id], fresh);
       setForm(fresh);
       qc.invalidateQueries({ queryKey: ["activity", account.id] });
       setLockError(null);
