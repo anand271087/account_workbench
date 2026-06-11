@@ -28,10 +28,7 @@ import type {
   CSOnboardingUpdate,
 } from "@/types/cs_onboarding";
 import { CS_HANDOVER_GROUPS } from "@/types/cs_onboarding";
-import type {
-  CSGoal,
-  CSGoalCategory,
-} from "@/types/cs_goal";
+import type { CSGoal } from "@/types/cs_goal";
 // 04-Jun bug 11 — CATEGORY_LABELS import removed; only consumer was
 // the legacy BlockGoals function that moved to Success Management.
 
@@ -84,23 +81,8 @@ interface MetricRow {
   status: "green" | "amber" | "red" | "grey";
 }
 
-// ─────────────────────────────────────────────────────────────
-// Per-category Phase A question + options (prototype lines 305-322).
-// ─────────────────────────────────────────────────────────────
-function phaseAOptions(category: CSGoalCategory): string[] {
-  switch (category) {
-    case "cost_savings":
-      return ["Confirmed with baseline", "Partial — baseline pending", "Not confirmed"];
-    case "risk_mitigation":
-      return ["Regulatory (EUDR / CSDDD)", "Supply disruption", "Geopolitical", "Financial", "All of the above"];
-    case "base_rationalization":
-      return ["Known per category", "Known at total", "Partial", "Not known"];
-    case "adoption":
-      return ["Active users / month", "Module-depth score", "Both"];
-    default:
-      return ["Confirmed", "Partial", "Unclear"];
-  }
-}
+// (phaseAOptions helper removed 11-Jun — only consumer was the
+// deleted DemoStateToggle's fast-fwd flow.)
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -1161,210 +1143,6 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
 // bulk-align "Fast-fwd" + "Reset" for clean replays. The buttons mutate
 // real backend state so the page reflects the change immediately.
 // ─────────────────────────────────────────────────────────────
-function DemoStateToggle({
-  accountId,
-  goals,
-  handoff,
-  onMutate,
-  notify,
-}: {
-  accountId: string;
-  goals: CSGoal[];
-  handoff: CSHandoffState;
-  onMutate: () => void;
-  notify: (o: { title: string; body?: string; tone?: "info" | "success" | "warning" | "error" }) => void;
-}) {
-  void accountId;
-  const realigning = !!handoff.realignment;
-  const started = !!handoff.started;
-  const currentStage: 1 | 2 | 3 = started ? 3 : realigning ? 2 : 1;
-
-  // Whole-document handoff replacement.
-  const patchHandoff = useMutation({
-    mutationFn: (next: CSHandoffState | null) =>
-      api.patch<CSOnboarding>(
-        `/api/v1/accounts/${accountId}/cs-onboarding`,
-        { cs_handoff: next },
-      ),
-    onSuccess: onMutate,
-    onError: (e: ApiError) =>
-      notify({ title: "Demo patch failed", body: e.message, tone: "error" }),
-  });
-
-  // Bulk goal patcher (fast-fwd · align all). Runs Promise.allSettled
-  // so one failure doesn't block the others.
-  async function bulkAlignAllGoals(opts: { accept: boolean } = { accept: true }) {
-    if (goals.length === 0) {
-      notify({ title: "No goals to fast-forward", tone: "warning" });
-      return;
-    }
-    const today = new Date().toISOString();
-    const seed = (g: CSGoal) => {
-      const phaseA = {
-        ...(g.phase_a ?? {}),
-        intent: phaseAOptions(g.category)[0],
-        note:
-          "Demo seed — client confirmed scope and target. Use as a starting point; replace in real run.",
-        phase_a_complete: true,
-      };
-      const phaseB = {
-        ...(g.phase_b ?? {}),
-        baseline_current: "done_current",
-        data_access: "done_current",
-        cadence: "Monthly with the category lead",
-        phase_b_complete: true,
-      };
-      const phaseC = {
-        ...(g.phase_c ?? {}),
-        category_focus: "Demo seed — replace with actual category scope",
-        baseline: g.target_value || "Current baseline pending capture",
-        agreed_target: g.target_value || "Target agreed at signing",
-        measure_method: "Quarterly review against baseline",
-        timeline:
-          (g.target_date && /^\d{4}-\d{2}-\d{2}$/.test(g.target_date)
-            ? g.target_date
-            : new Date(Date.now() + 365 * 86400_000).toISOString().slice(0, 10)),
-        phase_c_complete: true,
-      };
-      return {
-        phase_a: phaseA,
-        phase_b: phaseB,
-        phase_c: phaseC,
-        phase_a_completed_at: today,
-        phase_b_completed_at: today,
-        phase_c_completed_at: today,
-        validation_status: opts.accept ? ("accepted" as const) : ("pending" as const),
-        flag_note: null,
-        alignment_status: "aligned" as const,
-      };
-    };
-    const results = await Promise.allSettled(
-      goals.map((g) => api.patch<CSGoal>(`/api/v1/cs-goals/${g.id}`, seed(g))),
-    );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      notify({
-        title: "Fast-fwd partial",
-        body: `${goals.length - failed}/${goals.length} goals aligned.`,
-        tone: "warning",
-      });
-    } else {
-      notify({
-        title: `Fast-fwd · ${goals.length} goal${goals.length === 1 ? "" : "s"} aligned`,
-        tone: "success",
-      });
-    }
-    onMutate();
-  }
-
-  // Reset every goal back to fresh state (no phase completions, no
-  // validation status).
-  async function bulkResetGoals() {
-    if (goals.length === 0) return;
-    await Promise.allSettled(
-      goals.map((g) =>
-        api.patch<CSGoal>(`/api/v1/cs-goals/${g.id}`, {
-          phase_a: { ...(g.phase_a ?? {}), phase_a_complete: false },
-          phase_b: { ...(g.phase_b ?? {}), phase_b_complete: false },
-          phase_c: { ...(g.phase_c ?? {}), phase_c_complete: false },
-          phase_a_completed_at: null,
-          phase_b_completed_at: null,
-          phase_c_completed_at: null,
-          validation_status: "pending",
-          flag_note: null,
-          alignment_status: "not_started",
-        }),
-      ),
-    );
-    onMutate();
-  }
-
-  async function setStage(s: 1 | 2 | 3) {
-    if (s === 1) {
-      await bulkResetGoals();
-      patchHandoff.mutate({});
-      return;
-    }
-    if (s === 2) {
-      // Sample realignment — picks the Client block by default.
-      patchHandoff.mutate({
-        realignment: {
-          block: "Client",
-          note:
-            "SPOC is fine, but the Budget Owner slot should be confirmed — they haven't attended a QBR in 2 quarters. Need clarity on whether they're still the signer.",
-          sent_at: new Date().toISOString(),
-          sent_to: "Sales",
-        },
-        started: false,
-        started_at: null,
-      });
-      return;
-    }
-    // s === 3
-    await bulkAlignAllGoals({ accept: true });
-    patchHandoff.mutate({
-      ...handoff,
-      realignment: null,
-      started: true,
-      started_at: new Date().toISOString(),
-    });
-  }
-
-  const StageBtn = ({ n, label }: { n: 1 | 2 | 3; label: string }) => {
-    const active = currentStage === n;
-    return (
-      <button
-        type="button"
-        onClick={() => setStage(n)}
-        disabled={patchHandoff.isPending}
-        className={cn(
-          "px-2.5 py-1 rounded-[6px] text-[11px] font-semibold border transition disabled:opacity-50 disabled:cursor-wait",
-          active
-            ? "border-transparent text-white"
-            : "border-white/15 text-white/85 hover:bg-white/10",
-        )}
-        style={active ? { background: C.BLUE, borderColor: C.BLUE } : { background: "rgba(255,255,255,0.10)" }}
-      >
-        {n}. {label}
-      </button>
-    );
-  };
-
-  return (
-    <div
-      className="fixed top-3.5 right-3.5 z-[90] rounded-[10px] px-3 py-2 flex flex-wrap gap-1.5 items-center shadow-lg max-w-[560px]"
-      style={{ background: C.NAVY }}
-    >
-      <span
-        className="text-[9px] font-bold uppercase tracking-wider mr-1"
-        style={{ color: "#8496b0" }}
-      >
-        Demo State
-      </span>
-      <StageBtn n={1} label="Fresh review" />
-      <StageBtn n={2} label="Re-alignment pending" />
-      <StageBtn n={3} label="Success Journey started" />
-      <button
-        type="button"
-        onClick={() => bulkAlignAllGoals({ accept: true })}
-        disabled={patchHandoff.isPending}
-        className="px-2.5 py-1 rounded-[6px] text-[11px] font-semibold text-white disabled:opacity-50"
-        style={{ background: C.GREEN }}
-      >
-        Fast-fwd · align all
-      </button>
-      <button
-        type="button"
-        onClick={() => setStage(1)}
-        disabled={patchHandoff.isPending}
-        className="px-2.5 py-1 rounded-[6px] text-[11px] font-semibold text-white disabled:opacity-50"
-        style={{ background: C.AMBER }}
-      >
-        Reset
-      </button>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // Tab default export
@@ -1481,17 +1259,9 @@ export default function CSOnboardingTab() {
 
   return (
     <div>
-      <DemoStateToggle
-        accountId={account.id}
-        goals={goals}
-        handoff={handoff}
-        onMutate={() => {
-          qc.invalidateQueries({ queryKey: ["cs-onboarding", account.id] });
-          qc.invalidateQueries({ queryKey: ["cs-goals", account.id, false] });
-          qc.invalidateQueries({ queryKey: ["account", account.id] });
-        }}
-        notify={notify}
-      />
+      {/* 11-Jun · Removed the fixed top-right DemoStateToggle widget
+          per stakeholder ask — it was prototype-only mock UX. The
+          underlying function is dropped below. */}
       <StageIndicator
         account={account}
         csmName={csmName}

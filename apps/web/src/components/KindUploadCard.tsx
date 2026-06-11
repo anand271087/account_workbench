@@ -51,6 +51,7 @@ export function KindUploadCard({
   description,
   emptyHint,
   headerAction,
+  contractSubtypes,
 }: {
   accountId: string;
   kind: DocKind;
@@ -61,7 +62,17 @@ export function KindUploadCard({
   // card title (used by Pre-Sales to surface the Pre-Meeting Brief
   // overlay next to the MoM upload, per the prototype).
   headerAction?: React.ReactNode;
+  // 11-Jun · Optional list of contract subtypes (matches migration
+  // 0059's CHECK constraint). When provided AND kind='contract',
+  // the card renders a "Document Type" dropdown above the upload
+  // dropzone and passes the selected value to the upload endpoint
+  // as `contract_subtype` (multipart form field). Existing call
+  // sites that don't pass this prop keep behaving exactly as before.
+  contractSubtypes?: readonly string[];
 }) {
+  const [pendingSubtype, setPendingSubtype] = useState<string>(
+    contractSubtypes?.[0] ?? "",
+  );
   const qc = useQueryClient();
   const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -333,6 +344,18 @@ export function KindUploadCard({
     const fd = new FormData();
     fd.append("file", file);
     fd.append("kind", kind);
+    // 11-Jun · Pass contract_subtype when the caller surfaced a
+    // dropdown (kind='contract' only — backend ignores subtype on
+    // other kinds). Migration 0059 enforces the canonical set via
+    // CHECK constraint.
+    if (
+      kind === "contract" &&
+      contractSubtypes &&
+      pendingSubtype &&
+      contractSubtypes.includes(pendingSubtype)
+    ) {
+      fd.append("contract_subtype", pendingSubtype);
+    }
     const access = await authProvider.getAccessToken();
     const r = await fetch(
       `${import.meta.env.VITE_API_BASE_URL}/api/v1/accounts/${accountId}/documents`,
@@ -431,6 +454,32 @@ export function KindUploadCard({
             )}
           </div>
         </div>
+        {/* 11-Jun · Contract subtype dropdown. Shown only when the
+            caller passes a contractSubtypes list AND kind='contract'.
+            The selection rides on the next upload as form field
+            `contract_subtype`. */}
+        {kind === "contract" && contractSubtypes && contractSubtypes.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+              Document Type
+            </label>
+            <select
+              value={pendingSubtype}
+              onChange={(e) => setPendingSubtype(e.target.value)}
+              disabled={!!uploadStatus || !canUpload}
+              className="text-[12px] px-2 py-1.5 rounded-md border border-beroe-card-border bg-white focus:border-beroe-blue outline-none"
+            >
+              {contractSubtypes.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-text-muted">
+              · pick the type before uploading
+            </span>
+          </div>
+        )}
         <div className="flex items-center gap-3 flex-wrap">
           <input
             ref={fileInputRef}
@@ -591,6 +640,13 @@ function DocumentRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-text-primary truncate">{doc.filename}</span>
+            {/* 11-Jun · Contract subtype pill (only when set) — gives
+                Audit a quick visual category for each contract upload. */}
+            {doc.contract_subtype && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/20">
+                {doc.contract_subtype}
+              </span>
+            )}
             <StatusPill status={doc.ai_status} />
             {doc.ai_status === "complete" && (
               <span

@@ -460,12 +460,29 @@ function SalesHandoffSection({
           into the localStorage draft → the drain() effect above
           consumes it → Contract Audit fields populate. */}
       <GroupHead>Contract Documents</GroupHead>
+      {/* 11-Jun · Sales Handoff prototype's nine canonical contract
+          document types. The CSM picks the type before uploading;
+          the value lands on documents.contract_subtype (migration
+          0059 CHECK-constrained to this exact set). AI extraction
+          still runs on every upload — the subtype is metadata that
+          helps Contract Operations audit the package. */}
       <KindUploadCard
         accountId={account.id}
         kind="contract"
-        title="Signed Contract"
-        description="Upload the signed contract (MSA or Signed Proposal). AI reads it and auto-populates the Contract Audit fields below — signed date, term, ACV, modules, tier, segment, subscribers, plus payment terms and other contract clauses when present. Review and adjust anything that's off."
-        emptyHint="No contracts yet. Drag a .pdf, .docx or .txt onto the card above."
+        title="Contract Documents"
+        description="Upload contracts and supporting documents. Pick the document type from the dropdown before uploading — AI reads it and auto-populates the Contract Audit fields below (signed date, term, ACV, modules, tier, segment, subscribers, payment terms, etc.). Review and adjust anything that's off."
+        emptyHint="No contracts yet. Pick a type and drop a .pdf, .docx or .txt above."
+        contractSubtypes={[
+          "Signed Proposal",
+          "Unsigned Proposal",
+          "Work Order",
+          "MSA",
+          "Purchase Order",
+          "Invoice",
+          "SOW",
+          "Amendment",
+          "NDA",
+        ]}
       />
 
       {/* Lock CTA */}
