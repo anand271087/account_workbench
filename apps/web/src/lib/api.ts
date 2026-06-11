@@ -3,9 +3,12 @@
 
 import { authProvider } from "./auth";
 
-const BASE = import.meta.env.VITE_API_BASE_URL;
+// Empty string is valid — means all API paths are absolute from the same origin.
+// Paths in this codebase already include /api/v1/, so BASE="" works with the
+// nginx proxy_pass rule that forwards /api/ to the backend container.
+const BASE: string = import.meta.env.VITE_API_BASE_URL ?? "";
 
-if (!BASE) {
+if (BASE === undefined || BASE === null) {
   throw new Error("Missing VITE_API_BASE_URL — copy apps/web/.env.example to apps/web/.env");
 }
 
