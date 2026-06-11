@@ -1,0 +1,176 @@
+# Render Blueprint — one-click setup for the AWB backend.
+#
+# Usage:
+#   1. Push this file (you're doing it now).
+#   2. Go to https://dashboard.render.com → Blueprints → New Blueprint Instance.
+#   3. Pick this repo + branch `main`. Render reads this file and creates all
+#      three services with the right wiring (web ↔ worker ↔ redis).
+#   4. After the services are created, fill the env vars marked `sync: false`
+#      from the Render dashboard. The rest are auto-wired.
+#
+# The free tier on Render spins web services down after 15 min of inactivity
+# (cold start ≈ 30 s). Workers don't auto-spin-down. If that's a problem,
+# upgrade just the web service to Starter ($7/mo).
+
+services:
+  # -------------------- FastAPI web service --------------------
+  # 05-Jun · Switched to docker runtime so the Dockerfile picks up the
+  # AWS CLI v2 + session-manager-plugin layers needed by the Redshift
+  # SSM tunnel. Render's native python runtime ignored the Dockerfile,
+  # producing 'aws CLI not found in PATH' at startup.
+  - type: web
+    name: beroe-awb-api
+    runtime: docker
+    plan: free
+    branch: main
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.10
+      - key: ENV
+        value: production
+      - key: API_PORT
+        value: "10000"
+      # Wire to the Render-managed Redis below
+      - key: REDIS_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_BROKER_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_RESULT_BACKEND
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      # Fill these from the Render dashboard (sync: false = no value in repo)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      # Path A — Bifrost AI gateway (preferred when reachable inside VPC).
+      - key: AI_GATEWAY_URL
+        sync: false  # in-VPC: http://bifrost.beroe.internal:8087/v1 · tunnelled: http://localhost:8087/v1
+      - key: AI_GATEWAY_API_KEY
+        sync: false  # x-bf-ak — set to beroe-bedrock-dev-for-csm or prod equivalent
+      - key: AI_GATEWAY_MODEL
+        value: bedrock/eu.anthropic.claude-opus-4-5-20251101-v1:0
+      # Bifrost SSM tunnel — only needed when this service is OUTSIDE
+      # the VPC and AI_GATEWAY_URL points at localhost:8087. Once the
+      # service is inside the VPC (Karthick's path), flip
+      # BIFROST_AUTOSTART_TUNNEL=false and aim AI_GATEWAY_URL at
+      # private DNS — no tunnel needed.
+      - key: BIFROST_AUTOSTART_TUNNEL
+        value: "true"
+      - key: BIFROST_SSM_TARGET
+        sync: false  # e.g. i-0af78c12204f8391c
+      - key: BIFROST_SSM_DOCUMENT
+        value: AWS-StartPortForwardingSession
+      - key: BIFROST_SSM_REMOTE_PORT
+        value: "8087"
+      - key: BIFROST_SSM_LOCAL_PORT
+        value: "8087"
+      - key: BIFROST_AWS_ACCESS_KEY_ID
+        sync: false
+      - key: BIFROST_AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: BIFROST_AWS_REGION
+        value: eu-west-1
+      - key: BIFROST_AWS_PROFILE
+        sync: false  # optional — leave blank if creds above are sufficient
+      # Path B — direct Anthropic SDK. Now optional; leave blank to force
+      # the gateway path. If gateway is unreachable from Render, set this.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
+      - key: CORS_ORIGINS
+        # Update this to your Vercel URL once Vercel's deployed.
+        value: "http://localhost:5173"
+      - key: CLAUDE_USER_DAILY_LIMIT
+        value: "200"
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "100"
+      - key: ALLOWED_DOC_EXTENSIONS
+        value: ".docx,.doc,.pptx,.ppt,.xlsx,.xls,.pdf,.txt,.vtt,.eml,.csv,.md,.markdown"
+
+  # -------------------- Celery worker --------------------
+  # 09-Jun · Worker MUST use the Docker runtime so the AWS CLI +
+  # session-manager-plugin layers from the Dockerfile are available.
+  # Worker tasks (MoM/VPD/contract extract, AI summaries) all go
+  # through services/llm.py → Bifrost, and Bifrost lives behind the
+  # SSM tunnel that this layer is needed to open. Native python
+  # runtime wouldn't have these binaries and would fail at runtime.
+  - type: worker
+    name: beroe-awb-worker
+    runtime: docker
+    plan: starter   # workers don't have a free tier; cheapest is $7/mo
+    branch: main
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    # Linux doesn't have the macOS fork issue → default prefork pool is fine
+    dockerCommand: .venv/bin/celery -A app.workers.celery_app.celery_app worker --loglevel=INFO --concurrency=2
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.10
+      - key: ENV
+        value: production
+      - key: REDIS_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_BROKER_URL
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: CELERY_RESULT_BACKEND
+        fromService: { type: redis, name: beroe-awb-redis, property: connectionString }
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      # Path A — Bifrost AI gateway (preferred when reachable inside VPC).
+      - key: AI_GATEWAY_URL
+        sync: false  # in-VPC: http://bifrost.beroe.internal:8087/v1 · tunnelled: http://localhost:8087/v1
+      - key: AI_GATEWAY_API_KEY
+        sync: false  # x-bf-ak — set to beroe-bedrock-dev-for-csm or prod equivalent
+      - key: AI_GATEWAY_MODEL
+        value: bedrock/eu.anthropic.claude-opus-4-5-20251101-v1:0
+      # Bifrost SSM tunnel — only needed when this service is OUTSIDE
+      # the VPC and AI_GATEWAY_URL points at localhost:8087. Once the
+      # service is inside the VPC (Karthick's path), flip
+      # BIFROST_AUTOSTART_TUNNEL=false and aim AI_GATEWAY_URL at
+      # private DNS — no tunnel needed.
+      - key: BIFROST_AUTOSTART_TUNNEL
+        value: "true"
+      - key: BIFROST_SSM_TARGET
+        sync: false  # e.g. i-0af78c12204f8391c
+      - key: BIFROST_SSM_DOCUMENT
+        value: AWS-StartPortForwardingSession
+      - key: BIFROST_SSM_REMOTE_PORT
+        value: "8087"
+      - key: BIFROST_SSM_LOCAL_PORT
+        value: "8087"
+      - key: BIFROST_AWS_ACCESS_KEY_ID
+        sync: false
+      - key: BIFROST_AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: BIFROST_AWS_REGION
+        value: eu-west-1
+      - key: BIFROST_AWS_PROFILE
+        sync: false  # optional — leave blank if creds above are sufficient
+      # Path B — direct Anthropic SDK. Now optional; leave blank to force
+      # the gateway path. If gateway is unreachable from Render, set this.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
+
+  # -------------------- Redis (broker + cache) --------------------
+  - type: redis
+    name: beroe-awb-redis
+    plan: free            # 25 MB, sufficient for Celery broker + light cache
+    ipAllowList: []       # Render-internal only (web + worker connect via fromService)
