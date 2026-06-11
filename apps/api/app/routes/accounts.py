@@ -421,6 +421,10 @@ async def create_account(
         contract_end=body.contract_end,
         renewal_date=body.renewal_date,
         health_score=body.health_score,
+        # CSM picks up a freshly-created account → Entry A (clean Sales
+        # hand-off). The future bulk-upload endpoint will default to 'B'
+        # (mid-contract pickup). See decisions log 2026-06-11.
+        cs_entry_type="A",
     )
     db.add(acc)
     await db.commit()

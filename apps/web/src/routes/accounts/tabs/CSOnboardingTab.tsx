@@ -19,7 +19,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useConfirm, useNotify } from "@/components/DialogProvider";
+import { useConfirm, useNotify, usePrompt } from "@/components/DialogProvider";
+import { useAuth } from "@/components/AuthProvider";
 import { useAccountFromLayout } from "../AccountProfileLayout";
 import type {
   CSEntryType,
@@ -678,13 +679,14 @@ function StageConn({ done }: { done: boolean }) {
 }
 
 function SuccessBanner({
-  startedAt, csmName, alignedCount, accountId, onGoToSM,
+  startedAt, csmName, alignedCount, accountId, onGoToSM, onUnlock,
 }: {
   startedAt: string;
   csmName: string;
   alignedCount: number;
   accountId: string;
   onGoToSM: () => void;
+  onUnlock?: () => void;
 }) {
   return (
     <>
@@ -704,14 +706,27 @@ function SuccessBanner({
             Account active in Success Management. {alignedCount} goals fully aligned · CSM: <b>{csmName}</b>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onGoToSM}
-          className="px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border bg-white"
-          style={{ borderColor: C.GREEN, color: "#146a45" }}
-        >
-          Go to Success Management →
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {onUnlock && (
+            <button
+              type="button"
+              onClick={onUnlock}
+              title="Admin-only — revert CS Handoff back to Stage 1"
+              className="px-2.5 py-1.5 rounded-[8px] text-[12px] font-semibold border bg-white text-text-secondary"
+              style={{ borderColor: C.CB }}
+            >
+              🔓 Unlock
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onGoToSM}
+            className="px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border bg-white"
+            style={{ borderColor: C.GREEN, color: "#146a45" }}
+          >
+            Go to Success Management →
+          </button>
+        </div>
       </div>
       <NextStepsPanel alignedCount={alignedCount} accountId={accountId} />
     </>
@@ -1152,6 +1167,9 @@ export default function CSOnboardingTab() {
   const qc = useQueryClient();
   const confirmDlg = useConfirm();
   const notify = useNotify();
+  const prompt = usePrompt();
+  const { me } = useAuth();
+  const isAdmin = me?.user.role === "admin";
 
   const { data, isLoading } = useQuery<CSOnboarding>({
     queryKey: ["cs-onboarding", account.id],
@@ -1224,37 +1242,99 @@ export default function CSOnboardingTab() {
     });
   }
 
-  function submitRealign(block: "Commercial" | "Client" | "Commitment", note: string) {
-    const sentTo = block === "Commercial" ? "Contract Ops" : "Sales";
-    patch.mutate({
-      cs_handoff: {
-        ...handoff,
-        realignment: {
-          block,
-          note,
-          sent_at: realignment && editingRealign ? realignment.sent_at : new Date().toISOString(),
-          sent_to: sentTo,
-        },
-      },
+  async function unlockJourney() {
+    const reason = await prompt({
+      title: "Unlock CS Handoff?",
+      body:
+        "This reverts the account back to Stage 1 (pre-journey). " +
+        "Aligned goals stay intact; Success Management remains active " +
+        "but CS Handoff becomes editable again. Capture WHY — this " +
+        "becomes a permanent audit entry.",
+      placeholder: "Why are you walking back the journey? (≥10 chars)",
+      minLength: 10,
+      maxLength: 2000,
+      multiline: true,
+      confirmLabel: "Unlock CS Handoff",
+      tone: "warning",
     });
+    if (!reason) return;
+    try {
+      await api.post<CSOnboarding>(
+        `/api/v1/accounts/${account.id}/cs-onboarding/unlock`,
+        { reason },
+      );
+      await invalidateUpstream();
+      notify({
+        title: "CS Handoff unlocked",
+        body: "Account reverted to Stage 1. Re-start Success Journey when ready.",
+        tone: "info",
+      });
+    } catch (e) {
+      const err = e as ApiError;
+      notify({
+        title: "Unlock failed",
+        body: err.message,
+        tone: "error",
+      });
+    }
+  }
+
+  async function invalidateUpstream() {
+    // The cascade unlock on the backend flips sh_locked_at + gate_unlocked.
+    // Invalidate every cache key that gates Sales Handoff / Signing /
+    // Solutioning edit affordances so the upstream tabs pick up the new
+    // editable state without a manual reload.
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["cs-onboarding", account.id] }),
+      qc.invalidateQueries({ queryKey: ["account", account.id] }),
+      qc.invalidateQueries({ queryKey: ["signing-gate", account.id] }),
+      qc.invalidateQueries({ queryKey: ["solutioning", account.id] }),
+    ]);
+  }
+
+  function submitRealign(block: "Commercial" | "Client" | "Commitment", note: string) {
+    api
+      .post<CSOnboarding>(
+        `/api/v1/accounts/${account.id}/cs-onboarding/realign`,
+        { block, note },
+      )
+      .then(invalidateUpstream)
+      .catch((e: ApiError) =>
+        notify({ title: "Re-align failed", body: e.message, tone: "error" }),
+      );
     setRealignModalOpen(false);
     setEditingRealign(false);
   }
 
+  async function clearRealign(mode: "resolved" | "cancelled") {
+    try {
+      await api.post<CSOnboarding>(
+        `/api/v1/accounts/${account.id}/cs-onboarding/realign/clear`,
+        { mode },
+      );
+      await invalidateUpstream();
+    } catch (e) {
+      const err = e as ApiError;
+      notify({
+        title: mode === "resolved" ? "Resolve failed" : "Cancel failed",
+        body: err.message,
+        tone: "error",
+      });
+    }
+  }
+
   async function resolveRealign() {
-    patch.mutate({
-      cs_handoff: { ...handoff, realignment: null },
-    });
+    clearRealign("resolved");
   }
 
   async function cancelRealign() {
     const ok = await confirmDlg({
       title: "Cancel this re-alignment?",
-      body: "CS Handoff will resume.",
+      body: "CS Handoff will resume. Sales Handoff and Signing stay unlocked — upstream owners will re-lock through their normal flows.",
       confirmLabel: "Cancel re-align",
       danger: true,
     });
-    if (ok) resolveRealign();
+    if (ok) clearRealign("cancelled");
   }
 
   return (
@@ -1280,6 +1360,7 @@ export default function CSOnboardingTab() {
               tone: "info",
             })
           }
+          onUnlock={isAdmin ? unlockJourney : undefined}
         />
       )}
       {realignment && (

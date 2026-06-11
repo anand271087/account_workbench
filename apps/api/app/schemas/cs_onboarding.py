@@ -84,3 +84,47 @@ class CSOnboardingUpdate(BaseModel):
     cs_handover_checklist: dict[str, bool] | None = None
     cs_stakeholders: dict[str, Stakeholder] | None = None
     cs_handoff: dict | None = None
+
+
+# ============================================================
+# Realignment flow (CS Handoff → upstream Sales / Contract Ops)
+# ============================================================
+
+RealignBlock = Literal["Commercial", "Client", "Commitment"]
+
+
+class RealignOpenIn(BaseModel):
+    """Open or update a realignment record.
+
+    Sending this when one is already open is an EDIT — the original
+    sent_at + sent_to are preserved so the audit trail keeps the
+    initial timestamp.
+    """
+
+    block: RealignBlock
+    note: str = Field(..., min_length=5, max_length=2000)
+
+
+class RealignClearIn(BaseModel):
+    """Resolve or cancel a pending realignment.
+
+    `mode='resolved'`  → upstream actually fixed it.
+    `mode='cancelled'` → CSM rescinded the realignment without upstream action.
+
+    Both clear cs_handoff.realignment. Neither auto-re-locks Sales
+    Handoff or Signing — the upstream owners re-lock via their own
+    flows when they're ready.
+    """
+
+    mode: Literal["resolved", "cancelled"]
+
+
+class UnlockCSHandoffIn(BaseModel):
+    """Admin-only revert of a started Success Journey back to Stage 1.
+
+    Clears cs_handoff.started + started_at. The reason is recorded in
+    cs_handoff.unlock_log so leadership can see why a journey was
+    walked back (premature start, contract renegotiation, etc.).
+    """
+
+    reason: str = Field(..., min_length=10, max_length=2000)
