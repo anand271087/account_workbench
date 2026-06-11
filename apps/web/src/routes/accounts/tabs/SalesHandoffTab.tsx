@@ -139,16 +139,14 @@ function SalesHandoffSection({
   const locked = !!gate.sh_locked_at;
   const isAdmin = gate.can_sh_unlock;
 
-  // 11-Jun · Editor open/close state. Opens automatically when
-  // sh_value_validation flips to revised / partially_confirmed; closes
-  // after a successful Save. CSM can re-open via the "Edit again"
-  // link below.
+  // 11-Jun · Editor open/close — driven by explicit user action only.
+  // Defaults to false on every mount; previously a useEffect re-opened
+  // the editor on tab return because validation was still revised /
+  // partially_confirmed from a prior session. Now the editor opens
+  // when the CSM picks Revised / Partially in the seg-control (see
+  // onChange below) or clicks the "Edit again" link. Closes after a
+  // successful Save.
   const [editorOpen, setEditorOpen] = useState(false);
-  useEffect(() => {
-    const v = solutioning?.sh_value_validation;
-    if (v === "revised" || v === "partially_confirmed") setEditorOpen(true);
-    else setEditorOpen(false);
-  }, [solutioning?.sh_value_validation]);
 
   // Patch the Solutioning row for the sh_* edits (the existing PATCH
   // /accounts/:id/solutioning accepts sh_* fields).
@@ -332,6 +330,11 @@ function SalesHandoffSection({
           onChange={(label) => {
             const key = validationKeys.find((k) => SH_VALIDATION_LABELS[k] === label) ?? null;
             patchSol.mutate({ sh_value_validation: key });
+            // 11-Jun · Open the editor only when the user explicitly
+            // selects a "needs edit" validation. Confirmed → close.
+            // This is the only auto-open path; tab return no longer
+            // triggers it.
+            setEditorOpen(key === "revised" || key === "partially_confirmed");
           }}
         />
       </Field>
