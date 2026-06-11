@@ -1100,6 +1100,10 @@ function ValueDefHistoryPanel({
   onRestore: (v: string) => void;
 }) {
   const [viewing, setViewing] = useState<ValueDefVersion | null>(null);
+  // 11-Jun · Older versions collapsed behind a disclosure so the
+  // panel shows ONLY the pinned "Current" entry by default. Toggle
+  // reveals a scrollable list of all earlier versions.
+  const [showOthers, setShowOthers] = useState(false);
   // Newest first for display.
   const ordered = useMemo(
     () => [...history].sort((a, b) => b.edited_at.localeCompare(a.edited_at)),
@@ -1187,12 +1191,28 @@ function ValueDefHistoryPanel({
                 {renderEntry(currentEntry, -1, true)}
               </div>
             )}
-            {/* Scrollable older versions (cap height so the panel
-                doesn't push the page longer as history grows). */}
+            {/* 11-Jun · Older versions hidden by default behind a
+                disclosure so only the pinned Current is shown on
+                first paint. Toggle expands a max-h scrollable list. */}
             {others.length > 0 && (
-              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-0.5">
-                {others.map((v, i) => renderEntry(v, i, false))}
-              </div>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowOthers((v) => !v)}
+                  className="w-full text-[10px] font-bold uppercase tracking-wider text-beroe-blue mt-1 mb-1.5 flex items-center justify-between hover:opacity-80"
+                >
+                  <span>
+                    {showOthers ? "Hide" : "Show"} {others.length} earlier{" "}
+                    version{others.length === 1 ? "" : "s"}
+                  </span>
+                  <span>{showOthers ? "▴" : "▾"}</span>
+                </button>
+                {showOthers && (
+                  <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-0.5">
+                    {others.map((v, i) => renderEntry(v, i, false))}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
