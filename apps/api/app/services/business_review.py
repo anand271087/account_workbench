@@ -628,7 +628,25 @@ h3.section{font-size:13px;font-weight:700;color:#001137;
 """
 
 
-def render_html(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = None) -> str:
+_ALL_SLIDE_IDS = ("s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12")
+
+
+def _select_slides(slide_ids: list[str] | None) -> set[str]:
+    """Normalise the slide selection. None / empty → all 12."""
+    if not slide_ids:
+        return set(_ALL_SLIDE_IDS)
+    keep = {sid for sid in slide_ids if sid in _ALL_SLIDE_IDS}
+    # Belt-and-braces: an empty filter would yield a blank deck — fall
+    # back to "all" rather than emit a zero-slide PPTX.
+    return keep or set(_ALL_SLIDE_IDS)
+
+
+def render_html(
+    snapshot: dict[str, Any],
+    *,
+    charts: dict[str, bytes] | None = None,
+    slide_ids: list[str] | None = None,
+) -> str:
     s = snapshot
     cover = s["cover"]
     cc = s["custom_credits"]
@@ -846,20 +864,22 @@ def render_html(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = N
       <div class="brand">{_e(cover.get('footer'))}</div>
     </section>"""
 
-    body = "".join([
-        s1,
-        slide("CUSTOM CREDITS", "Custom Credits", s2_body),
-        slide("RISKS · OPEN · ASKS", "Risks · Open · Asks", s3_body),
-        slide("EXECUTIVE SNAPSHOT", "Executive Snapshot", s4_body),
-        slide("CONTRACT SUMMARY", "Contract Summary", s5_body),
-        slide("ACCOMPLISHMENTS & MILESTONES", "Accomplishments & Milestones", s6_body),
-        slide("UPSELL & EXPANSION PIPELINE", "Upsell & Expansion Pipeline", s7_body),
-        slide("ACCOUNT HEALTH · 12 SCORES", "Account Health · 12 scores", s8_body),
-        slide("SUBSCRIBERS & ENGAGEMENT", "Subscribers & Engagement", s9_body),
-        slide("LIVE.AI · CATEGORY WATCH", "Live.ai · Category Watch", s10_body),
-        slide("INFLATION WATCH GIT", "Inflation Watch GIT", s11_body),
-        s12,
-    ])
+    selected = _select_slides(slide_ids)
+    parts: list[tuple[str, str]] = [
+        ("s1", s1),
+        ("s2", slide("CUSTOM CREDITS", "Custom Credits", s2_body)),
+        ("s3", slide("RISKS · OPEN · ASKS", "Risks · Open · Asks", s3_body)),
+        ("s4", slide("EXECUTIVE SNAPSHOT", "Executive Snapshot", s4_body)),
+        ("s5", slide("CONTRACT SUMMARY", "Contract Summary", s5_body)),
+        ("s6", slide("ACCOMPLISHMENTS & MILESTONES", "Accomplishments & Milestones", s6_body)),
+        ("s7", slide("UPSELL & EXPANSION PIPELINE", "Upsell & Expansion Pipeline", s7_body)),
+        ("s8", slide("ACCOUNT HEALTH · 12 SCORES", "Account Health · 12 scores", s8_body)),
+        ("s9", slide("SUBSCRIBERS & ENGAGEMENT", "Subscribers & Engagement", s9_body)),
+        ("s10", slide("LIVE.AI · CATEGORY WATCH", "Live.ai · Category Watch", s10_body)),
+        ("s11", slide("INFLATION WATCH GIT", "Inflation Watch GIT", s11_body)),
+        ("s12", s12),
+    ]
+    body = "".join(html for sid, html in parts if sid in selected)
 
     title_text = _html.escape(f"{cover.get('account_name', 'Business Review')} · {cover.get('period_label', '')}")
     return f"""<!doctype html>
@@ -905,7 +925,12 @@ def render_pdf(html: str) -> bytes:
 # ============================================================
 
 
-def render_pptx(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = None) -> bytes:
+def render_pptx(
+    snapshot: dict[str, Any],
+    *,
+    charts: dict[str, bytes] | None = None,
+    slide_ids: list[str] | None = None,
+) -> bytes:
     try:
         from pptx import Presentation  # type: ignore
         from pptx.dml.color import RGBColor  # type: ignore
@@ -915,6 +940,7 @@ def render_pptx(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = N
         return b""
     if charts is None:
         charts = _build_chart_pngs(snapshot)
+    selected = _select_slides(slide_ids)
 
     s = snapshot
     prs = Presentation()
@@ -995,168 +1021,171 @@ def render_pptx(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = N
     la = s["live_ai"]
     iw = s["inflation_watch"]
 
-    # 1 Cover
-    _add_cover(
-        cover.get("period_label", ""),
-        cover.get("account_name", ""),
-        cover.get("title", ""),
-        cover.get("footer", "Beroe"),
-    )
+    # Per-slide builders. Each block is independently guarded so the
+    # user can deselect any subset and the deck still renders cleanly.
 
-    # 2 Custom Credits
-    sl = _add_content("Custom Credits", "Custom Credits")
-    tiles = [
-        ("FTE allocation", _fmt(cc.get("fte"))),
-        ("Hours purchased", _fmt(cc.get("hours_purchased"))),
-        ("Hours consumed YTD", _fmt(cc.get("hours_consumed"))),
-        ("Hours remaining", _fmt(cc.get("hours_remaining"))),
-        ("Fixed-fee instances", f"{_fmt(cc.get('fixed_fee_done'))}/{_fmt(cc.get('fixed_fee_total'))}"),
-        ("Instances in flight", _fmt(cc.get("instances_in_flight"))),
-        ("Infinity Slots active", _fmt(cc.get("slots_active"))),
-        ("Slot refresh cadence", _fmt(cc.get("slot_cadence"))),
-    ]
-    for i, (lab, val) in enumerate(tiles):
-        x = 0.5 + (i % 4) * 3.1
-        y = 1.7 + (i // 4) * 1.4
-        _add_kpi(sl, x, y, 3.0, lab, val)
+    if "s1" in selected:
+        _add_cover(
+            cover.get("period_label", ""),
+            cover.get("account_name", ""),
+            cover.get("title", ""),
+            cover.get("footer", "Beroe"),
+        )
 
-    # 3 Risks · Open · Asks
-    sl = _add_content("Risks · Open · Asks", "Risks · Open · Asks")
-    for col, (label, items) in enumerate([
-        ("Open items (Beroe-side)", ro.get("open_items") or ["—"]),
-        ("Risks", ro.get("risks") or ["—"]),
-        ("Asks from client", ro.get("asks") or ["—"]),
-    ]):
-        x = 0.5 + col * 4.3
-        _add_text(sl, x, 1.7, 4.0, 0.35, label, size=12, bold=True, color=NAVY)
-        for i, txt in enumerate(items[:8]):
-            _add_text(sl, x, 2.1 + i * 0.45, 4.0, 0.45, "• " + str(txt), size=11, color=DARK)
+    if "s2" in selected:
+        sl = _add_content("Custom Credits", "Custom Credits")
+        tiles = [
+            ("FTE allocation", _fmt(cc.get("fte"))),
+            ("Hours purchased", _fmt(cc.get("hours_purchased"))),
+            ("Hours consumed YTD", _fmt(cc.get("hours_consumed"))),
+            ("Hours remaining", _fmt(cc.get("hours_remaining"))),
+            ("Fixed-fee instances", f"{_fmt(cc.get('fixed_fee_done'))}/{_fmt(cc.get('fixed_fee_total'))}"),
+            ("Instances in flight", _fmt(cc.get("instances_in_flight"))),
+            ("Infinity Slots active", _fmt(cc.get("slots_active"))),
+            ("Slot refresh cadence", _fmt(cc.get("slot_cadence"))),
+        ]
+        for i, (lab, val) in enumerate(tiles):
+            x = 0.5 + (i % 4) * 3.1
+            y = 1.7 + (i // 4) * 1.4
+            _add_kpi(sl, x, y, 3.0, lab, val)
 
-    # 4 Executive Snapshot
-    sl = _add_content("Executive Snapshot", "Executive Snapshot")
-    _add_kpi(sl, 0.5, 1.7, 3.0, "Account Health", f"{_fmt(ex.get('health'))} / 100",
-             _fmt(ex.get("health_trend") or ex.get("health_band") or ""))
-    _add_kpi(sl, 3.7, 1.7, 3.0, "ARR in scope", _money(ex.get("arr_usd")),
-             _fmt(ex.get("expansion_note") or ""))
-    _add_kpi(sl, 6.9, 1.7, 3.0, "Cost avoidance", _money(ex.get("cost_avoidance_usd")),
-             f"target {_money(ex.get('cost_target_usd'))}" if ex.get("cost_target_usd") else "")
-    _add_kpi(sl, 10.1, 1.7, 2.7, "Renewal", _fmt(ex.get("renewal_date")),
-             f"{ex.get('days_to_renewal')} days" if ex.get("days_to_renewal") is not None else "")
-    _add_text(sl, 0.5, 3.3, 5, 0.3, "Engagement", size=12, bold=True, color=NAVY)
-    _add_kpi(sl, 0.5, 3.7, 3.0, "Active 30d",
-             f"{_fmt(ex.get('active_30d'))} / {_fmt(ex.get('licensed_seats'))}")
-    _add_kpi(sl, 3.7, 3.7, 3.0, "Logins", _fmt(ex.get("logins")))
-    _add_kpi(sl, 6.9, 3.7, 3.0, "Hours", _fmt(ex.get("hours")))
-    _add_kpi(sl, 10.1, 3.7, 2.7, "Abi queries", _fmt(ex.get("abi_queries")))
+    if "s3" in selected:
+        sl = _add_content("Risks · Open · Asks", "Risks · Open · Asks")
+        for col, (label, items) in enumerate([
+            ("Open items (Beroe-side)", ro.get("open_items") or ["—"]),
+            ("Risks", ro.get("risks") or ["—"]),
+            ("Asks from client", ro.get("asks") or ["—"]),
+        ]):
+            x = 0.5 + col * 4.3
+            _add_text(sl, x, 1.7, 4.0, 0.35, label, size=12, bold=True, color=NAVY)
+            for i, txt in enumerate(items[:8]):
+                _add_text(sl, x, 2.1 + i * 0.45, 4.0, 0.45, "• " + str(txt), size=11, color=DARK)
 
-    # 5 Contract Summary
-    sl = _add_content("Contract Summary", "Contract Summary")
-    items = [
-        ("Contract start", _fmt(cs.get("start"))),
-        ("Contract end / renewal", _fmt(cs.get("end"))),
-        ("Term", _fmt(cs.get("term"))),
-        ("ACV", _money(cs.get("acv_usd"))),
-        ("Billing", _fmt(cs.get("billing"))),
-        ("Licensed seats", _fmt(cs.get("seats_current"))),
-        ("Geography", _fmt(cs.get("geography"))),
-        ("Sponsor", f"{_fmt(cs.get('sponsor_name'))} · {_fmt(cs.get('sponsor_role'))}"),
-    ]
-    for i, (lab, val) in enumerate(items):
-        x = 0.5 + (i % 4) * 3.1
-        y = 1.7 + (i // 4) * 1.4
-        _add_kpi(sl, x, y, 3.0, lab, val)
-    mods = ", ".join(cs.get("modules") or []) or "—"
-    _add_text(sl, 0.5, 4.7, 12.3, 0.3, "Modules in scope", size=12, bold=True, color=NAVY)
-    _add_text(sl, 0.5, 5.0, 12.3, 1.5, mods, size=11, color=DARK)
+    if "s4" in selected:
+        sl = _add_content("Executive Snapshot", "Executive Snapshot")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Account Health", f"{_fmt(ex.get('health'))} / 100",
+                 _fmt(ex.get("health_trend") or ex.get("health_band") or ""))
+        _add_kpi(sl, 3.7, 1.7, 3.0, "ARR in scope", _money(ex.get("arr_usd")),
+                 _fmt(ex.get("expansion_note") or ""))
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Cost avoidance", _money(ex.get("cost_avoidance_usd")),
+                 f"target {_money(ex.get('cost_target_usd'))}" if ex.get("cost_target_usd") else "")
+        _add_kpi(sl, 10.1, 1.7, 2.7, "Renewal", _fmt(ex.get("renewal_date")),
+                 f"{ex.get('days_to_renewal')} days" if ex.get("days_to_renewal") is not None else "")
+        _add_text(sl, 0.5, 3.3, 5, 0.3, "Engagement", size=12, bold=True, color=NAVY)
+        _add_kpi(sl, 0.5, 3.7, 3.0, "Active 30d",
+                 f"{_fmt(ex.get('active_30d'))} / {_fmt(ex.get('licensed_seats'))}")
+        _add_kpi(sl, 3.7, 3.7, 3.0, "Logins", _fmt(ex.get("logins")))
+        _add_kpi(sl, 6.9, 3.7, 3.0, "Hours", _fmt(ex.get("hours")))
+        _add_kpi(sl, 10.1, 3.7, 2.7, "Abi queries", _fmt(ex.get("abi_queries")))
 
-    # 6 Accomplishments
-    sl = _add_content("Accomplishments & Milestones", "Accomplishments & Milestones")
-    for i, a in enumerate((acc or [{}])[:6]):
-        x = 0.5 + (i % 3) * 4.2
-        y = 1.7 + (i // 3) * 2.5
-        _add_text(sl, x, y, 4.0, 0.5, _money(a.get("amount_usd")), size=22, bold=True, color=INDIGO)
-        _add_text(sl, x, y + 0.6, 4.0, 0.35, _fmt(a.get("title")), size=11, bold=True, color=NAVY)
-        _add_text(sl, x, y + 1.0, 4.0, 0.3, _fmt(a.get("bu")), size=9, color=MUTED)
-        _add_text(sl, x, y + 1.3, 4.0, 1.0, _fmt(a.get("description")), size=10, color=DARK)
+    if "s5" in selected:
+        sl = _add_content("Contract Summary", "Contract Summary")
+        items = [
+            ("Contract start", _fmt(cs.get("start"))),
+            ("Contract end / renewal", _fmt(cs.get("end"))),
+            ("Term", _fmt(cs.get("term"))),
+            ("ACV", _money(cs.get("acv_usd"))),
+            ("Billing", _fmt(cs.get("billing"))),
+            ("Licensed seats", _fmt(cs.get("seats_current"))),
+            ("Geography", _fmt(cs.get("geography"))),
+            ("Sponsor", f"{_fmt(cs.get('sponsor_name'))} · {_fmt(cs.get('sponsor_role'))}"),
+        ]
+        for i, (lab, val) in enumerate(items):
+            x = 0.5 + (i % 4) * 3.1
+            y = 1.7 + (i // 4) * 1.4
+            _add_kpi(sl, x, y, 3.0, lab, val)
+        mods = ", ".join(cs.get("modules") or []) or "—"
+        _add_text(sl, 0.5, 4.7, 12.3, 0.3, "Modules in scope", size=12, bold=True, color=NAVY)
+        _add_text(sl, 0.5, 5.0, 12.3, 1.5, mods, size=11, color=DARK)
 
-    # 7 Upsell pipeline
-    sl = _add_content("Upsell & Expansion Pipeline", "Upsell & Expansion Pipeline")
-    _add_text(sl, 0.5, 1.7, 5, 0.3, "Conversation", size=10, bold=True, color=MUTED)
-    _add_text(sl, 5.0, 1.7, 2, 0.3, "Status", size=10, bold=True, color=MUTED)
-    _add_text(sl, 7.0, 1.7, 2, 0.3, "Value", size=10, bold=True, color=MUTED)
-    _add_text(sl, 9.0, 1.7, 1.5, 0.3, "Prob", size=10, bold=True, color=MUTED)
-    _add_text(sl, 10.5, 1.7, 2.5, 0.3, "When", size=10, bold=True, color=MUTED)
-    for i, p in enumerate(up[:8]):
-        y = 2.1 + i * 0.5
-        _add_text(sl, 0.5, y, 4.5, 0.4, _fmt(p.get("title")), size=11, color=DARK)
-        _add_text(sl, 5.0, y, 2, 0.4, _fmt(p.get("status")), size=10, color=INDIGO, bold=True)
-        _add_text(sl, 7.0, y, 2, 0.4, _money(p.get("value_usd")), size=11, color=DARK, bold=True)
-        _add_text(sl, 9.0, y, 1.5, 0.4, f"{p.get('prob', 0)}%", size=11, color=DARK)
-        _add_text(sl, 10.5, y, 2.5, 0.4, _fmt(p.get("when_text")), size=10, color=MUTED)
+    if "s6" in selected:
+        sl = _add_content("Accomplishments & Milestones", "Accomplishments & Milestones")
+        for i, a in enumerate((acc or [{}])[:6]):
+            x = 0.5 + (i % 3) * 4.2
+            y = 1.7 + (i // 3) * 2.5
+            _add_text(sl, x, y, 4.0, 0.5, _money(a.get("amount_usd")), size=22, bold=True, color=INDIGO)
+            _add_text(sl, x, y + 0.6, 4.0, 0.35, _fmt(a.get("title")), size=11, bold=True, color=NAVY)
+            _add_text(sl, x, y + 1.0, 4.0, 0.3, _fmt(a.get("bu")), size=9, color=MUTED)
+            _add_text(sl, x, y + 1.3, 4.0, 1.0, _fmt(a.get("description")), size=10, color=DARK)
 
-    # 8 Scores · 12
-    sl = _add_content("Account Health · 12 scores", "Account Health · 12 scores")
-    for i, r in enumerate(sc):
-        x = 0.5 + (i % 4) * 3.1
-        y = 1.7 + (i // 4) * 1.5
-        _add_kpi(sl, x, y, 3.0, r.get("name", ""), str(_fmt(r.get("score"))), _fmt(r.get("band")))
+    if "s7" in selected:
+        sl = _add_content("Upsell & Expansion Pipeline", "Upsell & Expansion Pipeline")
+        _add_text(sl, 0.5, 1.7, 5, 0.3, "Conversation", size=10, bold=True, color=MUTED)
+        _add_text(sl, 5.0, 1.7, 2, 0.3, "Status", size=10, bold=True, color=MUTED)
+        _add_text(sl, 7.0, 1.7, 2, 0.3, "Value", size=10, bold=True, color=MUTED)
+        _add_text(sl, 9.0, 1.7, 1.5, 0.3, "Prob", size=10, bold=True, color=MUTED)
+        _add_text(sl, 10.5, 1.7, 2.5, 0.3, "When", size=10, bold=True, color=MUTED)
+        for i, p in enumerate(up[:8]):
+            y = 2.1 + i * 0.5
+            _add_text(sl, 0.5, y, 4.5, 0.4, _fmt(p.get("title")), size=11, color=DARK)
+            _add_text(sl, 5.0, y, 2, 0.4, _fmt(p.get("status")), size=10, color=INDIGO, bold=True)
+            _add_text(sl, 7.0, y, 2, 0.4, _money(p.get("value_usd")), size=11, color=DARK, bold=True)
+            _add_text(sl, 9.0, y, 1.5, 0.4, f"{p.get('prob', 0)}%", size=11, color=DARK)
+            _add_text(sl, 10.5, y, 2.5, 0.4, _fmt(p.get("when_text")), size=10, color=MUTED)
 
-    # 9 Subscribers & Engagement
-    sl = _add_content("Subscribers & Engagement", "Subscribers & Engagement")
-    _add_kpi(sl, 0.5, 1.7, 3.0, "Licensed seats", _fmt(se.get("licensed_seats")),
-             f"+{se.get('seats_proposed')} in proposal" if se.get("seats_proposed") else "")
-    _add_kpi(sl, 3.7, 1.7, 3.0, "Active 30d", _fmt(se.get("active_30d")),
-             f"{se.get('activation_pct')}% activation" if se.get("activation_pct") is not None else "")
-    _add_kpi(sl, 6.9, 1.7, 3.0, "Logins (period)", _fmt(se.get("logins_total")))
-    _add_kpi(sl, 10.1, 1.7, 2.7, "Hours (period)", _fmt(se.get("hours_total")))
-    chart9_bytes = charts.get("slide9", b"")
-    if chart9_bytes:
-        sl.shapes.add_picture(BytesIO(chart9_bytes), Inches(0.5), Inches(3.2),
-                              width=Inches(12.3), height=Inches(3.8))
-    else:
-        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
-                  "Trend chart unavailable — need ≥2 months of usage data.",
-                  size=11, color=MUTED, align="center")
+    if "s8" in selected:
+        sl = _add_content("Account Health · 12 scores", "Account Health · 12 scores")
+        for i, r in enumerate(sc):
+            x = 0.5 + (i % 4) * 3.1
+            y = 1.7 + (i // 4) * 1.5
+            _add_kpi(sl, x, y, 3.0, r.get("name", ""), str(_fmt(r.get("score"))), _fmt(r.get("band")))
 
-    # 10 Live.ai
-    sl = _add_content("Live.ai · Category Watch", "Live.ai · Category Watch")
-    _add_kpi(sl, 0.5, 1.7, 3.0, "Subscribers",
-             f"{_fmt(la.get('subscribers'))} of {_fmt(la.get('total_subs'))}")
-    _add_kpi(sl, 3.7, 1.7, 3.0, "Categories unlocked", _fmt(la.get("categories_unlocked")),
-             f"{la.get('ent_cats') or '—'} Ent + {la.get('non_ent_cats') or '—'} Non-Ent")
-    _add_kpi(sl, 6.9, 1.7, 3.0, "Avg cat/user", _fmt(la.get("avg_per_user")),
-             f"benchmark {la.get('benchmark')}" if la.get("benchmark") else "")
-    chart10_bytes = charts.get("slide10", b"")
-    if chart10_bytes:
-        sl.shapes.add_picture(BytesIO(chart10_bytes), Inches(0.5), Inches(3.2),
-                              width=Inches(12.3), height=Inches(3.8))
-    else:
-        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
-                  "No top-category data — populate platform_intel.cat_intel.top_cats.",
-                  size=11, color=MUTED, align="center")
+    if "s9" in selected:
+        sl = _add_content("Subscribers & Engagement", "Subscribers & Engagement")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Licensed seats", _fmt(se.get("licensed_seats")),
+                 f"+{se.get('seats_proposed')} in proposal" if se.get("seats_proposed") else "")
+        _add_kpi(sl, 3.7, 1.7, 3.0, "Active 30d", _fmt(se.get("active_30d")),
+                 f"{se.get('activation_pct')}% activation" if se.get("activation_pct") is not None else "")
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Logins (period)", _fmt(se.get("logins_total")))
+        _add_kpi(sl, 10.1, 1.7, 2.7, "Hours (period)", _fmt(se.get("hours_total")))
+        chart9_bytes = charts.get("slide9", b"")
+        if chart9_bytes:
+            sl.shapes.add_picture(BytesIO(chart9_bytes), Inches(0.5), Inches(3.2),
+                                  width=Inches(12.3), height=Inches(3.8))
+        else:
+            _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                      "Trend chart unavailable — need ≥2 months of usage data.",
+                      size=11, color=MUTED, align="center")
 
-    # 11 Inflation Watch GIT
-    sl = _add_content("Inflation Watch GIT", "Inflation Watch GIT")
-    _add_kpi(sl, 0.5, 1.7, 4.0, "Categories tracked",
-             f"{_fmt(iw.get('categories_tracked'))} of {_fmt(iw.get('categories_in_scope'))}")
-    _add_kpi(sl, 4.7, 1.7, 4.0, "Views (period)", _fmt(iw.get("views_period")))
-    _add_kpi(sl, 8.9, 1.7, 3.9, "Negotiation prep runs", _fmt(iw.get("neg_prep_runs")))
-    chart11_bytes = charts.get("slide11", b"")
-    if chart11_bytes:
-        sl.shapes.add_picture(BytesIO(chart11_bytes), Inches(0.5), Inches(3.2),
-                              width=Inches(12.3), height=Inches(3.8))
-    else:
-        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
-                  "No inflation trend data — populate platform_intel.inflation_watch.trend_monthly.",
-                  size=11, color=MUTED, align="center")
+    if "s10" in selected:
+        sl = _add_content("Live.ai · Category Watch", "Live.ai · Category Watch")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Subscribers",
+                 f"{_fmt(la.get('subscribers'))} of {_fmt(la.get('total_subs'))}")
+        _add_kpi(sl, 3.7, 1.7, 3.0, "Categories unlocked", _fmt(la.get("categories_unlocked")),
+                 f"{la.get('ent_cats') or '—'} Ent + {la.get('non_ent_cats') or '—'} Non-Ent")
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Avg cat/user", _fmt(la.get("avg_per_user")),
+                 f"benchmark {la.get('benchmark')}" if la.get("benchmark") else "")
+        chart10_bytes = charts.get("slide10", b"")
+        if chart10_bytes:
+            sl.shapes.add_picture(BytesIO(chart10_bytes), Inches(0.5), Inches(3.2),
+                                  width=Inches(12.3), height=Inches(3.8))
+        else:
+            _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                      "No top-category data — populate platform_intel.cat_intel.top_cats.",
+                      size=11, color=MUTED, align="center")
 
-    # 12 Closer
-    _add_cover(
-        "Next review scheduled per cadence",
-        f"Thank you, {cover.get('account_name', '')}",
-        cover.get("title", ""),
-        cover.get("footer", "Beroe"),
-    )
+    if "s11" in selected:
+        sl = _add_content("Inflation Watch GIT", "Inflation Watch GIT")
+        _add_kpi(sl, 0.5, 1.7, 4.0, "Categories tracked",
+                 f"{_fmt(iw.get('categories_tracked'))} of {_fmt(iw.get('categories_in_scope'))}")
+        _add_kpi(sl, 4.7, 1.7, 4.0, "Views (period)", _fmt(iw.get("views_period")))
+        _add_kpi(sl, 8.9, 1.7, 3.9, "Negotiation prep runs", _fmt(iw.get("neg_prep_runs")))
+        chart11_bytes = charts.get("slide11", b"")
+        if chart11_bytes:
+            sl.shapes.add_picture(BytesIO(chart11_bytes), Inches(0.5), Inches(3.2),
+                                  width=Inches(12.3), height=Inches(3.8))
+        else:
+            _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                      "No inflation trend data — populate platform_intel.inflation_watch.trend_monthly.",
+                      size=11, color=MUTED, align="center")
+
+    if "s12" in selected:
+        _add_cover(
+            "Next review scheduled per cadence",
+            f"Thank you, {cover.get('account_name', '')}",
+            cover.get("title", ""),
+            cover.get("footer", "Beroe"),
+        )
 
     buf = BytesIO()
     prs.save(buf)
