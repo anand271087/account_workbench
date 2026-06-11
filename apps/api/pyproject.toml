@@ -34,9 +34,12 @@ dependencies = [
     "cachetools>=6.2.6",
     # Business Review renderers. weasyprint produces PDF from the same
     # HTML the iframe preview consumes; python-pptx builds the deck.
-    # matplotlib lands in phase 3 for chart images on slides 9-11.
+    # matplotlib paints the trend / category charts on slides 9-11 as
+    # PNG bytes — embedded inline in HTML (data: URL) and via
+    # add_picture() in PPTX, so all three outputs carry identical visuals.
     "weasyprint>=63.0",
     "python-pptx>=1.0.2",
+    "matplotlib>=3.9.0",
 ]
 
 [project.optional-dependencies]

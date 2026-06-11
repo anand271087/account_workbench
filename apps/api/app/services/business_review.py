@@ -17,6 +17,7 @@ across monthly / quarterly / renewal / custom.
 
 from __future__ import annotations
 
+import base64
 import html as _html
 import logging
 from dataclasses import dataclass
@@ -427,6 +428,157 @@ def _kpi_tile(label: str, value: str, note: str = "") -> str:
     )
 
 
+# ============================================================
+# Chart rendering — matplotlib PNG bytes, embedded inline in
+# HTML (data: URL) AND in PPTX (add_picture). Same bytes →
+# identical visuals across all three outputs.
+# ============================================================
+
+
+_INDIGO_HEX = "#4A00F8"
+_NAVY_HEX = "#001137"
+_FUSCIA_HEX = "#C344C7"
+_AQUA_HEX = "#35E1D4"
+
+
+def _chart_to_png(fig: Any) -> bytes:
+    """Convert a matplotlib Figure to PNG bytes, then close it.
+
+    Always closes the figure so the worker process doesn't leak figures
+    across calls (matplotlib keeps a global registry by default)."""
+    buf = BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=120,
+                facecolor="white", edgecolor="none")
+    import matplotlib.pyplot as plt  # type: ignore
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def _line_chart(
+    *, months: list[str], series: list[float], title: str, color: str = _INDIGO_HEX
+) -> bytes:
+    """12-month line chart with a soft fill under it. Returns empty
+    bytes when the data has fewer than 2 points (a line of 1 point is
+    just a dot — render placeholder text instead)."""
+    if not months or not series or len(series) < 2:
+        return b""
+    try:
+        import matplotlib  # type: ignore
+        matplotlib.use("Agg")  # headless safe
+        import matplotlib.pyplot as plt  # type: ignore
+    except ImportError:
+        logger.warning("matplotlib not installed; skipping line chart")
+        return b""
+
+    fig, ax = plt.subplots(figsize=(9.5, 3.2))
+    n = min(len(months), len(series))
+    x = list(range(n))
+    y = list(series[:n])
+    labels = list(months[:n])
+    ax.plot(x, y, marker="o", linewidth=2.5, color=color, markersize=6,
+            markerfacecolor="white", markeredgewidth=2, markeredgecolor=color)
+    ax.fill_between(x, y, alpha=0.10, color=color)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=9, color="#5a7896")
+    ax.tick_params(axis="y", labelsize=9, colors="#5a7896")
+    ax.set_title(title, fontsize=11, fontweight="bold", color=_NAVY_HEX, loc="left", pad=12)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_color("#e4eaf6")
+    ax.spines["bottom"].set_color("#e4eaf6")
+    ax.grid(axis="y", color="#f0f3f8", linewidth=1)
+    ax.set_axisbelow(True)
+    return _chart_to_png(fig)
+
+
+def _bar_chart(
+    *, labels: list[str], values: list[float], title: str, color: str = _INDIGO_HEX
+) -> bytes:
+    """Horizontal bar chart. Used for slide 10's top-categories list."""
+    if not labels or not values:
+        return b""
+    try:
+        import matplotlib  # type: ignore
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt  # type: ignore
+    except ImportError:
+        logger.warning("matplotlib not installed; skipping bar chart")
+        return b""
+
+    n = min(len(labels), len(values), 10)
+    ll = list(reversed(labels[:n]))
+    vv = list(reversed(values[:n]))
+    fig, ax = plt.subplots(figsize=(9.5, max(2.4, 0.34 * n + 1.2)))
+    bars = ax.barh(ll, vv, color=color, edgecolor="white", linewidth=1)
+    for bar, v in zip(bars, vv, strict=True):
+        ax.text(v + max(vv) * 0.01, bar.get_y() + bar.get_height() / 2,
+                f"{int(v) if float(v).is_integer() else v}",
+                va="center", fontsize=9, color=_NAVY_HEX, fontweight="bold")
+    ax.tick_params(axis="x", labelsize=9, colors="#5a7896")
+    ax.tick_params(axis="y", labelsize=9, colors=_NAVY_HEX)
+    ax.set_title(title, fontsize=11, fontweight="bold", color=_NAVY_HEX, loc="left", pad=10)
+    for spine in ("top", "right", "bottom"):
+        ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_color("#e4eaf6")
+    ax.set_xticks([])
+    return _chart_to_png(fig)
+
+
+def _build_chart_pngs(snapshot: dict[str, Any]) -> dict[str, bytes]:
+    """Build the three chart PNGs once; reuse them across HTML+PPTX.
+
+    Keys:
+      slide9  — 12-month login trend (line)
+      slide10 — Top categories visits (horizontal bar)
+      slide11 — Monthly inflation-watch trend (line)
+    """
+    se = snapshot.get("subscribers_engagement", {}) or {}
+    la = snapshot.get("live_ai", {}) or {}
+    iw = snapshot.get("inflation_watch", {}) or {}
+
+    # Slide 9 — login trend. Months come from platform_intel.usage.months
+    # but subscribers_engagement.logins_trend mirrors that list. If the
+    # mirror is absent fall back to a 12-month default label set.
+    months = snapshot.get("meta", {}).get("logins_months") or _MONTHS_12()
+    logins = se.get("logins_trend") or []
+    chart9 = _line_chart(
+        months=months, series=[float(x) for x in logins if isinstance(x, (int, float))],
+        title="Monthly logins (12-month trend)",
+    )
+
+    # Slide 10 — top categories
+    cats = la.get("top_cats") or []
+    chart10 = _bar_chart(
+        labels=[str(c.get("name") or "—") for c in cats[:10]],
+        values=[float(c.get("visits") or 0) for c in cats[:10]],
+        title="Top categories by visits",
+        color=_FUSCIA_HEX,
+    )
+
+    # Slide 11 — inflation trend
+    inf_trend = iw.get("trend_monthly") or []
+    chart11 = _line_chart(
+        months=_MONTHS_12()[: len(inf_trend)],
+        series=[float(v) for v in inf_trend if isinstance(v, (int, float))],
+        title="Inflation Watch · monthly trend",
+        color=_AQUA_HEX,
+    )
+
+    return {"slide9": chart9, "slide10": chart10, "slide11": chart11}
+
+
+def _MONTHS_12() -> list[str]:
+    return list(_MONTHS)
+
+
+def _png_data_url(png: bytes) -> str:
+    """Inline a PNG into an HTML <img src="data:..."> URL."""
+    if not png:
+        return ""
+    b64 = base64.b64encode(png).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
 _CSS = """
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,sans-serif;
@@ -476,7 +628,7 @@ h3.section{font-size:13px;font-weight:700;color:#001137;
 """
 
 
-def render_html(snapshot: dict[str, Any]) -> str:
+def render_html(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = None) -> str:
     s = snapshot
     cover = s["cover"]
     cc = s["custom_credits"]
@@ -489,6 +641,10 @@ def render_html(snapshot: dict[str, Any]) -> str:
     se = s["subscribers_engagement"]
     la = s["live_ai"]
     iw = s["inflation_watch"]
+    # Charts: build once if caller didn't pass them. Empty bytes means
+    # the data was too thin to chart and we fall back to a text note.
+    if charts is None:
+        charts = _build_chart_pngs(snapshot)
 
     def slide(eyebrow: str, title: str, body: str) -> str:
         eb = f'<div class="slide-eyebrow">·  {_e(eyebrow)}</div>' if eyebrow else ""
@@ -611,7 +767,17 @@ def render_html(snapshot: dict[str, Any]) -> str:
         <tbody>{score_rows}</tbody>
       </table>"""
 
-    # Slide 9 — Subscribers & Engagement (chart placeholder in Phase 1)
+    # Slide 9 — Subscribers & Engagement (12-month login chart)
+    chart9_url = _png_data_url(charts.get("slide9", b""))
+    chart9_html = (
+        f'<img src="{chart9_url}" alt="12-month login trend" '
+        f'style="width:100%;max-width:1000px;display:block;margin:20px auto 0">'
+        if chart9_url else
+        '<div style="padding:32px;text-align:center;color:#8496b0;font-size:11px;'
+        'border:1px dashed #c5d0e0;border-radius:8px;margin-top:20px">'
+        'Not enough monthly data yet — chart will appear once usage telemetry '
+        'has ≥2 months of history.</div>'
+    )
     s9_body = f"""
       <div class="grid grid-4">
         {_kpi_tile("LICENSED SEATS", _e(se.get('licensed_seats')), f"+{_e(se.get('seats_proposed'))} in proposal" if se.get('seats_proposed') else "")}
@@ -619,10 +785,7 @@ def render_html(snapshot: dict[str, Any]) -> str:
         {_kpi_tile("Logins (period)", _e(se.get('logins_total')))}
         {_kpi_tile("Hours (period)", _e(se.get('hours_total')))}
       </div>
-      <div style="padding:32px;text-align:center;color:#8496b0;font-size:11px;
-                  border:1px dashed #c5d0e0;border-radius:8px;margin-top:20px">
-        [12-month login trend chart — embedded in PPTX/PDF render]
-      </div>"""
+      {chart9_html}"""
 
     # Slide 10 — Live.ai Category Watch
     _heat_pill = {"hot": "red", "warm": "amber", "whitespace": "blue", "cold": "green"}
@@ -637,6 +800,12 @@ def render_html(snapshot: dict[str, Any]) -> str:
         f'<td>{_heat_cell(c.get("heat"))}</td></tr>'
         for c in (la.get("top_cats") or [])
     ) or '<tr><td colspan="3">—</td></tr>'
+    chart10_url = _png_data_url(charts.get("slide10", b""))
+    chart10_html = (
+        f'<img src="{chart10_url}" alt="Top categories by visits" '
+        f'style="width:100%;max-width:1000px;display:block;margin:14px auto 0">'
+        if chart10_url else ""
+    )
     s10_body = f"""
       <div class="grid grid-4">
         {_kpi_tile("Subscribers", f"{_e(la.get('subscribers'))} of {_e(la.get('total_subs'))}")}
@@ -647,19 +816,27 @@ def render_html(snapshot: dict[str, Any]) -> str:
       </div>
       <h3 class="section">Top categories</h3>
       <table><thead><tr><th>Category</th><th>Visits</th><th>Heat</th></tr></thead>
-        <tbody>{cat_rows}</tbody></table>"""
+        <tbody>{cat_rows}</tbody></table>
+      {chart10_html}"""
 
-    # Slide 11 — Inflation Watch GIT
+    # Slide 11 — Inflation Watch GIT (monthly trend line)
+    chart11_url = _png_data_url(charts.get("slide11", b""))
+    chart11_html = (
+        f'<img src="{chart11_url}" alt="Inflation Watch monthly trend" '
+        f'style="width:100%;max-width:1000px;display:block;margin:20px auto 0">'
+        if chart11_url else
+        '<div style="padding:32px;text-align:center;color:#8496b0;font-size:11px;'
+        'border:1px dashed #c5d0e0;border-radius:8px;margin-top:20px">'
+        'No trend data yet — chart will appear once inflation telemetry has '
+        '≥2 months of history.</div>'
+    )
     s11_body = f"""
       <div class="grid grid-3">
         {_kpi_tile("Categories tracked", f"{_e(iw.get('categories_tracked'))} of {_e(iw.get('categories_in_scope'))} in scope")}
         {_kpi_tile("Views (period)", _e(iw.get('views_period')))}
         {_kpi_tile("Negotiation prep runs", _e(iw.get('neg_prep_runs')))}
       </div>
-      <div style="padding:32px;text-align:center;color:#8496b0;font-size:11px;
-                  border:1px dashed #c5d0e0;border-radius:8px;margin-top:20px">
-        [Monthly category-watch trend chart — embedded in PPTX/PDF render]
-      </div>"""
+      {chart11_html}"""
 
     # Slide 12 — Closer
     s12 = f"""<section class="slide cover">
@@ -728,7 +905,7 @@ def render_pdf(html: str) -> bytes:
 # ============================================================
 
 
-def render_pptx(snapshot: dict[str, Any]) -> bytes:
+def render_pptx(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = None) -> bytes:
     try:
         from pptx import Presentation  # type: ignore
         from pptx.dml.color import RGBColor  # type: ignore
@@ -736,6 +913,8 @@ def render_pptx(snapshot: dict[str, Any]) -> bytes:
     except ImportError:
         logger.warning("python-pptx not installed; returning empty PPTX")
         return b""
+    if charts is None:
+        charts = _build_chart_pngs(snapshot)
 
     s = snapshot
     prs = Presentation()
@@ -930,8 +1109,14 @@ def render_pptx(snapshot: dict[str, Any]) -> bytes:
              f"{se.get('activation_pct')}% activation" if se.get("activation_pct") is not None else "")
     _add_kpi(sl, 6.9, 1.7, 3.0, "Logins (period)", _fmt(se.get("logins_total")))
     _add_kpi(sl, 10.1, 1.7, 2.7, "Hours (period)", _fmt(se.get("hours_total")))
-    _add_text(sl, 0.5, 3.5, 12.3, 0.4, "[12-month login trend chart — Phase 3]",
-              size=11, color=MUTED, align="center")
+    chart9_bytes = charts.get("slide9", b"")
+    if chart9_bytes:
+        sl.shapes.add_picture(BytesIO(chart9_bytes), Inches(0.5), Inches(3.2),
+                              width=Inches(12.3), height=Inches(3.8))
+    else:
+        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                  "Trend chart unavailable — need ≥2 months of usage data.",
+                  size=11, color=MUTED, align="center")
 
     # 10 Live.ai
     sl = _add_content("Live.ai · Category Watch", "Live.ai · Category Watch")
@@ -941,8 +1126,14 @@ def render_pptx(snapshot: dict[str, Any]) -> bytes:
              f"{la.get('ent_cats') or '—'} Ent + {la.get('non_ent_cats') or '—'} Non-Ent")
     _add_kpi(sl, 6.9, 1.7, 3.0, "Avg cat/user", _fmt(la.get("avg_per_user")),
              f"benchmark {la.get('benchmark')}" if la.get("benchmark") else "")
-    _add_text(sl, 0.5, 3.5, 12.3, 0.4, "[Top categories bar chart — Phase 3]",
-              size=11, color=MUTED, align="center")
+    chart10_bytes = charts.get("slide10", b"")
+    if chart10_bytes:
+        sl.shapes.add_picture(BytesIO(chart10_bytes), Inches(0.5), Inches(3.2),
+                              width=Inches(12.3), height=Inches(3.8))
+    else:
+        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                  "No top-category data — populate platform_intel.cat_intel.top_cats.",
+                  size=11, color=MUTED, align="center")
 
     # 11 Inflation Watch GIT
     sl = _add_content("Inflation Watch GIT", "Inflation Watch GIT")
@@ -950,8 +1141,14 @@ def render_pptx(snapshot: dict[str, Any]) -> bytes:
              f"{_fmt(iw.get('categories_tracked'))} of {_fmt(iw.get('categories_in_scope'))}")
     _add_kpi(sl, 4.7, 1.7, 4.0, "Views (period)", _fmt(iw.get("views_period")))
     _add_kpi(sl, 8.9, 1.7, 3.9, "Negotiation prep runs", _fmt(iw.get("neg_prep_runs")))
-    _add_text(sl, 0.5, 3.5, 12.3, 0.4, "[Monthly trend chart — Phase 3]",
-              size=11, color=MUTED, align="center")
+    chart11_bytes = charts.get("slide11", b"")
+    if chart11_bytes:
+        sl.shapes.add_picture(BytesIO(chart11_bytes), Inches(0.5), Inches(3.2),
+                              width=Inches(12.3), height=Inches(3.8))
+    else:
+        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                  "No inflation trend data — populate platform_intel.inflation_watch.trend_monthly.",
+                  size=11, color=MUTED, align="center")
 
     # 12 Closer
     _add_cover(

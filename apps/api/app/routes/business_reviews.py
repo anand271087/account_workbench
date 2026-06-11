@@ -38,6 +38,7 @@ from app.schemas.business_review import (
     GenerateBRRequest,
 )
 from app.services.business_review import (
+    _build_chart_pngs,
     derive_period,
     gather_data,
     render_html,
@@ -113,9 +114,11 @@ async def generate_business_review(
     snapshot = await gather_data(
         db=db, account=acc, period=period, cadence=body.cadence
     )
-    html = render_html(snapshot)
+    # Build chart PNGs ONCE so HTML/PDF/PPTX carry identical visuals.
+    charts = _build_chart_pngs(snapshot)
+    html = render_html(snapshot, charts=charts)
     pdf = render_pdf(html)
-    pptx = render_pptx(snapshot)
+    pptx = render_pptx(snapshot, charts=charts)
 
     row = BusinessReview(
         account_id=account_id,
