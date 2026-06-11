@@ -35,7 +35,7 @@ jobs:
             VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL_PROD }}"
           elif [[ "$BRANCH" == "main" ]]; then
             IMAGE_TAG="qa-${VERSION}"
-            VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL_STAGING }}"
+            VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL_DEV }}"
           else
             IMAGE_TAG="dev-${VERSION}"
             VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL_DEV }}"
@@ -126,7 +126,7 @@ jobs:
             echo "image_tag=dev-${VERSION}" >> $GITHUB_OUTPUT
             echo "compose_file_1=docker-compose-csm-workbench-dev.yml" >> $GITHUB_OUTPUT
             echo "compose_file_2=" >> $GITHUB_OUTPUT
-            echo "deploy_path=/opt/beroe-awb/Dev/docker-compose" >> $GITHUB_OUTPUT
+            echo "deploy_path=/opt/csm-workbench" >> $GITHUB_OUTPUT
           fi
           echo "ecr_registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
           echo "ecr_repo=${{ secrets.ECR_REPO }}" >> $GITHUB_OUTPUT
@@ -198,9 +198,9 @@ jobs:
                 \"IMAGE_TAG=$IMAGE_TAG ECR_REGISTRY=$ECR_REGISTRY ECR_REPO=$ECR_REPO docker-compose -f $COMPOSE_FILE pull || exit 1\",
                 \"IMAGE_TAG=$IMAGE_TAG ECR_REGISTRY=$ECR_REGISTRY ECR_REPO=$ECR_REPO docker-compose -f $COMPOSE_FILE up -d || { echo Deployment failed, old container still running; exit 1; }\",
                 \"sleep 5\",
-                \"docker ps --filter name=beroe-awb-api --filter status=running | grep beroe-awb-api || { echo Container not running; exit 1; }\",
+                \"docker ps --filter name=csm-workbench-backend --filter status=running | grep csm-workbench-backend || { echo Container not running; exit 1; }\",
                 \"echo Deployment successful\",
-                \"docker ps --filter name=beroe-awb-api\"
+                \"docker ps --filter name=csm-workbench-backend\"
               ]" \
               --query "Command.CommandId" \
               --output text)

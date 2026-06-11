@@ -20,36 +20,26 @@
 services:
 
   # -------------------- Web (Vite SPA + nginx) --------------------
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        # Vite bakes these into the bundle at build time. Reads from the
-        # .env.prod env file passed to `docker compose`.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-    image: beroe-awb-web:latest
-    restart: unless-stopped
+  csm-workbench-frontend:
+    image: 857862908450.dkr.ecr.eu-north-1.amazonaws.com/csm-account-workbench:beroe-awb-web-qa-1.0.0
+    container_name: csm-workbench-frontend
+    restart: on-failure
     ports:
-      - "80:80"
+      - "5173:80"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
       interval: 30s
       timeout: 5s
       retries: 3
     depends_on:
-      api:
+      csm-workbench-backend:
         condition: service_healthy
 
   # -------------------- API (FastAPI + uvicorn) --------------------
-  api:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    image: beroe-awb-api:latest
-    restart: unless-stopped
+  csm-workbench-backend:
+    image: 857862908450.dkr.ecr.eu-north-1.amazonaws.com/csm-account-workbench:beroe-awb-api-qa-1.0.0
+    container_name: csm-workbench-backend
+    restart: on-failure
     env_file:
       - .env.prod
     environment:
@@ -69,15 +59,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    command: sh -c ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
 
   # -------------------- Celery worker --------------------
-  worker:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    image: beroe-awb-api:latest
-    restart: unless-stopped
+  csm-workbench-worker:
+    image: 857862908450.dkr.ecr.eu-north-1.amazonaws.com/csm-account-workbench:beroe-awb-api-qa-1.0.0
+    container_name: csm-workbench-worker
+    restart: on-failure
     env_file:
       - .env.prod
     environment:
@@ -88,9 +76,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      api:
+      csm-workbench-backend:
         condition: service_healthy
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    command: sh -c ".venv/bin/celery -A app.workers.celery_app worker --loglevel=info --concurrency=2"
 
   # -------------------- Redis (broker + backend) --------------------
   redis:
