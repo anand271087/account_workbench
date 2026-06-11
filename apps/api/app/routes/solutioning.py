@@ -64,13 +64,23 @@ async def get_solutioning(
     ).scalar_one_or_none()
 
     if row is None:
-        # Return a blank record so the form can render before the first save.
+        # Persist a blank row on first read so all NOT-NULL columns with
+        # server_defaults (value_definition_history, trial_modules_tested,
+        # value_themes, ai_edited) materialise. Returning a synthetic
+        # in-memory row leaves those attrs as None in Python, which makes
+        # Pydantic's model_validate explode → 500 → the frontend's
+        # `isLoading || !form` guard never flips → stuck on "Loading…".
         row = AccountSolutioning(
             account_id=account_id,
             value_themes=[],
+            trial_modules_tested={},
+            value_definition_history=[],
             ai_edited=False,
             updated_at=datetime.utcnow(),
         )
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
 
     out = SolutioningOut.model_validate(row)
     # Two paths to is_editable: pre-lock solutioning write, or Sales Hand-off

@@ -219,6 +219,14 @@ export default function SolutioningTab() {
     onSaveShortcut: saveDirty,
   });
 
+  if (isError) {
+    return (
+      <div className="text-sm text-beroe-red border border-beroe-red/30 bg-beroe-red/5 rounded-md p-3">
+        Couldn't load Solutioning. Refresh the page; if it keeps failing, the
+        backend may be down or the account row is malformed.
+      </div>
+    );
+  }
   if (isLoading || !form) {
     return <div className="text-sm text-text-muted">Loading solutioning…</div>;
   }
