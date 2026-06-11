@@ -139,6 +139,17 @@ function SalesHandoffSection({
   const locked = !!gate.sh_locked_at;
   const isAdmin = gate.can_sh_unlock;
 
+  // 11-Jun · Editor open/close state. Opens automatically when
+  // sh_value_validation flips to revised / partially_confirmed; closes
+  // after a successful Save. CSM can re-open via the "Edit again"
+  // link below.
+  const [editorOpen, setEditorOpen] = useState(false);
+  useEffect(() => {
+    const v = solutioning?.sh_value_validation;
+    if (v === "revised" || v === "partially_confirmed") setEditorOpen(true);
+    else setEditorOpen(false);
+  }, [solutioning?.sh_value_validation]);
+
   // Patch the Solutioning row for the sh_* edits (the existing PATCH
   // /accounts/:id/solutioning accepts sh_* fields).
   // 11-Jun · Optimistic update so the validation seg-control + every
@@ -333,14 +344,36 @@ function SalesHandoffSection({
           source='user' entry to value_definition_history. */}
       {(solutioning?.sh_value_validation === "revised" ||
         solutioning?.sh_value_validation === "partially_confirmed") && (
-        <ValueDefEditor
-          locked={locked}
-          current={solutioning?.value_definition ?? ""}
-          saving={patchSol.isPending}
-          onSave={(v) =>
-            patchSol.mutate({ value_definition: v.trim() || null })
-          }
-        />
+        editorOpen ? (
+          <ValueDefEditor
+            locked={locked}
+            current={solutioning?.value_definition ?? ""}
+            saving={patchSol.isPending}
+            onSave={(v) =>
+              patchSol.mutate(
+                { value_definition: v.trim() || null },
+                {
+                  // Collapse the editor after a successful Save. The
+                  // upper "Value Definition Validation" card already
+                  // reads the live value_definition, so the new text
+                  // surfaces there automatically.
+                  onSuccess: () => setEditorOpen(false),
+                },
+              )
+            }
+          />
+        ) : (
+          <div className="mt-1 mb-2">
+            <button
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              disabled={locked}
+              className="text-[11px] font-semibold text-beroe-blue underline disabled:opacity-40"
+            >
+              ✏️ Edit value definition again
+            </button>
+          </div>
+        )
       )}
       <Field label="Sales Validation Notes">
         <TextArea

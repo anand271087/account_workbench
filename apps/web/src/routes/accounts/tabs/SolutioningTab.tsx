@@ -1105,6 +1105,64 @@ function ValueDefHistoryPanel({
     () => [...history].sort((a, b) => b.edited_at.localeCompare(a.edited_at)),
     [history],
   );
+  // 11-Jun · Pin the "current" entry above a scroll container so the
+  // panel never extends the page when many versions exist. The current
+  // entry is the one whose value matches what's actually in the
+  // value_definition textarea. If no match (legacy / unsaved state),
+  // currentEntry is null and we just show "others" scrollable.
+  const { currentEntry, others } = useMemo(() => {
+    const cur = currentValue.trim();
+    const idx = ordered.findIndex((v) => v.value.trim() === cur);
+    if (idx < 0) return { currentEntry: null, others: ordered };
+    return {
+      currentEntry: ordered[idx],
+      others: ordered.filter((_, i) => i !== idx),
+    };
+  }, [ordered, currentValue]);
+
+  // Reusable card renderer (used both for the pinned current row and
+  // for the scrollable list of older versions).
+  function renderEntry(v: ValueDefVersion, i: number, isCurrent: boolean) {
+    const isVpd = v.source === "vpd";
+    return (
+      <button
+        key={`${v.edited_at}-${i}`}
+        type="button"
+        onClick={() => setViewing(v)}
+        className={cn(
+          "w-full text-left rounded-md border px-2 py-1.5 hover:border-beroe-blue transition-colors",
+          isCurrent
+            ? "border-beroe-green/40 bg-beroe-green/15/40"
+            : "border-beroe-card-border bg-white",
+        )}
+      >
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span
+            className={cn(
+              "text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded",
+              isVpd
+                ? "bg-beroe-purple/15 text-beroe-purple"
+                : "bg-beroe-blue/10 text-beroe-blue",
+            )}
+          >
+            {isVpd ? "✨ AI · VPD" : "👤 User"}
+          </span>
+          {isCurrent && (
+            <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-1 py-px rounded bg-beroe-green/20 text-beroe-green">
+              Current
+            </span>
+          )}
+        </div>
+        <div className="text-[10.5px] text-text-primary font-semibold truncate">
+          {v.edited_by_name || "—"}
+        </div>
+        <div className="text-[9.5px] text-text-muted font-mono">
+          {formatRelative(v.edited_at)}
+        </div>
+      </button>
+    );
+  }
+
   return (
     <>
       <div className="rounded-md border border-beroe-card-border bg-beroe-bg/40 p-2.5">
@@ -1122,49 +1180,21 @@ function ValueDefHistoryPanel({
             start tracking.
           </div>
         ) : (
-          <div className="space-y-1.5 max-h-[260px] overflow-y-auto">
-            {ordered.map((v, i) => {
-              const isVpd = v.source === "vpd";
-              const isCurrent = v.value.trim() === currentValue.trim();
-              return (
-                <button
-                  key={`${v.edited_at}-${i}`}
-                  type="button"
-                  onClick={() => setViewing(v)}
-                  className={cn(
-                    "w-full text-left rounded-md border px-2 py-1.5 hover:border-beroe-blue transition-colors",
-                    isCurrent
-                      ? "border-beroe-green/40 bg-beroe-green/15/40"
-                      : "border-beroe-card-border bg-white",
-                  )}
-                >
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span
-                      className={cn(
-                        "text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded",
-                        isVpd
-                          ? "bg-beroe-purple/15 text-beroe-purple"
-                          : "bg-beroe-blue/10 text-beroe-blue",
-                      )}
-                    >
-                      {isVpd ? "✨ AI · VPD" : "👤 User"}
-                    </span>
-                    {isCurrent && (
-                      <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-1 py-px rounded bg-beroe-green/20 text-beroe-green">
-                        Current
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10.5px] text-text-primary font-semibold truncate">
-                    {v.edited_by_name || "—"}
-                  </div>
-                  <div className="text-[9.5px] text-text-muted font-mono">
-                    {formatRelative(v.edited_at)}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <>
+            {/* Pinned current entry — always visible, never scrolled */}
+            {currentEntry && (
+              <div className="mb-1.5">
+                {renderEntry(currentEntry, -1, true)}
+              </div>
+            )}
+            {/* Scrollable older versions (cap height so the panel
+                doesn't push the page longer as history grows). */}
+            {others.length > 0 && (
+              <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-0.5">
+                {others.map((v, i) => renderEntry(v, i, false))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
