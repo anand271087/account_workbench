@@ -1,6 +1,6 @@
-# Local dev stack — Postgres, Redis, FastAPI, Celery worker, web.
+# Local dev stack — Postgres, Redis, FastAPI, Celery worker.
 # Web is run via `pnpm dev` outside of docker for fast HMR; the rest run in containers.
-# Production deploys: web → Vercel, api+worker → Render, db → Supabase (managed).
+# For production use docker-compose.prod.yml (web + api + worker + redis, db on Supabase).
 
 services:
   postgres:

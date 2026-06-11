@@ -59,7 +59,5 @@ USER awb
 
 EXPOSE 8000
 
-# Default: run the API. ${PORT} is injected by Render; falls back to 8000
-# for docker-compose / local docker. docker-compose overrides CMD for the
-# worker container.
-CMD ["sh", "-c", ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Default: run the API. docker-compose.prod.yml overrides CMD for the worker container.
+CMD [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

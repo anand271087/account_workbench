@@ -1,21 +1,15 @@
-# Production-shape docker compose — deploy Beroe AWB end-to-end on a
-# single host. Five services:
+# Dev/QA deploy — Beroe AWB end-to-end on a single host using pre-built ECR images.
 #
-#   web      — nginx serving the Vite SPA bundle (port 80)
-#   api      — FastAPI on uvicorn (port 8000, behind nginx if you front it)
-#   worker   — Celery worker for AI summarisation + extraction jobs
-#   redis    — Celery broker + result backend
-#   (NO postgres) — production DB lives on Supabase / managed Postgres;
-#                   point DATABASE_URL at it via the .env file.
+#   csm-workbench-frontend — nginx serving the Vite SPA bundle (port 5173)
+#   csm-workbench-backend  — FastAPI on uvicorn (port 8000)
+#   csm-workbench-worker   — Celery worker for AI summarisation + extraction jobs
+#   redis                  — Celery broker + result backend
+#   (NO postgres)          — DB lives on Supabase; point DATABASE_URL in .env.prod.
 #
 # Usage:
 #   1. Copy .env.prod.example → .env.prod and fill the secrets.
-#   2. Build:  docker compose -f docker-compose.prod.yml --env-file .env.prod build
-#   3. Run:    docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
-#   4. Migrate DB once after first deploy (see DEPLOY.md).
-#
-# Replace `image:` tags below with your registry (ECR / ACR / GCR) for
-# multi-node deployments.
+#      Make sure CORS_ORIGINS in .env.prod includes http://<host>:5173.
+#   2. docker compose -f docker-compose-csm-workbench-dev.yml up -d
 
 services:
 
@@ -23,11 +17,11 @@ services:
   csm-workbench-frontend:
     image: 857862908450.dkr.ecr.eu-north-1.amazonaws.com/csm-account-workbench:beroe-awb-web-qa-1.0.0
     container_name: csm-workbench-frontend
-    restart: on-failure
+    restart: unless-stopped
     ports:
       - "5173:80"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -39,7 +33,7 @@ services:
   csm-workbench-backend:
     image: 857862908450.dkr.ecr.eu-north-1.amazonaws.com/csm-account-workbench:beroe-awb-api-qa-1.0.0
     container_name: csm-workbench-backend
-    restart: on-failure
+    restart: unless-stopped
     env_file:
       - .env.prod
     environment:
@@ -59,13 +53,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: sh -c ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    command: [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
 
   # -------------------- Celery worker --------------------
   csm-workbench-worker:
     image: 857862908450.dkr.ecr.eu-north-1.amazonaws.com/csm-account-workbench:beroe-awb-api-qa-1.0.0
     container_name: csm-workbench-worker
-    restart: on-failure
+    restart: unless-stopped
     env_file:
       - .env.prod
     environment:
@@ -76,9 +70,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      csm-workbench-backend:
-        condition: service_healthy
-    command: sh -c ".venv/bin/celery -A app.workers.celery_app worker --loglevel=info --concurrency=2"
+    command: [".venv/bin/celery", "-A", "app.workers.celery_app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
 
   # -------------------- Redis (broker + backend) --------------------
   redis:

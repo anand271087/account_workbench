@@ -7,7 +7,7 @@
 ## Project at a glance
 
 - **Repo:** beroe-awb (monorepo)
-- **Hosts:** Frontend → Vercel · Backend → Render · DB/Auth/Storage → Supabase
+- **Hosts:** Frontend → Docker (nginx) · Backend → Docker Compose (FastAPI + Celery + Redis) · DB/Auth/Storage → Supabase
 - **Tech:** React + Vite + TS + Tailwind + shadcn/ui (web) · FastAPI + Python 3.11 + SQLAlchemy + Pydantic v2 (api) · Supabase Postgres + RLS · Anthropic Claude · Celery + Redis
 - **Sprint scope (frozen):** F01 (Auth), F02 (RBAC), AK01 (Account List), AK02 (Account Profile shell), AK03 (Pre-Sales & Solutioning: Engagement Info + Client Contacts + Documents)
 - **Build plan:** `~/.claude/plans/i-want-to-build-memoized-pie.md`
