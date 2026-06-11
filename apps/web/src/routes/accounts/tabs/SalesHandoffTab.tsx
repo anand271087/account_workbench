@@ -227,10 +227,16 @@ function SalesHandoffSection({
   const validationLabels = validationKeys.map((k) => SH_VALIDATION_LABELS[k]);
 
   // Ready-check rollup.
+  // 11-Jun · "Revised" now counts as validated too. Sales reviewed
+  // the value definition AND wrote new content for it — that's
+  // explicit validation, just with edits. Previously only
+  // confirmed / partially_confirmed ticked this check, which left
+  // the lock blocked after a legitimate Sales-revision flow.
   const checks: Array<[string, boolean]> = [
     ["Value definition validated",
       solutioning?.sh_value_validation === "confirmed" ||
-      solutioning?.sh_value_validation === "partially_confirmed"],
+      solutioning?.sh_value_validation === "partially_confirmed" ||
+      solutioning?.sh_value_validation === "revised"],
     ["Watch-outs & risks captured", !!solutioning?.sales_watchouts?.trim()],
     ["SPOC named", !!spoc],
     ["Budget Owner named", !!budgetOwner],
