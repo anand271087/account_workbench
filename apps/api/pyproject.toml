@@ -32,6 +32,11 @@ dependencies = [
     "psycopg[binary]>=3.2.0",
     "xlrd>=2.0.2",
     "cachetools>=6.2.6",
+    # Business Review renderers. weasyprint produces PDF from the same
+    # HTML the iframe preview consumes; python-pptx builds the deck.
+    # matplotlib lands in phase 3 for chart images on slides 9-11.
+    "weasyprint>=63.0",
+    "python-pptx>=1.0.2",
 ]
 
 [project.optional-dependencies]

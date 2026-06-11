@@ -15,6 +15,7 @@ from app.core import redshift as redshift_core
 from app.core import bifrost as bifrost_core
 from app.routes import accounts as account_routes
 from app.routes import auth as auth_routes
+from app.routes import business_reviews as business_review_routes
 from app.routes import contacts as contact_routes
 from app.routes import documents as document_routes
 from app.routes import engagement as engagement_routes
@@ -149,6 +150,8 @@ def create_app() -> FastAPI:
     app.include_router(intel_routes.router)
     app.include_router(intel_upload_routes.router)
     app.include_router(report_routes.router)
+    app.include_router(business_review_routes.account_router)
+    app.include_router(business_review_routes.br_router)
     app.include_router(meeting_brief_routes.router)
     app.include_router(favorite_routes.router)
 

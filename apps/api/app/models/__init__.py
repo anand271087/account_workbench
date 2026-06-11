@@ -1,5 +1,6 @@
 from app.models.account import Account
 from app.models.audit import AuditLog
+from app.models.business_review import BusinessReview
 from app.models.checkpoint import Checkpoint
 from app.models.contact import ClientContact
 from app.models.document import AccountDiscoverySummary, Document, Job
@@ -22,6 +23,7 @@ __all__ = [
     "AccountPlay",
     "AccountSolutioning",
     "AuditLog",
+    "BusinessReview",
     "Checkpoint",
     "ClientContact",
     "CSGoal",
