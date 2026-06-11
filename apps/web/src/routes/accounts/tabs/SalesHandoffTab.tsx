@@ -141,14 +141,40 @@ function SalesHandoffSection({
 
   // Patch the Solutioning row for the sh_* edits (the existing PATCH
   // /accounts/:id/solutioning accepts sh_* fields).
+  // 11-Jun · Optimistic update so the validation seg-control + every
+  // other patch feels instant. Cache is mutated synchronously before
+  // the network round-trip; on error we roll back to the prior data
+  // snapshot. Final invalidate runs on settle so the server's
+  // authoritative response (e.g. revision-history append) lands.
   const patchSol = useMutation({
     mutationFn: (body: SolutioningUpdate) =>
       api.patch<Solutioning>(`/api/v1/accounts/${account.id}/solutioning`, body),
-    onSuccess: () => {
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: ["solutioning", account.id] });
+      const prev = qc.getQueryData<Solutioning>(["solutioning", account.id]);
+      if (prev) {
+        // Body's optional/null fields are assignment-compatible with
+        // the cached Solutioning shape only after spread merging — the
+        // type system can't infer that, so we cast. Runtime correctness
+        // matters here, not the surface type: any nulls are exactly
+        // what the user just typed and the server will reflect back on
+        // settle.
+        qc.setQueryData<Solutioning>(
+          ["solutioning", account.id],
+          { ...prev, ...body } as Solutioning,
+        );
+      }
+      return { prev };
+    },
+    onError: (e: ApiError, _body, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(["solutioning", account.id], ctx.prev);
+      }
+      notify({ title: "Save failed", body: e.message, tone: "error" });
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["solutioning", account.id] });
     },
-    onError: (e: ApiError) =>
-      notify({ title: "Save failed", body: e.message, tone: "error" }),
   });
 
   const shLock = useMutation({
@@ -299,31 +325,22 @@ function SalesHandoffSection({
         />
       </Field>
 
-      {/* 11-Jun · Sales can now edit the value definition on BOTH
-          'revised' AND 'partially_confirmed' (was revised only). The
-          edit writes through to the LIVE solutioning.value_definition
-          field — which the PATCH /solutioning handler also appends to
-          value_definition_history (with source='user' + this user's
-          name). The Solutioning tab's revision-history panel picks up
-          the new entry automatically. The deprecated
-          sh_value_from_solutioning snapshot field is no longer touched. */}
+      {/* 11-Jun · Sales edits value_definition (revised OR
+          partially_confirmed). Local draft state + explicit Save
+          button so the CSM commits intentionally (was onBlur, which
+          some testers missed entirely). Save writes to the LIVE
+          solutioning.value_definition; the PATCH route appends a
+          source='user' entry to value_definition_history. */}
       {(solutioning?.sh_value_validation === "revised" ||
         solutioning?.sh_value_validation === "partially_confirmed") && (
-        <Field label="Edit Value Definition">
-          <TextArea
-            value={solutioning?.value_definition ?? ""}
-            disabled={locked}
-            placeholder="Rewrite the value definition — saves to the live Solutioning field and adds a new entry to revision history."
-            onBlur={(v) =>
-              v !== (solutioning?.value_definition ?? "") &&
-              patchSol.mutate({ value_definition: v.trim() || null })
-            }
-          />
-          <div className="text-[10px] mt-1" style={{ color: "#854F0B" }}>
-            ⚠ Your edits replace Solutioning's value definition.
-            Every save adds an entry to the revision history visible on the Solutioning tab.
-          </div>
-        </Field>
+        <ValueDefEditor
+          locked={locked}
+          current={solutioning?.value_definition ?? ""}
+          saving={patchSol.isPending}
+          onSave={(v) =>
+            patchSol.mutate({ value_definition: v.trim() || null })
+          }
+        />
       )}
       <Field label="Sales Validation Notes">
         <TextArea
@@ -1703,6 +1720,61 @@ function GroupHead({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+// 11-Jun · Explicit-Save value-definition editor used on the Sales
+// Handoff tab when sh_value_validation is "revised" or
+// "partially_confirmed". Local draft so the textarea is fully
+// controlled by the CSM; Save button only enables when content
+// genuinely changed.
+function ValueDefEditor({
+  locked,
+  current,
+  saving,
+  onSave,
+}: {
+  locked: boolean;
+  current: string;
+  saving: boolean;
+  onSave: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState<string>(current);
+  // Reset the draft when the upstream value changes (e.g. another
+  // user edited it, or Save just committed and onSettled refetched).
+  useEffect(() => setDraft(current), [current]);
+
+  const dirty = draft.trim() !== current.trim();
+
+  return (
+    <Field label="Edit Value Definition">
+      <TextArea
+        value={draft}
+        disabled={locked}
+        placeholder="Rewrite the value definition — click Save to commit. Adds an entry to revision history."
+        onBlur={(v) => setDraft(v)}
+      />
+      <div className="flex items-center justify-between mt-1.5 gap-2">
+        <div className="text-[10px]" style={{ color: "#854F0B" }}>
+          ⚠ Your edits replace Solutioning's value definition.
+          Every save adds an entry to the revision history visible
+          on the Solutioning tab.
+        </div>
+        <button
+          type="button"
+          disabled={locked || saving || !dirty}
+          onClick={() => onSave(draft)}
+          className="text-[11px] font-bold px-3 py-1.5 rounded-md bg-beroe-blue text-white hover:opacity-90 disabled:opacity-40 shrink-0"
+          title={
+            dirty
+              ? "Save edits to Solutioning's value definition"
+              : "No changes to save"
+          }
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </Field>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-2.5">
