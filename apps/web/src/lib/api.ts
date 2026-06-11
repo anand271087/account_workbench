@@ -144,4 +144,33 @@ export const api = {
       method: "DELETE",
       body: body ? JSON.stringify(body) : undefined,
     }),
+  // Plain-text fetch — used by the BR iframe preview which needs the raw
+  // HTML, not parsed JSON. Carries the same JWT and 401/403 handling.
+  getText: async (path: string): Promise<string> => {
+    const token = await authProvider.getAccessToken();
+    const headers = new Headers();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const r = await fetch(`${BASE}${path}`, { headers });
+    if (!r.ok) throw new ApiError(r.status, `HTTP ${r.status}`, null);
+    return await r.text();
+  },
+  // Binary download — used to fetch PDF/PPTX blobs from authenticated
+  // endpoints and trigger a browser download via Blob URL.
+  getBlob: async (path: string): Promise<Blob> => {
+    const token = await authProvider.getAccessToken();
+    const headers = new Headers();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const r = await fetch(`${BASE}${path}`, { headers });
+    if (!r.ok) {
+      let detail = `HTTP ${r.status}`;
+      try {
+        const body = await r.json();
+        if (body && typeof body.detail === "string") detail = body.detail;
+      } catch {
+        /* swallow */
+      }
+      throw new ApiError(r.status, detail, null);
+    }
+    return await r.blob();
+  },
 };
