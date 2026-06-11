@@ -179,27 +179,23 @@ async def patch_solutioning(
                 "trial_feedback",
             )
         )
-        # 10-Jun · Versioned value_definition — push a `source='user'`
-        # snapshot onto value_definition_history when the new value
-        # genuinely differs from the current one. Idempotent re-PATCHes
-        # (same content) do NOT bloat the history list. The append
-        # happens BEFORE the actual setattr so the snapshot reflects
-        # the new value the CSM is committing.
+        # 10-Jun · Versioned value_definition (extracted into a shared
+        # helper on 11-Jun). The helper also handles the
+        # seed-on-first-edit case: if the row carries a legacy
+        # value_definition that isn't represented in history yet, it
+        # gets pushed as a synthetic "(prior state)" entry first so no
+        # content is ever silently overwritten.
         if "value_definition" in sol_fields:
-            new_vd = sol_fields["value_definition"]
-            cur_vd = row.value_definition
-            if (new_vd or "").strip() != (cur_vd or "").strip():
-                import copy
-                history = copy.deepcopy(list(row.value_definition_history or []))
-                history.append({
-                    "value": new_vd or "",
-                    "source": "user",
-                    "edited_by": str(user.id),
-                    "edited_by_name": user.full_name or user.email,
-                    "edited_at": datetime.now(timezone.utc).isoformat(),
-                    "document_id": None,
-                })
-                row.value_definition_history = history
+            from app.services.value_def_history import (
+                append_value_definition_version,
+            )
+            append_value_definition_version(
+                row=row,
+                new_value=sol_fields["value_definition"],
+                source="user",
+                edited_by=str(user.id),
+                edited_by_name=user.full_name or user.email,
+            )
 
         for field, value in sol_fields.items():
             setattr(row, field, value)
@@ -219,25 +215,20 @@ async def patch_solutioning(
                 "Your role cannot edit Sales Hand-off fields on this account",
             )
         # 11-Jun · When value_definition lands here (sales-revision
-        # exception, see top of route), append a `source='user'` entry
-        # to value_definition_history just like the solutioning-side
-        # PATCH does — Solutioning's revision-history panel surfaces
-        # both kinds of edits side by side.
+        # exception, see top of route), use the same shared helper as
+        # the solutioning-side branch so the seed + append logic stays
+        # in one place.
         if "value_definition" in sh_fields:
-            new_vd = sh_fields["value_definition"]
-            cur_vd = row.value_definition
-            if (new_vd or "").strip() != (cur_vd or "").strip():
-                import copy
-                history = copy.deepcopy(list(row.value_definition_history or []))
-                history.append({
-                    "value": new_vd or "",
-                    "source": "user",
-                    "edited_by": str(user.id),
-                    "edited_by_name": user.full_name or user.email,
-                    "edited_at": datetime.now(timezone.utc).isoformat(),
-                    "document_id": None,
-                })
-                row.value_definition_history = history
+            from app.services.value_def_history import (
+                append_value_definition_version,
+            )
+            append_value_definition_version(
+                row=row,
+                new_value=sh_fields["value_definition"],
+                source="user",
+                edited_by=str(user.id),
+                edited_by_name=user.full_name or user.email,
+            )
         for field, value in sh_fields.items():
             setattr(row, field, value)
 

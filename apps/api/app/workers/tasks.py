@@ -343,17 +343,20 @@ async def _apply_vpd_summary_to_solutioning(
         db.add(row)
         await db.flush()
 
-    history = copy.deepcopy(list(row.value_definition_history or []))
-    history.append({
-        "value": summary,
-        "source": "vpd",
-        "edited_by": None,
-        "edited_by_name": "AI · VPD summary",
-        "edited_at": datetime.now(timezone.utc).isoformat(),
-        "document_id": str(document_id),
-    })
+    # 11-Jun · Shared helper handles seed-on-first-edit + idempotent
+    # appends so a legacy value_definition can't be silently lost.
+    from app.services.value_def_history import (
+        append_value_definition_version,
+    )
+    append_value_definition_version(
+        row=row,
+        new_value=summary,
+        source="vpd",
+        edited_by=None,
+        edited_by_name="AI · VPD summary",
+        document_id=str(document_id),
+    )
     row.value_definition = summary
-    row.value_definition_history = history
     # Stamp the AI-extracted bookkeeping fields so the existing
     # `ai_edited` badge wiring keeps working — when the CSM later
     # edits the field manually, ai_edited flips to True via the
