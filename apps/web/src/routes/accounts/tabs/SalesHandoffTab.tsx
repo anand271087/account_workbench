@@ -429,6 +429,30 @@ function SalesHandoffSection({
             <option value="">--</option>
             {FIRST_CP_OPTIONS.map((o) => <option key={o}>{o}</option>)}
           </Select>
+          {/* 11-Jun · Show the calculated calendar date next to the
+              cadence pick. Go-Live + N days where N parses out of
+              "30 days" / "45 days" / "60 days". */}
+          {(() => {
+            const cadence = solutioning?.sh_first_checkpoint ?? "";
+            const goLive = solutioning?.sh_go_live_date ?? "";
+            const m = cadence.match(/^(\d+)/);
+            if (!m || !goLive) return null;
+            const days = parseInt(m[1], 10);
+            const start = new Date(goLive);
+            if (Number.isNaN(start.getTime())) return null;
+            start.setDate(start.getDate() + days);
+            const fmtted = start.toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            });
+            return (
+              <div className="text-[10.5px] mt-1 text-text-muted">
+                📅 Scheduled for <b className="text-text-primary">{fmtted}</b>{" "}
+                ({days} calendar days after Go-Live)
+              </div>
+            );
+          })()}
         </Field>
       </div>
       <Field label="Commercial Context">
@@ -998,9 +1022,10 @@ const ContractAuditSection = memo(function ContractAuditSection({
   const ALL_MODULE_SET = new Set<string>(ALL_MODULES);
   const rawModules = gate.gate_contract_modules ?? [];
   const modules = rawModules.filter((m) => ALL_MODULE_SET.has(m));
-  const allConfigsFilled = modules.every(
-    (m) => moduleConfigStatus(m, cfgs[m] as Record<string, unknown>).status === "complete",
-  );
+  // 11-Jun · `allConfigsFilled` no longer needed — the audit
+  // checklist dropped the "All module configs filled" hard
+  // requirement. moduleConfigStatus still drives per-card UI
+  // feedback below.
 
   // Defaults shown in the dropdowns but only persisted after the user
   // either picks them OR clicks Complete Audit (the onCompleteAudit
@@ -1016,7 +1041,10 @@ const ContractAuditSection = memo(function ContractAuditSection({
     ["Billing frequency", !!effectiveBilling],
     ["Payment terms", !!effectivePayment],
     ["≥1 module contracted", modules.length > 0],
-    ["All module configs filled", modules.length > 0 && allConfigsFilled],
+    // 11-Jun · "All module configs filled" check removed per
+    // stakeholder ask — too noisy as a hard blocker since module
+    // configs are often filled in after sign-off. ≥1 module
+    // contracted stays as the gate.
     ["Geography defined", !!effectiveGeography],
   ];
   const allOk = checks.every(([, ok]) => ok);
