@@ -179,10 +179,12 @@ function SalesHandoffSection({
     (c) => !c.is_spoc && !c.is_sponsor && c.decision_power !== "executive_sponsor",
   ).slice(0, 5);
 
-  // Value definition lead + bullets (from Solutioning's sh_value_from_solutioning).
-  const vfsLead = (solutioning?.sh_value_from_solutioning ?? "").trim();
-  const themes = (solutioning?.sh_value_themes_from_solutioning ?? "")
-    .split(/[,\n]/g).map((t) => t.trim()).filter(Boolean);
+  // 11-Jun · Read the LIVE value_definition from Solutioning (was
+  // sh_value_from_solutioning, the frozen snapshot). Sales sees
+  // whatever's currently in Solutioning — including edits made via
+  // the revision-history Restore button on the Solutioning tab.
+  const vfsLead = (solutioning?.value_definition ?? "").trim();
+  const themes = (solutioning?.value_themes ?? []).map((t) => t.trim()).filter(Boolean);
 
   // Sales validation seg-control state. The schema uses snake_case
   // values; surface the title-cased labels via SH_VALIDATION_LABELS.
@@ -297,26 +299,29 @@ function SalesHandoffSection({
         />
       </Field>
 
-      {/* 09-Jun · G1 — value_flow_map Stage 3 gap-pill:
-          "If 'Revised' — Sales needs an explicit edit surface (today:
-          status toggle only, value text stays as Sol's original)."
-          When validation === "revised", reveal an inline editor for
-          sh_value_from_solutioning so Sales can rewrite the prose
-          that downstream CS Handoff renders. Saves on blur. */}
-      {solutioning?.sh_value_validation === "revised" && (
-        <Field label="Revised Value Definition (Sales-edited)">
+      {/* 11-Jun · Sales can now edit the value definition on BOTH
+          'revised' AND 'partially_confirmed' (was revised only). The
+          edit writes through to the LIVE solutioning.value_definition
+          field — which the PATCH /solutioning handler also appends to
+          value_definition_history (with source='user' + this user's
+          name). The Solutioning tab's revision-history panel picks up
+          the new entry automatically. The deprecated
+          sh_value_from_solutioning snapshot field is no longer touched. */}
+      {(solutioning?.sh_value_validation === "revised" ||
+        solutioning?.sh_value_validation === "partially_confirmed") && (
+        <Field label="Edit Value Definition">
           <TextArea
-            value={solutioning?.sh_value_from_solutioning ?? ""}
+            value={solutioning?.value_definition ?? ""}
             disabled={locked}
-            placeholder="Rewrite the value definition with Sales' edits — this replaces Sol's narrative downstream."
+            placeholder="Rewrite the value definition — saves to the live Solutioning field and adds a new entry to revision history."
             onBlur={(v) =>
-              v !== (solutioning?.sh_value_from_solutioning ?? "") &&
-              patchSol.mutate({ sh_value_from_solutioning: v.trim() || null })
+              v !== (solutioning?.value_definition ?? "") &&
+              patchSol.mutate({ value_definition: v.trim() || null })
             }
           />
           <div className="text-[10px] mt-1" style={{ color: "#854F0B" }}>
-            ⚠ Your edits replace the Solutioning-side narrative
-            downstream (CS Handoff Commitment block + VDD).
+            ⚠ Your edits replace Solutioning's value definition.
+            Every save adds an entry to the revision history visible on the Solutioning tab.
           </div>
         </Field>
       )}
@@ -1599,7 +1604,10 @@ function StageConn({ done }: { done: boolean }) {
 function HandedOffBanner({
   gate, modulesCount,
 }: { gate: SigningGate; modulesCount: number }) {
-  if (!gate.gate_signed) return null;
+  // 11-Jun · Bug — the banner persisted after Unlock because we only
+  // checked gate_signed. When the contract is unlocked for edits the
+  // handoff is implicitly retracted; banner must disappear.
+  if (!gate.gate_signed || gate.gate_unlocked) return null;
   const handedAt = gate.gate_confirmed_at;
   return (
     <div
@@ -1619,143 +1627,6 @@ function HandedOffBanner({
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Demo state toggle (mirrors prototype line 132-141)
-// ─────────────────────────────────────────────────────────────
-function DemoStateToggle({
-  accountId,
-  gate,
-  onGateUpdate,
-  notify,
-}: {
-  accountId: string;
-  gate: SigningGate;
-  onGateUpdate: (next: SigningGate) => void;
-  notify: (o: { title: string; body?: string; tone?: "info" | "success" | "warning" | "error" }) => void;
-}) {
-  const stage: 1 | 2 | 3 = gate.gate_signed && !gate.gate_unlocked
-    ? 3 : gate.sh_locked_at ? 2 : 1;
-  const [pending, setPending] = useState<1 | 2 | 3 | null>(null);
-
-  // Treat 409 from /sign as already-signed success.
-  async function tolerant409<T>(p: () => Promise<T>): Promise<T | null> {
-    try { return await p(); }
-    catch (e) {
-      if (e instanceof ApiError && e.status === 409) return null;
-      throw e;
-    }
-  }
-
-  async function setStage(s: 1 | 2 | 3) {
-    if (pending || stage === s) return;
-    setPending(s);
-    try {
-      // One live read at the start. The subsequent calls touch independent
-      // state (sh_locked vs gate_signed), so we don't need to re-read
-      // between them — saves 1-2 round-trips per click.
-      const live = await api.get<SigningGate>(`/api/v1/accounts/${accountId}/sign`);
-      let next: SigningGate = live;
-
-      if (s === 1) {
-        if (live.gate_signed && !live.gate_unlocked) {
-          next = await api.post<SigningGate>(
-            `/api/v1/accounts/${accountId}/sign/unlock`,
-            { reason: "Demo reset — back to stage 1" },
-          );
-        }
-        if (next.sh_locked_at) {
-          next = await api.post<SigningGate>(
-            `/api/v1/accounts/${accountId}/sh-unlock`,
-            { reason: "Demo reset — back to stage 1" },
-          );
-        }
-        notify({ title: "Reset to stage 1 (Sales Handoff)", tone: "info" });
-      } else if (s === 2) {
-        if (live.gate_signed && !live.gate_unlocked) {
-          next = await api.post<SigningGate>(
-            `/api/v1/accounts/${accountId}/sign/unlock`,
-            { reason: "Demo state change — back to stage 2" },
-          );
-        }
-        if (!next.sh_locked_at) {
-          next = await api.post<SigningGate>(
-            `/api/v1/accounts/${accountId}/sh-lock`, {},
-          );
-        }
-        notify({ title: "Moved to stage 2 (Audit in progress)", tone: "info" });
-      } else {
-        if (!live.sh_locked_at) {
-          next = await api.post<SigningGate>(
-            `/api/v1/accounts/${accountId}/sh-lock`, {},
-          );
-        }
-        const signResult = await tolerant409(() =>
-          api.post<SigningGate>(`/api/v1/accounts/${accountId}/sign`, {
-            gate_signed_date: next.gate_signed_date ?? new Date().toISOString().slice(0, 10),
-            gate_contract_acv: next.gate_contract_acv ?? 310000,
-            gate_contract_term: next.gate_contract_term ?? "3 years",
-            gate_contract_modules: next.gate_contract_modules,
-            gate_platform_tier: next.gate_platform_tier,
-            gate_account_segment: next.gate_account_segment,
-            gate_subscribers: next.gate_subscribers,
-          }),
-        );
-        if (signResult) next = signResult;
-        notify({ title: "Moved to stage 3 (Handed off to CS)", tone: "success" });
-      }
-
-      // Each backend mutation returns the freshly-serialised SigningGate.
-      // Push it straight into the cache so the UI updates without waiting
-      // for a separate background refetch — same final state, ~150ms
-      // faster perceived response.
-      onGateUpdate(next);
-    } catch (e) {
-      notify({
-        title: "Demo state change failed",
-        body: e instanceof ApiError ? e.message : undefined,
-        tone: "error",
-      });
-    } finally {
-      setPending(null);
-    }
-  }
-
-  const StageBtn = ({ n, label }: { n: 1 | 2 | 3; label: string }) => {
-    const active = stage === n;
-    const isPending = pending === n;
-    return (
-      <button
-        type="button"
-        disabled={!!pending || active}
-        onClick={() => setStage(n)}
-        className={cn(
-          "px-2.5 py-1 rounded-[6px] text-[11px] font-semibold border transition disabled:cursor-not-allowed",
-          active ? "border-transparent text-white" : "border-white/15 text-white/85 hover:bg-white/10",
-          pending && !isPending && "opacity-60",
-        )}
-        style={active ? { background: C.BLUE, borderColor: C.BLUE } : { background: "rgba(255,255,255,0.10)" }}
-      >
-        {isPending ? "…" : `${n}. ${label}`}
-      </button>
-    );
-  };
-  return (
-    <div
-      className="fixed top-3.5 right-3.5 z-[90] rounded-[10px] px-3 py-2 flex flex-wrap gap-1.5 items-center shadow-lg max-w-[560px]"
-      style={{ background: C.NAVY }}
-    >
-      <span className="text-[9px] font-bold uppercase tracking-wider mr-1" style={{ color: "#8496b0" }}>
-        Demo State
-      </span>
-      <StageBtn n={1} label="Sales Handoff" />
-      <StageBtn n={2} label="Audit in progress" />
-      <StageBtn n={3} label="Handed off to CS" />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Shared atoms
 // ─────────────────────────────────────────────────────────────
 function Card({
   children, leftBorderColor, opaqueWhenLocked,
@@ -1944,7 +1815,7 @@ function SegControl({
 export default function SalesHandoffTab() {
   const account = useAccountFromLayout();
   const qc = useQueryClient();
-  const notify = useNotify();
+  // notify hook removed alongside DemoStateToggle (11-Jun).
 
   const gateQ = useQuery<SigningGate>({
     queryKey: ["signing-gate", account.id],
@@ -1992,17 +1863,8 @@ export default function SalesHandoffTab() {
 
   return (
     <div>
-      <DemoStateToggle
-        accountId={account.id}
-        gate={gate}
-        onGateUpdate={(next) => {
-          // Cheap path — write straight into the cache; nothing else
-          // (contacts/solutioning/docs) is affected by a stage flip.
-          qc.setQueryData(["signing-gate", account.id], next);
-          qc.invalidateQueries({ queryKey: ["account", account.id] });
-        }}
-        notify={notify}
-      />
+      {/* 11-Jun · Removed the fixed top-right DemoStateToggle widget
+          per stakeholder ask — it was prototype-only mock UX. */}
       <StageIndicator gate={gate} />
       <HandedOffBanner gate={gate} modulesCount={(gate.gate_contract_modules ?? []).length} />
       <SalesHandoffSection

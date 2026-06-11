@@ -127,6 +127,24 @@ async def patch_solutioning(
     sol_fields = {k: v for k, v in payload.items() if k not in SH_FIELDS}
     sh_fields = {k: v for k, v in payload.items() if k in SH_FIELDS}
 
+    # 11-Jun · Sales-Handoff revision exception — when Sales picks
+    # "revised" or "partially_confirmed" they get an editable
+    # value_definition box that writes BACK to the live field. Re-route
+    # value_definition out of the locked sol_fields branch in that
+    # case so it doesn't 403 (sales-handoff role) or 409 (locked row).
+    # The PATCH still appends to value_definition_history with
+    # source='user' + the Sales rep's identity below.
+    from app.core.rbac import can_write_sales_handoff  # local import to avoid cycle
+    sales_revision = (
+        "value_definition" in sol_fields
+        and row.sh_value_validation in ("revised", "partially_confirmed")
+        and can_write_sales_handoff(
+            user.role, is_assigned=is_assigned, is_team=is_team
+        )
+    )
+    if sales_revision:
+        sh_fields["value_definition"] = sol_fields.pop("value_definition")
+
     # ---- Solutioning fields: lock-aware, solutioning-write permission ----
     if sol_fields:
         if not can_write_solutioning(user.role, is_assigned=is_assigned, is_team=is_team):
@@ -200,6 +218,26 @@ async def patch_solutioning(
                 status.HTTP_403_FORBIDDEN,
                 "Your role cannot edit Sales Hand-off fields on this account",
             )
+        # 11-Jun · When value_definition lands here (sales-revision
+        # exception, see top of route), append a `source='user'` entry
+        # to value_definition_history just like the solutioning-side
+        # PATCH does — Solutioning's revision-history panel surfaces
+        # both kinds of edits side by side.
+        if "value_definition" in sh_fields:
+            new_vd = sh_fields["value_definition"]
+            cur_vd = row.value_definition
+            if (new_vd or "").strip() != (cur_vd or "").strip():
+                import copy
+                history = copy.deepcopy(list(row.value_definition_history or []))
+                history.append({
+                    "value": new_vd or "",
+                    "source": "user",
+                    "edited_by": str(user.id),
+                    "edited_by_name": user.full_name or user.email,
+                    "edited_at": datetime.now(timezone.utc).isoformat(),
+                    "document_id": None,
+                })
+                row.value_definition_history = history
         for field, value in sh_fields.items():
             setattr(row, field, value)
 
