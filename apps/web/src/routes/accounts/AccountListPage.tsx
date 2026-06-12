@@ -632,7 +632,12 @@ function Row({
         {formatRelativeDate(item.last_activity_at)}
       </td>
       <td className="px-4 py-3 text-text-secondary text-[12px]">
-        {item.csm_full_name ?? "—"}
+        {/* 13-Jun · Fall back to csm_owner_name (free text from the
+            bulk-import / create modal) when csm_full_name is null —
+            same pattern the account header uses. Without this, every
+            imported account showed "—" because the named CSM (e.g.
+            "Suchismita Dhal") isn't an invited Beroe user yet. */}
+        {item.csm_full_name || item.csm_owner_name || "—"}
       </td>
       <td className="px-4 py-3 text-text-secondary text-[12px]">
         <div className="flex items-center gap-1.5">
