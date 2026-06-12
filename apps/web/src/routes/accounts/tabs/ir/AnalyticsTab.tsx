@@ -11,6 +11,7 @@
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { useProductRoster } from "@/components/ProductRoster";
 import { useAccountFromLayout, useAccountPeriod } from "../../AccountProfileLayout";
 import { useIntelBundle, type IntelSection } from "@/hooks/useIntelAll";
 import type {
@@ -176,6 +177,13 @@ export default function AnalyticsTab() {
         </div>
         <div className="flex-1 h-px bg-analytics-line" />
       </div>
+
+      {/* 12-Jun · Product-ownership banner — if the account explicitly
+          does NOT own this product (account_products.purchased=false),
+          surface a soft warning above the section. Unknown (null) is
+          treated as "show normally" — we don't want to nag CSMs about
+          products that aren't tracked yet. */}
+      <ProductOwnershipBanner accountId={account.id} subTabId={sub} />
 
       {/* 09-Jun · Progressive load. 16 SectionFetcher instances mount
           on first render; React Query fires all 16 in parallel. The
@@ -374,5 +382,62 @@ function SectionSkeleton() {
         ))}
       </div>
     </Card>
+  );
+}
+
+
+// ============================================================
+// Product-ownership gating — surfaces a soft banner when the
+// account explicitly does NOT own the product behind the active
+// sub-tab. Sub-tabs that aren't product-shaped (Account Summary,
+// Scores, NPS, Super Users) are deliberately not gated.
+// ============================================================
+
+const _SUBTAB_TO_PRODUCT_KEY: Partial<Record<IntelSection, string>> = {
+  "category-watch":      "category_watch",
+  "abi":                 "abi",
+  "supplier-discovery":  "supplier_discovery",
+  "supplier-monitoring": "supplier_monitoring_risk",
+  "custom-usage":        "custom_credits",
+  "thought-leadership":  "thought_leadership",
+  "datahub":             "datahub",
+  "inflation-watch":     "inflation_watch_git",
+  "cirtuo":              "cirtuo",
+  "nnamu":               "nnamu",
+  "upply":               "upply",
+  "alerts":              "alerts",
+  "training":            "platform_training",
+};
+
+function ProductOwnershipBanner({
+  accountId,
+  subTabId,
+}: {
+  accountId: string;
+  subTabId: IntelSection;
+}) {
+  const productKey = _SUBTAB_TO_PRODUCT_KEY[subTabId];
+  const { data } = useProductRoster(productKey ? accountId : null);
+
+  if (!productKey || !data) return null;
+  const row = data.items.find((r) => r.product_key === productKey);
+  if (!row || row.purchased !== false) return null;  // null / true → no banner
+
+  return (
+    <div
+      className="mb-3 rounded-card border-l-4 px-3.5 py-2.5 flex items-start gap-2.5"
+      style={{ background: "#fef3c7", borderColor: "#F0BC41" }}
+    >
+      <span className="text-[16px]">⚠️</span>
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px] font-bold text-[#854F0B]">
+          This account doesn't own {row.label}
+        </div>
+        <div className="text-[11px] text-[#854F0B] opacity-90">
+          The data below is shown for reference only. Use Growth & Pipeline → Plays
+          to surface a pitch.
+        </div>
+      </div>
+    </div>
   );
 }
