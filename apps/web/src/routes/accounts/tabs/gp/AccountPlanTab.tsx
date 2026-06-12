@@ -25,7 +25,7 @@ import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { MoneyInput } from "@/components/MoneyInput";
 import { useNavigate } from "react-router-dom";
 import { useProductRoster } from "@/components/ProductRoster";
-import type { CSGoal, Initiative, InitiativeStatus } from "@/types/cs_goal";
+import type { CSGoal, Initiative } from "@/types/cs_goal";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   fmtK,
@@ -2397,7 +2397,10 @@ function PeerPlaysList({
   return (
     <div className="space-y-2">
       {plays.map((p) => {
-        const tone = _STATUS_TONE[p.status];
+        // 13-Jun · Status badge hidden — stakeholder asked not to display
+        // anything in that slot for now. _STATUS_LABEL / _STATUS_TONE still
+        // live in this file because the Status select inside Goal Alignment
+        // depends on them; only the badge in the play row is gone.
         return (
           <div
             key={p.id}
@@ -2433,12 +2436,6 @@ function PeerPlaysList({
                   </div>
                 )}
               </div>
-              <span
-                className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide flex-shrink-0"
-                style={{ background: tone.bg, color: tone.fg }}
-              >
-                {_STATUS_LABEL[p.status]}
-              </span>
             </div>
           </div>
         );
@@ -2600,21 +2597,6 @@ function PlanInputs({
 // 12-Jun · Active Expansion Plays = initiatives across goals
 // ============================================================
 
-const _STATUS_LABEL: Record<InitiativeStatus, string> = {
-  identification: "Identification",
-  pipeline: "Pipeline",
-  in_progress: "In progress",
-  delivered: "Delivered",
-  not_started: "Identification",
-};
-const _STATUS_TONE: Record<InitiativeStatus, { bg: string; fg: string }> = {
-  identification: { bg: "#f1f5f9", fg: "#5a7896" },
-  pipeline: { bg: "#dbeafe", fg: "#1e40af" },
-  in_progress: { bg: "#fef3c7", fg: "#854F0B" },
-  delivered: { bg: "#dcfce7", fg: "#146a45" },
-  not_started: { bg: "#f1f5f9", fg: "#5a7896" },
-};
-
 type InitiativeRow = {
   goal: CSGoal;
   init: Initiative;
@@ -2690,13 +2672,16 @@ function ActiveInitiativesList({
       ) : (
         <div className="space-y-2 mb-3">
           {rows.map((row) => {
-            const tone = _STATUS_TONE[row.init.status];
+            // 13-Jun · Status badge column removed — stakeholder asked not
+            // to display the "Identification / Pipeline / …" pill on play
+            // rows for now. Grid collapses from `1fr 120px 80px` (content /
+            // status / actions) to `1fr 80px` (content / actions).
             return (
               <div
                 key={`${row.goal.id}:${row.index}`}
                 className="bg-white border border-beroe-card-border rounded-card p-3 grid items-center"
                 style={{
-                  gridTemplateColumns: "1fr 120px 80px",
+                  gridTemplateColumns: "1fr 80px",
                   gap: 12,
                 }}
               >
@@ -2727,12 +2712,6 @@ function ActiveInitiativesList({
                     )}
                   </div>
                 </div>
-                <span
-                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-center"
-                  style={{ background: tone.bg, color: tone.fg }}
-                >
-                  {_STATUS_LABEL[row.init.status]}
-                </span>
                 {editable ? (
                   <div className="flex gap-1 justify-end">
                     <button
