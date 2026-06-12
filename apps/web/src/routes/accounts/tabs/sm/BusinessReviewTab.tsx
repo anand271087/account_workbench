@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { useNotify, useConfirm } from "@/components/DialogProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { useProductRoster } from "@/components/ProductRoster";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   type BRCadence,
@@ -340,12 +341,101 @@ function GroupCheckbox({
   );
 }
 
+// Slide → product_key map. Only Modules-group slides that map 1:1 to
+// a Beroe product carry a purchase badge in the picker. Slides not
+// listed here (Cover, Snapshot, Pipeline etc.) render without a badge.
+const _SLIDE_TO_PRODUCT_KEY: Record<string, string> = {
+  s10: "category_watch",
+  s11: "inflation_watch_git",
+  s14: "abi",
+  s15: "supplier_monitoring_risk",
+  s19: "supplier_discovery",
+  s20: "custom_credits",
+  s21: "thought_leadership",
+  s22: "datahub",
+  s23: "cirtuo",
+  s24: "nnamu",
+  s25: "upply",
+  s26: "alerts",
+  s27: "platform_training",
+};
+
+function PurchaseBadge({
+  slideId,
+  productByKey,
+}: {
+  slideId: string;
+  productByKey: Map<string, boolean | null>;
+}) {
+  const productKey = _SLIDE_TO_PRODUCT_KEY[slideId];
+  if (!productKey || !productByKey.size) return null;
+  const purchased = productByKey.get(productKey);
+  if (purchased === undefined) return null;
+  if (purchased === true) {
+    return (
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 800,
+          color: "#146a45",
+          background: "#dcfce7",
+          padding: "1px 6px",
+          borderRadius: 4,
+          marginLeft: 6,
+          letterSpacing: 0.4,
+        }}
+        title="Account has purchased this product"
+      >
+        ✓ OWNED
+      </span>
+    );
+  }
+  if (purchased === false) {
+    return (
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 800,
+          color: BRAND.t3,
+          background: "#f1f5f9",
+          padding: "1px 6px",
+          borderRadius: 4,
+          marginLeft: 6,
+          letterSpacing: 0.4,
+        }}
+        title="Account does not own this product"
+      >
+        · NOT OWNED
+      </span>
+    );
+  }
+  return (
+    <span
+      style={{
+        fontSize: 9,
+        fontWeight: 800,
+        color: "#854F0B",
+        background: "#fef3c7",
+        padding: "1px 6px",
+        borderRadius: 4,
+        marginLeft: 6,
+        letterSpacing: 0.4,
+      }}
+      title="Purchase status unknown — populate via account_products"
+    >
+      ?
+    </span>
+  );
+}
+
 function SlidePicker({
   selected,
   onChange,
+  productByKey,
 }: {
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
+  productByKey: Map<string, boolean | null>;
 }) {
   // Modal version — content rendered inside a fixed-width, scrollable
   // container. Caller (the parent modal) owns the open/close state.
@@ -474,7 +564,17 @@ function SlidePicker({
                       style={{ marginRight: 8, marginTop: 2, flexShrink: 0 }}
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: BRAND.t1 }}>{s.name}</div>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: BRAND.t1,
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span>{s.name}</span>
+                        <PurchaseBadge slideId={s.id} productByKey={productByKey} />
+                      </div>
                       <div
                         style={{
                           fontSize: 11,
@@ -514,6 +614,7 @@ function GenerateBRModal({
   setPeriodEnd,
   selectedSlides,
   setSelectedSlides,
+  productByKey,
   customValid,
   onGenerate,
   isGenerating,
@@ -528,6 +629,7 @@ function GenerateBRModal({
   setPeriodEnd: (v: string) => void;
   selectedSlides: Set<string>;
   setSelectedSlides: (next: Set<string>) => void;
+  productByKey: Map<string, boolean | null>;
   customValid: boolean;
   onGenerate: () => void;
   isGenerating: boolean;
@@ -663,7 +765,11 @@ function GenerateBRModal({
             </div>
           )}
 
-          <SlidePicker selected={selectedSlides} onChange={setSelectedSlides} />
+          <SlidePicker
+            selected={selectedSlides}
+            onChange={setSelectedSlides}
+            productByKey={productByKey}
+          />
         </div>
 
         {/* Footer */}
@@ -745,6 +851,17 @@ export default function BusinessReviewTab() {
     queryFn: () => api.get(`/api/v1/accounts/${account.id}/business-reviews`),
     staleTime: 30_000,
   });
+
+  // Product roster — drives the OWNED / NOT OWNED / ? badges next to
+  // module slides in the picker. Cached separately from cycles.
+  const productsQ = useProductRoster(account.id);
+  const productByKey = useMemo(() => {
+    const m = new Map<string, boolean | null>();
+    for (const row of productsQ.data?.items ?? []) {
+      m.set(row.product_key, row.purchased);
+    }
+    return m;
+  }, [productsQ.data]);
 
   const generate = useMutation({
     mutationFn: (body: GenerateBRRequest) =>
@@ -888,6 +1005,7 @@ export default function BusinessReviewTab() {
         setPeriodEnd={setPeriodEnd}
         selectedSlides={selectedSlides}
         setSelectedSlides={setSelectedSlides}
+        productByKey={productByKey}
         customValid={customValid}
         onGenerate={onGenerate}
         isGenerating={generate.isPending}

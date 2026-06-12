@@ -297,7 +297,7 @@ export default function AccountListPage() {
                       </Th>
                     ))}
                     <Th>CSM</Th>
-                    <Th>Industry / Country</Th>
+                    <Th>Industry / Sector · Country</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -635,8 +635,46 @@ function Row({
         {item.csm_full_name ?? "—"}
       </td>
       <td className="px-4 py-3 text-text-secondary text-[12px]">
-        <div>{item.industry ?? "—"}</div>
-        <div className="text-[11px] text-text-muted">{item.country ?? "—"}</div>
+        <div className="flex items-center gap-1.5">
+          {item.renewal_risk && (
+            <span
+              title={`Renewal Risk · ${item.renewal_risk}`}
+              className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+              style={{
+                background:
+                  item.renewal_risk === "Low"
+                    ? "#6EC457"
+                    : item.renewal_risk === "Medium"
+                      ? "#F0BC41"
+                      : "#CF4548",
+              }}
+            />
+          )}
+          <span className="truncate">{item.industry ?? "—"}</span>
+          {item.sector && (
+            <span className="text-[10px] text-text-muted">· {item.sector}</span>
+          )}
+        </div>
+        <div className="text-[11px] text-text-muted flex items-center gap-1.5">
+          <span>{item.country ?? "—"}</span>
+          {item.revenue_bucket && (
+            <span
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+              style={{ background: "#f3f0ff", color: "#4A00F8" }}
+            >
+              {item.revenue_bucket}
+            </span>
+          )}
+          {item.is_fortune_500 && (
+            <span
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+              style={{ background: "#FFE61E30", color: "#854F0B" }}
+              title="Fortune 500"
+            >
+              F500
+            </span>
+          )}
+        </div>
       </td>
     </tr>
   );
