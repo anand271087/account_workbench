@@ -133,6 +133,46 @@ export function VpdMetricsExtractionReview({
           </button>
         </div>
 
+        {/* 12-Jun bug 227 — Select-all toolbar. Same pattern as goals
+            review modal — flip every row in one click. */}
+        {rows.length > 0 && (
+          <div className="px-5 py-2 border-b border-beroe-card-border bg-beroe-bg/40 flex items-center gap-2">
+            <input
+              type="checkbox"
+              ref={(el) => {
+                if (el) {
+                  const total = rows.filter((r) => r._status !== "done").length;
+                  const sel = rows.filter((r) => r._selected && r._status !== "done").length;
+                  el.indeterminate = sel > 0 && sel < total;
+                }
+              }}
+              checked={
+                rows.filter((r) => r._status !== "done").length > 0 &&
+                rows
+                  .filter((r) => r._status !== "done")
+                  .every((r) => r._selected)
+              }
+              onChange={(e) => {
+                const next = e.target.checked;
+                setRows((prev) =>
+                  prev.map((r) =>
+                    r._status === "done" ? r : { ...r, _selected: next },
+                  ),
+                );
+              }}
+              disabled={running}
+              className="cursor-pointer"
+              id="metrics-select-all"
+            />
+            <label
+              htmlFor="metrics-select-all"
+              className="text-[12px] font-semibold text-text-secondary cursor-pointer select-none"
+            >
+              Select all ({rows.filter((r) => r._status !== "done").length})
+            </label>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {rows.length === 0 ? (
             <div className="text-[12px] text-text-muted py-8 text-center">
