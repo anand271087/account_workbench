@@ -3047,6 +3047,15 @@ function EditInitiativeModal({
   );
 }
 
+// 13-Jun · Realigned to the v20 prototype "Add Play" modal (lines 7600-7619).
+// Field set + order + labels match exactly: Title → [Opportunity Value | Stage |
+// Timeline] → Trigger → Relevant Modes. Storage shape is preserved — the new
+// prototype-only fields (sales_stage_prob, timeline, modes) ride along in the
+// existing `value_fields` jsonb, so no migration is needed. "Status" / "Owner" /
+// "Delivered" are dropped from the modal (status still defaults to
+// "identification" via _newInitiative so the cascade-unlock logic on Goals
+// keeps working downstream).
+
 function InitiativeFormFields({
   draft,
   setDraft,
@@ -3054,9 +3063,26 @@ function InitiativeFormFields({
   draft: Initiative;
   setDraft: (next: Initiative) => void;
 }) {
+  const vf = (draft.value_fields ?? {}) as Record<string, unknown>;
+  const stageProb = typeof vf.sales_stage_prob === "number" ? vf.sales_stage_prob : null;
+  const timeline = typeof vf.timeline === "string" ? vf.timeline : "";
+  const modes: PlayMode[] = Array.isArray(vf.modes)
+    ? (vf.modes as string[]).filter((m): m is PlayMode =>
+        m === "rescue" || m === "retain" || m === "expand"
+      )
+    : [];
+
+  const patchValueFields = (patch: Record<string, unknown>) =>
+    setDraft({ ...draft, value_fields: { ...vf, ...patch } });
+
+  const toggleMode = (m: PlayMode) => {
+    const next = modes.includes(m) ? modes.filter((x) => x !== m) : [...modes, m];
+    patchValueFields({ modes: next });
+  };
+
   return (
     <div className="space-y-3">
-      <ModalField label="Title">
+      <ModalField label="Title *">
         <input
           type="text"
           value={draft.name}
@@ -3065,68 +3091,74 @@ function InitiativeFormFields({
           className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
         />
       </ModalField>
-      <div className="grid grid-cols-2 gap-3">
-        <ModalField label="Status">
+      <div className="grid grid-cols-3 gap-3">
+        <ModalField label="Opportunity Value">
+          <MoneyInput
+            value={draft.value_target ?? ""}
+            onChange={(v) => setDraft({ ...draft, value_target: v ?? null })}
+            className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
+            placeholder="$ 0"
+          />
+        </ModalField>
+        <ModalField label="Stage">
           <select
-            value={draft.status}
+            value={stageProb ?? ""}
             onChange={(e) =>
-              setDraft({ ...draft, status: e.target.value as InitiativeStatus })
+              patchValueFields({
+                sales_stage_prob: e.target.value === "" ? null : parseInt(e.target.value, 10),
+              })
             }
             className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px] bg-white"
           >
-            <option value="identification">Identification</option>
-            <option value="pipeline">Pipeline</option>
-            <option value="in_progress">In progress</option>
-            <option value="delivered">Delivered</option>
+            <option value="">— Select Stage —</option>
+            {SALES_STAGES.map((s) => (
+              <option key={s.prob} value={s.prob}>
+                {s.prob}% — {s.label}
+              </option>
+            ))}
           </select>
         </ModalField>
-        <ModalField label="Owner">
+        <ModalField label="Timeline">
           <input
             type="text"
-            value={(draft.value_fields?.owner as string) ?? ""}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                value_fields: { ...draft.value_fields, owner: e.target.value },
-              })
-            }
-            placeholder="Person responsible"
+            value={timeline}
+            onChange={(e) => patchValueFields({ timeline: e.target.value })}
+            placeholder="Q3 FY25 · 30 days · …"
             className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
           />
         </ModalField>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <ModalField label="Target ($ / text)">
-          <input
-            type="text"
-            value={draft.value_target ?? ""}
-            onChange={(e) =>
-              setDraft({ ...draft, value_target: e.target.value || null })
-            }
-            placeholder="$500K · 15% adoption · …"
-            className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
-          />
-        </ModalField>
-        <ModalField label="Delivered ($ / text)">
-          <input
-            type="text"
-            value={draft.value_delivered ?? ""}
-            onChange={(e) =>
-              setDraft({ ...draft, value_delivered: e.target.value || null })
-            }
-            placeholder="$120K · 5% so far · …"
-            className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
-          />
-        </ModalField>
-      </div>
-      <ModalField label="Notes">
+      <ModalField label="Trigger">
         <textarea
           value={draft.notes ?? ""}
           onChange={(e) => setDraft({ ...draft, notes: e.target.value || null })}
-          placeholder="Trigger, context, next steps…"
+          placeholder="What signal / event triggered this play?"
           rows={3}
           className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px] resize-y"
         />
+      </ModalField>
+      <ModalField label="Relevant Modes">
+        <div className="flex flex-wrap gap-3 pt-0.5">
+          {(["rescue", "retain", "expand"] as PlayMode[]).map((m) => {
+            const c = MODE_CONF[m];
+            const checked = modes.includes(m);
+            return (
+              <label
+                key={m}
+                className="flex items-center gap-1.5 text-[12px] cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleMode(m)}
+                  className="cursor-pointer"
+                />
+                <span style={{ color: c.col }}>{c.icon}</span>
+                <span>{c.label}</span>
+              </label>
+            );
+          })}
+        </div>
       </ModalField>
     </div>
   );
