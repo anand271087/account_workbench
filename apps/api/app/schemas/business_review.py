@@ -18,12 +18,12 @@ BRCadence = Literal["monthly", "quarterly", "renewal", "custom"]
 
 
 SLIDE_IDS = (
-    "s1", "s2", "s3", "s4", "s5", "s6",
-    "s7", "s8", "s9", "s10", "s11", "s12",
+    "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+    "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
 )
 SlideId = Literal[
-    "s1", "s2", "s3", "s4", "s5", "s6",
-    "s7", "s8", "s9", "s10", "s11", "s12",
+    "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+    "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
 ]
 
 
@@ -89,3 +89,11 @@ class BRDataSnapshot(BaseModel):
     subscribers_engagement: dict[str, Any] = Field(default_factory=dict)
     live_ai: dict[str, Any] = Field(default_factory=dict)
     inflation_watch: dict[str, Any] = Field(default_factory=dict)
+    # Module deep-dives (slides 13-18).
+    mmd_modules: dict[str, Any] = Field(default_factory=dict)
+    abi_intel: dict[str, Any] = Field(default_factory=dict)
+    supplier_watch: dict[str, Any] = Field(default_factory=dict)
+    benchmark: dict[str, Any] = Field(default_factory=dict)
+    engagement: dict[str, Any] = Field(default_factory=dict)
+    super_users: list[dict[str, Any]] = Field(default_factory=list)
+    nps: dict[str, Any] = Field(default_factory=dict)

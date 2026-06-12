@@ -100,11 +100,17 @@ export const SLIDE_GROUPS: SlideGroup[] = [
   },
   {
     id: "modules",
-    name: "Modules",
+    name: "Modules · deep dives",
     emoji: "📦",
     slides: [
       { id: "s10", name: "Live.ai · Category Watch", description: "Subscribers, categories, avg/user + top-cat bar chart" },
       { id: "s11", name: "Inflation Watch GIT", description: "Categories tracked, views, neg-prep + trend chart" },
+      { id: "s13", name: "MMD · Module Activity", description: "Per-module usage totals (MMD / Abi / SD / DL / BM)" },
+      { id: "s14", name: "Abi Intelligence", description: "Queries, complexity mix, top types, resolution rate" },
+      { id: "s15", name: "Supplier Watch", description: "Tracked count, risk breakdown, top suppliers list" },
+      { id: "s16", name: "Industry Benchmark", description: "This account vs industry averages across 5 KPIs" },
+      { id: "s17", name: "NPS · Voice of Customer", description: "NPS score + promoters/passives/detractors + VoC quotes" },
+      { id: "s18", name: "Super Users", description: "Top 5 power users by logins / CW / Abi / SD / hours" },
     ],
   },
   {
