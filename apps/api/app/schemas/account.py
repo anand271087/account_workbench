@@ -93,6 +93,13 @@ class AccountCreate(BaseModel):
     account_type: str | None = Field(None, max_length=40)
     segment: str | None = Field(None, max_length=40)
 
+    # 12-Jun · Real-data fields surfaced on the Create Account modal.
+    # Match the schema columns added in migration 0075.
+    sector: str | None = Field(None, max_length=80)
+    revenue_bucket: str | None = Field(None, max_length=40)
+    procurement_maturity: str | None = Field(None, max_length=40)  # Low|Medium|High
+    genai_adoption: str | None = Field(None, max_length=40)        # Low|Medium|High
+
     # 10-Jun · Upper bound dropped (was 99,999,999.99 ~= $100M). Any
     # positive Decimal accepted — accounts at billions+ ACV no longer
     # need a workaround.
