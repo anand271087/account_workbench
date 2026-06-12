@@ -318,6 +318,44 @@ def _stub_doc_summary(text: str, kind: str) -> dict:
     }
 
 
+# 13-Jun · markitdown converts .docx / .pptx / .xlsx to markdown, so
+# tables come through as `| col1 | col2 |` lines plus a `|---|---|`
+# separator row. Claude sometimes mirrors that shape back into the
+# summary text. The frontend renders summaries with `whitespace-pre-wrap`
+# (no markdown renderer), so users see literal pipes and dashes.
+# This belt-and-braces strip catches anything the prompt instruction
+# misses — keeps the cell contents but drops the structural punctuation.
+_MD_TABLE_SEP_RE = _re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+
+
+def _scrub_markdown_table_syntax(s: str) -> str:
+    """Strip markdown-table punctuation while preserving cell contents.
+
+    Drops `---|---|---` separator rows entirely. Converts `| a | b | c |`
+    into `a · b · c`. Leaves prose lines untouched.
+    """
+    if not s or "|" not in s:
+        return s
+    out: list[str] = []
+    for line in s.splitlines():
+        if _MD_TABLE_SEP_RE.match(line):
+            continue
+        # Only touch lines that look like table rows (multiple pipes).
+        if line.count("|") >= 2:
+            stripped = line.strip()
+            if stripped.startswith("|"):
+                stripped = stripped[1:]
+            if stripped.endswith("|"):
+                stripped = stripped[:-1]
+            cells = [c.strip() for c in stripped.split("|")]
+            cells = [c for c in cells if c]
+            if cells:
+                out.append(" · ".join(cells))
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
 def _real_doc_summary(text: str, kind: str) -> dict:
     """One LLM call → 200-word summary + structured entities."""
     raw = llm.chat_text(
@@ -339,6 +377,12 @@ def _real_doc_summary(text: str, kind: str) -> dict:
             "  - 03-Jun bug — the `summary` field MUST be bullet format. Each "
             "bullet on its own line prefixed with '- '. Do not write any prose "
             "paragraph. Even if there's only one point, render it as one bullet.\n"
+            "  - 13-Jun bug — NEVER emit markdown tables, pipe syntax (`|`), "
+            "or horizontal-rule separator rows (`---|---|---`) in ANY field. "
+            "The source document is converted to markdown so you may see "
+            "tables in the input — translate that information into plain "
+            "bullets. The frontend renders summaries as plain text; pipes "
+            "and dashes will appear literally.\n"
             "  - Be concise. Skip pleasantries and filler.\n"
             "  - If a list has no items, return [] — not omitted.\n"
         ),
@@ -355,7 +399,8 @@ def _real_doc_summary(text: str, kind: str) -> dict:
     except (json.JSONDecodeError, ValueError):
         # Couldn't parse — return a graceful placeholder rather than 500-ing.
         return {
-            "summary": cleaned[:600] or "Could not parse model response.",
+            "summary": _scrub_markdown_table_syntax(cleaned)[:600]
+            or "Could not parse model response.",
             "people": [],
             "decisions": [],
             "action_items": [],
@@ -363,10 +408,16 @@ def _real_doc_summary(text: str, kind: str) -> dict:
             "is_stub": False,
         }
     return {
-        "summary": str(parsed.get("summary", ""))[:1500],
+        "summary": _scrub_markdown_table_syntax(str(parsed.get("summary", "")))[:1500],
         "people": [str(x)[:200] for x in (parsed.get("people") or [])][:10],
-        "decisions": [str(x)[:200] for x in (parsed.get("decisions") or [])][:8],
-        "action_items": [str(x)[:200] for x in (parsed.get("action_items") or [])][:8],
+        "decisions": [
+            _scrub_markdown_table_syntax(str(x))[:200]
+            for x in (parsed.get("decisions") or [])
+        ][:8],
+        "action_items": [
+            _scrub_markdown_table_syntax(str(x))[:200]
+            for x in (parsed.get("action_items") or [])
+        ][:8],
         "dates": [str(x)[:120] for x in (parsed.get("dates") or [])][:10],
         "is_stub": False,
     }
