@@ -194,7 +194,7 @@ export default function AccountListPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search name, slug, country, industry, CSM email, primary contact…"
-            className="flex-1 min-w-[320px] px-3 py-2 rounded-lg border border-beroe-card-border text-sm bg-white focus:outline-none focus:border-beroe-blue"
+            className="flex-1 min-w-[220px] px-3 py-2 rounded-lg border border-beroe-card-border text-sm bg-white focus:outline-none focus:border-beroe-blue"
           />
           <Select value={industry} onChange={(v) => setParam("industry", v)} label="Industry" options={facets.industries} />
           <Select value={tier} onChange={(v) => setParam("tier", v)} label="Tier" options={facets.tiers} />

@@ -3,6 +3,23 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * 12-Jun · Cross-platform stability.
+   *
+   * scrollbar-gutter: stable reserves space for the scrollbar on Windows
+   * (which has visible 12-17px scrollbars by default) so layout doesn't
+   * shift when content grows past the viewport. On macOS overlay
+   * scrollbars are 0px wide, so this is effectively a no-op visually.
+   *
+   * Setting overflow-x on `html` to hidden as a final safety net stops
+   * any stray fixed-width child from creating a horizontal scrollbar
+   * on the whole page (a common Windows symptom).
+   */
+  html {
+    scrollbar-gutter: stable;
+    overflow-x: hidden;
+  }
+
   :root {
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;
