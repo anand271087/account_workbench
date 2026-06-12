@@ -50,6 +50,11 @@ class AccountDetail(BaseModel):
     co_user_id: UUID | None
     csm_full_name: str | None = None
     co_full_name: str | None = None
+    # 13-Jun · Free-text owner names (set by bulk-import / create modal
+    # when the named staff are not yet invited as real users). The header
+    # falls back to these when csm/co_full_name are null.
+    csm_owner_name: str | None = None
+    commercial_owner_name: str | None = None
 
     category: str | None
     tier: str | None

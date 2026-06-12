@@ -231,12 +231,33 @@ export default function AccountProfileLayout() {
               {data.sector && <> · {data.sector}</>}
               {data.country && <> · {data.country}</>}
               {data.revenue_bucket && <> · {data.revenue_bucket}</>}
-              {data.csm_full_name ? (
-                <> · <span className="text-text-secondary">{data.csm_full_name}</span></>
-              ) : data.co_full_name ? (
-                <> · <span className="text-text-secondary">{data.co_full_name} <span className="text-text-muted">(Sales)</span></span></>
-              ) : null}
               {data.tier && <> · {data.tier}</>}
+              {/* 13-Jun · CSM + CO moved to AFTER tier so the breadcrumb
+                  reads industry → tier → ownership. Fall back from the
+                  FK-joined full_name (only set when the named staff are
+                  invited as real users) to the free-text owner_name
+                  (set by the bulk-import / create-account modal). */}
+              {(() => {
+                const csm = data.csm_full_name || data.csm_owner_name;
+                const co = data.co_full_name || data.commercial_owner_name;
+                if (!csm && !co) return null;
+                return (
+                  <>
+                    {csm && (
+                      <>
+                        {" · CSM: "}
+                        <span className="text-text-secondary">{csm}</span>
+                      </>
+                    )}
+                    {co && (
+                      <>
+                        {" · CO: "}
+                        <span className="text-text-secondary">{co}</span>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             {/* 13-Jun · Bulk-import chip row removed per stakeholder ask
                 (Platform status, Fortune 500, Focus Region/Industry,

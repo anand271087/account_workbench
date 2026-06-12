@@ -11,6 +11,10 @@ export interface AccountListItem {
   co_user_id: string | null;
   csm_full_name: string | null;
   co_full_name: string | null;
+  // 13-Jun · Free-text owner names — used as fallback in the header
+  // when the staff aren't invited as real users yet.
+  csm_owner_name: string | null;
+  commercial_owner_name: string | null;
   category: string | null;
   tier: string | null;
   account_type: string | null;
@@ -84,6 +88,10 @@ export interface AccountDetail {
   co_user_id: string | null;
   csm_full_name: string | null;
   co_full_name: string | null;
+  // 13-Jun · Free-text owner names — used as fallback in the header
+  // when the staff aren't invited as real users yet.
+  csm_owner_name: string | null;
+  commercial_owner_name: string | null;
   category: string | null;
   tier: string | null;
   account_type: string | null;

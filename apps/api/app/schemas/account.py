@@ -21,6 +21,11 @@ class AccountListItem(BaseModel):
     co_user_id: UUID | None
     csm_full_name: str | None = None     # joined from users
     co_full_name: str | None = None      # joined from users
+    # 13-Jun · Free-text owner names — populated by bulk-import / create
+    # modal when the named staff aren't invited as real users yet. Header
+    # falls back to these when csm/co_full_name are null.
+    csm_owner_name: str | None = None
+    commercial_owner_name: str | None = None
 
     category: str | None
     tier: str | None

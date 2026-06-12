@@ -194,6 +194,8 @@ async def list_accounts(
                 industry=a.industry, country=a.country, region=a.region,
                 csm_user_id=a.csm_user_id, co_user_id=a.co_user_id,
                 csm_full_name=r[1], co_full_name=r[4],
+                csm_owner_name=a.csm_owner_name,
+                commercial_owner_name=a.commercial_owner_name,
                 category=a.category, tier=a.tier,
                 account_type=a.account_type, segment=a.segment,
                 current_acv=a.current_acv, target_acv=a.target_acv,
@@ -529,6 +531,10 @@ async def get_account(
         genai_adoption=a.genai_adoption,
         csm_user_id=a.csm_user_id, co_user_id=a.co_user_id,
         csm_full_name=row[1], co_full_name=row[4],
+        # 13-Jun · free-text owner names for header fallback when the
+        # named staff aren't real users yet.
+        csm_owner_name=a.csm_owner_name,
+        commercial_owner_name=a.commercial_owner_name,
         category=a.category, tier=a.tier,
         account_type=a.account_type, segment=a.segment,
         current_acv=a.current_acv, target_acv=a.target_acv,
@@ -1030,6 +1036,8 @@ async def _get_one_as_listitem(db: AsyncSession, account_id: UUID, user: User) -
         industry=a.industry, country=a.country, region=a.region,
         csm_user_id=a.csm_user_id, co_user_id=a.co_user_id,
         csm_full_name=row[1], co_full_name=row[4],
+        csm_owner_name=a.csm_owner_name,
+        commercial_owner_name=a.commercial_owner_name,
         category=a.category, tier=a.tier,
         account_type=a.account_type, segment=a.segment,
         current_acv=a.current_acv, target_acv=a.target_acv,
