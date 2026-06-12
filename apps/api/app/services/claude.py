@@ -325,7 +325,7 @@ def _stub_doc_summary(text: str, kind: str) -> dict:
 # (no markdown renderer), so users see literal pipes and dashes.
 # This belt-and-braces strip catches anything the prompt instruction
 # misses — keeps the cell contents but drops the structural punctuation.
-_MD_TABLE_SEP_RE = _re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+_MD_TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 
 
 def _scrub_markdown_table_syntax(s: str) -> str:
