@@ -211,7 +211,14 @@ def _scalar(sql: str, params: tuple = (), default: Any = None) -> Any:
                 ensure_tunnel()
                 continue
             logger.warning("redshift scalar failed: %s — %s", sql[:120].replace("\n", " "), exc)
-            _mark_unhealthy()
+            # 13-Jun · Only stamp tunnel-unhealthy on real connection drops.
+            # Per-query permission (42501) / relation-not-exist (42P01)
+            # errors are data-access problems, not tunnel problems — they
+            # used to trigger the "Redshift tunnel recovering" banner on
+            # every Analytics load while the Beroe data team's grants are
+            # still pending on the live_ai schema.
+            if _is_connection_error(exc):
+                _mark_unhealthy()
             return default
     return default
 
@@ -231,7 +238,10 @@ def _rows(sql: str, params: tuple = ()) -> list[tuple]:
                 ensure_tunnel()
                 continue
             logger.warning("redshift rows failed: %s — %s", sql[:120].replace("\n", " "), exc)
-            _mark_unhealthy()
+            # See note in _scalar — only mark tunnel unhealthy on real
+            # connection drops, not per-query permission/relation errors.
+            if _is_connection_error(exc):
+                _mark_unhealthy()
             return []
     return []
 
