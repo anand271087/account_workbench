@@ -347,7 +347,8 @@ function SlidePicker({
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Modal version — content rendered inside a fixed-width, scrollable
+  // container. Caller (the parent modal) owns the open/close state.
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(SLIDE_GROUPS.map((g) => g.id)),
   );
@@ -383,35 +384,19 @@ function SlidePicker({
   }
 
   return (
-    <div
-      style={{
-        border: `1px solid ${BRAND.cardBorder}`,
-        background: "#fff",
-        borderRadius: 10,
-        marginBottom: 16,
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
+    <div>
+      <div
         style={{
           display: "flex",
           alignItems: "center",
-          width: "100%",
-          padding: "10px 14px",
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 12,
-          fontWeight: 700,
-          color: BRAND.t1,
-          textAlign: "left",
+          padding: "0 0 10px",
+          borderBottom: `1px solid ${BRAND.cardBorder}`,
+          marginBottom: 8,
         }}
       >
-        <span style={{ marginRight: 8, fontSize: 11, color: BRAND.t2 }}>
-          {expanded ? "▼" : "▶"}
+        <span style={{ fontSize: 12, fontWeight: 700, color: BRAND.t1 }}>
+          Slides included
         </span>
-        Slides included
         <span
           style={{
             marginLeft: 8,
@@ -423,87 +408,312 @@ function SlidePicker({
           {count} of {total}
         </span>
         <span style={{ flex: 1 }} />
-        <span
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleAll();
-          }}
+        <button
+          type="button"
+          onClick={toggleAll}
           style={{
+            background: "transparent",
+            border: "none",
             fontSize: 11,
             color: BRAND.indigo,
             fontWeight: 700,
-            textDecoration: "underline",
             cursor: "pointer",
+            padding: 0,
           }}
         >
           {count === total ? "Deselect all" : "Select all"}
-        </span>
-      </button>
-      {expanded && (
-        <div style={{ padding: "0 14px 12px", borderTop: `1px solid ${BRAND.cardBorder}` }}>
-          {SLIDE_GROUPS.map((g) => {
-            const ids = g.slides.map((s) => s.id);
-            const onCount = ids.filter((id) => selected.has(id)).length;
-            const state: "all" | "some" | "none" =
-              onCount === 0 ? "none" : onCount === ids.length ? "all" : "some";
-            const open = openGroups.has(g.id);
-            return (
-              <div key={g.id} style={{ marginTop: 10 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: BRAND.t1,
-                  }}
-                  onClick={() => toggleOpen(g.id)}
-                >
-                  <span style={{ marginRight: 6, fontSize: 10, color: BRAND.t3 }}>
-                    {open ? "▼" : "▶"}
-                  </span>
-                  <GroupCheckbox state={state} onToggle={() => toggleGroup(g)} />
-                  <span style={{ marginRight: 6 }}>{g.emoji}</span>
-                  {g.name}
-                  <span style={{ marginLeft: 6, fontSize: 10, color: BRAND.t3, fontWeight: 600 }}>
-                    ({onCount} / {ids.length})
-                  </span>
-                </div>
-                {open && (
-                  <div style={{ marginLeft: 28, marginTop: 4 }}>
-                    {g.slides.map((s) => (
-                      <label
-                        key={s.id}
+        </button>
+      </div>
+      {SLIDE_GROUPS.map((g) => {
+        const ids = g.slides.map((s) => s.id);
+        const onCount = ids.filter((id) => selected.has(id)).length;
+        const state: "all" | "some" | "none" =
+          onCount === 0 ? "none" : onCount === ids.length ? "all" : "some";
+        const open = openGroups.has(g.id);
+        return (
+          <div key={g.id} style={{ marginTop: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+                color: BRAND.t1,
+                padding: "4px 0",
+              }}
+              onClick={() => toggleOpen(g.id)}
+            >
+              <span style={{ marginRight: 6, fontSize: 10, color: BRAND.t3, width: 10 }}>
+                {open ? "▼" : "▶"}
+              </span>
+              <GroupCheckbox state={state} onToggle={() => toggleGroup(g)} />
+              <span style={{ marginRight: 6 }}>{g.emoji}</span>
+              {g.name}
+              <span style={{ marginLeft: 6, fontSize: 10, color: BRAND.t3, fontWeight: 600 }}>
+                ({onCount} / {ids.length})
+              </span>
+            </div>
+            {open && (
+              <div style={{ marginLeft: 28, marginTop: 2 }}>
+                {g.slides.map((s) => (
+                  <label
+                    key={`${g.id}:${s.id}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      padding: "3px 0",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(s.id)}
+                      onChange={() => toggleSlide(s.id)}
+                      style={{ marginRight: 8, marginTop: 2, flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: BRAND.t1 }}>{s.name}</div>
+                      <div
                         style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          padding: "4px 0",
-                          cursor: "pointer",
-                          fontSize: 12,
+                          fontSize: 11,
+                          color: BRAND.t3,
+                          marginTop: 1,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={selected.has(s.id)}
-                          onChange={() => toggleSlide(s.id)}
-                          style={{ marginRight: 8, marginTop: 2 }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, color: BRAND.t1 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: BRAND.t3, marginTop: 2 }}>
-                            {s.description}
-                          </div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                )}
+                        {s.description}
+                      </div>
+                    </div>
+                  </label>
+                ))}
               </div>
-            );
-          })}
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Generate-BR modal — cadence + slide picker behind one open/close
+// ─────────────────────────────────────────────────────────────
+
+function GenerateBRModal({
+  isOpen,
+  onClose,
+  cadence,
+  setCadence,
+  periodStart,
+  setPeriodStart,
+  periodEnd,
+  setPeriodEnd,
+  selectedSlides,
+  setSelectedSlides,
+  customValid,
+  onGenerate,
+  isGenerating,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  cadence: BRCadence;
+  setCadence: (c: BRCadence) => void;
+  periodStart: string;
+  setPeriodStart: (v: string) => void;
+  periodEnd: string;
+  setPeriodEnd: (v: string) => void;
+  selectedSlides: Set<string>;
+  setSelectedSlides: (next: Set<string>) => void;
+  customValid: boolean;
+  onGenerate: () => void;
+  isGenerating: boolean;
+}) {
+  if (!isOpen) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 17, 55, 0.4)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          width: 560,
+          maxWidth: "100%",
+          maxHeight: "90vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 16px 48px rgba(0, 17, 55, 0.25)",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: "14px 18px",
+            borderBottom: `1px solid ${BRAND.cardBorder}`,
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 800, color: BRAND.t1 }}>
+            Generate Business Review
+          </div>
+          <span style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: "transparent",
+              border: "none",
+              fontSize: 20,
+              color: BRAND.t2,
+              cursor: "pointer",
+              lineHeight: 1,
+              padding: 4,
+            }}
+          >
+            ×
+          </button>
         </div>
-      )}
+
+        {/* Body — scrollable */}
+        <div
+          style={{
+            padding: 18,
+            overflowY: "auto",
+            flex: 1,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 1.5,
+              color: BRAND.t2,
+              textTransform: "uppercase",
+              marginBottom: 8,
+            }}
+          >
+            Cadence
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+            {(["monthly", "quarterly", "renewal", "custom"] as BRCadence[]).map((c) => (
+              <CadenceCard
+                key={c}
+                cadence={c}
+                selected={cadence === c}
+                onPick={setCadence}
+              />
+            ))}
+          </div>
+
+          {cadence === "custom" && (
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                alignItems: "flex-end",
+                marginBottom: 16,
+                flexWrap: "wrap",
+              }}
+            >
+              <label style={{ fontSize: 11, color: BRAND.t2, fontWeight: 700 }}>
+                <div style={{ marginBottom: 4 }}>Period start</div>
+                <input
+                  type="date"
+                  value={periodStart}
+                  onChange={(e) => setPeriodStart(e.target.value)}
+                  style={{
+                    padding: "8px 10px",
+                    border: `1px solid ${BRAND.cardBorder}`,
+                    borderRadius: 8,
+                    fontSize: 13,
+                  }}
+                />
+              </label>
+              <label style={{ fontSize: 11, color: BRAND.t2, fontWeight: 700 }}>
+                <div style={{ marginBottom: 4 }}>Period end</div>
+                <input
+                  type="date"
+                  value={periodEnd}
+                  onChange={(e) => setPeriodEnd(e.target.value)}
+                  style={{
+                    padding: "8px 10px",
+                    border: `1px solid ${BRAND.cardBorder}`,
+                    borderRadius: 8,
+                    fontSize: 13,
+                  }}
+                />
+              </label>
+            </div>
+          )}
+
+          <SlidePicker selected={selectedSlides} onChange={setSelectedSlides} />
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: "12px 18px",
+            borderTop: `1px solid ${BRAND.cardBorder}`,
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            background: BRAND.bgSoft,
+            borderRadius: "0 0 14px 14px",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: "#fff",
+              color: BRAND.t1,
+              padding: "9px 16px",
+              border: `1px solid ${BRAND.cardBorder}`,
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={isGenerating || !customValid}
+            style={{
+              background: BRAND.indigo,
+              color: "#fff",
+              padding: "9px 18px",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: isGenerating || !customValid ? "not-allowed" : "pointer",
+              opacity: isGenerating || !customValid ? 0.6 : 1,
+            }}
+          >
+            {isGenerating ? "Generating…" : "Generate →"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -527,6 +737,8 @@ export default function BusinessReviewTab() {
   const [selectedSlides, setSelectedSlides] = useState<Set<string>>(
     () => new Set(ALL_SLIDE_IDS),
   );
+  const [modalOpen, setModalOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
 
   const cyclesQ = useQuery<BRListResponse>({
     queryKey: ["br-cycles", account.id],
@@ -543,6 +755,8 @@ export default function BusinessReviewTab() {
     onSuccess: (row) => {
       qc.invalidateQueries({ queryKey: ["br-cycles", account.id] });
       setSelectedId(row.id);
+      setModalOpen(false);
+      setPreviewOpen(true);
       notify({
         title: "Business Review generated",
         body: `${CADENCE_LABEL[row.cadence]} · ${row.period_label}`,
@@ -615,120 +829,132 @@ export default function BusinessReviewTab() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Generator panel */}
+      {/* Trigger row */}
       <div
         style={{
-          padding: 20,
+          padding: 16,
           borderRadius: 12,
           border: `1.5px solid ${BRAND.cardBorder}`,
           background: BRAND.bgSoft,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 1.5,
-            color: BRAND.t2,
-            textTransform: "uppercase",
-            marginBottom: 12,
-          }}
-        >
-          Generate Business Review
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            marginBottom: 16,
-          }}
-        >
-          {(["monthly", "quarterly", "renewal", "custom"] as BRCadence[]).map(
-            (c) => (
-              <CadenceCard
-                key={c}
-                cadence={c}
-                selected={cadence === c}
-                onPick={setCadence}
-              />
-            ),
-          )}
-        </div>
-
-        {cadence === "custom" && (
+        <div style={{ flex: 1, minWidth: 200 }}>
           <div
             style={{
-              display: "flex",
-              gap: 12,
-              alignItems: "flex-end",
-              marginBottom: 16,
-              flexWrap: "wrap",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 1.5,
+              color: BRAND.t2,
+              textTransform: "uppercase",
+              marginBottom: 4,
             }}
           >
-            <label style={{ fontSize: 11, color: BRAND.t2, fontWeight: 700 }}>
-              <div style={{ marginBottom: 4 }}>Period start</div>
-              <input
-                type="date"
-                value={periodStart}
-                onChange={(e) => setPeriodStart(e.target.value)}
-                style={{
-                  padding: "8px 10px",
-                  border: `1px solid ${BRAND.cardBorder}`,
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              />
-            </label>
-            <label style={{ fontSize: 11, color: BRAND.t2, fontWeight: 700 }}>
-              <div style={{ marginBottom: 4 }}>Period end</div>
-              <input
-                type="date"
-                value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
-                style={{
-                  padding: "8px 10px",
-                  border: `1px solid ${BRAND.cardBorder}`,
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-              />
-            </label>
+            Generate Business Review
           </div>
-        )}
-
-        <SlidePicker selected={selectedSlides} onChange={setSelectedSlides} />
-
+          <div style={{ fontSize: 11, color: BRAND.t3 }}>
+            Pick cadence + slides. Live data from this account's Analytics.
+          </div>
+        </div>
         <button
           type="button"
-          onClick={onGenerate}
-          disabled={generate.isPending || !customValid}
+          onClick={() => setModalOpen(true)}
           style={{
             background: BRAND.indigo,
             color: "#fff",
-            padding: "10px 20px",
+            padding: "10px 18px",
             border: "none",
             borderRadius: 8,
             fontSize: 13,
             fontWeight: 700,
-            cursor:
-              generate.isPending || !customValid ? "not-allowed" : "pointer",
-            opacity: generate.isPending || !customValid ? 0.6 : 1,
+            cursor: "pointer",
           }}
         >
-          {generate.isPending ? "Generating…" : "Generate Business Review →"}
+          Generate Business Review →
         </button>
-        <div style={{ marginTop: 10, fontSize: 11, color: BRAND.t3 }}>
-          Live data from this account's Analytics — usage, modules, scores,
-          signals, plays, goals, contract, stakeholders. Every Generate
-          creates a new version in the Business Review Cycles list below.
-        </div>
       </div>
 
-      {/* Preview */}
+      <GenerateBRModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        cadence={cadence}
+        setCadence={setCadence}
+        periodStart={periodStart}
+        setPeriodStart={setPeriodStart}
+        periodEnd={periodEnd}
+        setPeriodEnd={setPeriodEnd}
+        selectedSlides={selectedSlides}
+        setSelectedSlides={setSelectedSlides}
+        customValid={customValid}
+        onGenerate={onGenerate}
+        isGenerating={generate.isPending}
+      />
+
+      {/* Preview — collapsible */}
       {selectedId ? (
-        <BRPreview brId={selectedId} />
+        previewOpen ? (
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: 8,
+                gap: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  color: BRAND.t2,
+                  textTransform: "uppercase",
+                }}
+              >
+                Preview
+              </span>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                style={{
+                  background: "#fff",
+                  border: `1px solid ${BRAND.cardBorder}`,
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: BRAND.t1,
+                  cursor: "pointer",
+                }}
+              >
+                ✕ Close preview
+              </button>
+            </div>
+            <BRPreview brId={selectedId} />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            style={{
+              padding: "10px 14px",
+              border: `1.5px dashed ${BRAND.cardBorder}`,
+              borderRadius: 12,
+              background: "#fff",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 700,
+              color: BRAND.indigo,
+              textAlign: "left",
+            }}
+          >
+            ▸ Show preview
+          </button>
+        )
       ) : (
         <div
           style={{
@@ -740,8 +966,7 @@ export default function BusinessReviewTab() {
             fontSize: 12,
           }}
         >
-          No Business Review generated yet. Pick a cadence above and click
-          Generate.
+          No Business Review generated yet. Click "Generate Business Review" above.
         </div>
       )}
 
@@ -801,7 +1026,10 @@ export default function BusinessReviewTab() {
                   key={row.id}
                   row={row}
                   selected={row.id === selectedId}
-                  onSelect={() => setSelectedId(row.id)}
+                  onSelect={() => {
+                    setSelectedId(row.id);
+                    setPreviewOpen(true);
+                  }}
                   onDelete={onDelete}
                   canDelete={isAdmin}
                 />

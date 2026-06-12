@@ -393,6 +393,21 @@ async def gather_data(
             "passives": nps.get("passives"),
             "detractors": nps.get("detractors"),
         },
+        # ───────── 9 additional module deep-dives (s19-s27) ─────────
+        # Mirror the Analytics tab's remaining sub-tabs. Pulled directly
+        # from `platform_intel.<key>` jsonb — each is permissive (extra="allow"),
+        # so when a section is populated by ETL it flows through without
+        # schema changes. Empty sections render em-dashes with a
+        # "Data pending" note.
+        "supplier_discovery": pi.get("supplier_discovery") or {},
+        "custom_usage": pi.get("custom_usage") or {},
+        "thought_leadership": pi.get("thought_leadership") or {},
+        "datahub": pi.get("datahub") or {},
+        "cirtuo": pi.get("cirtuo") or {},
+        "nnamu": pi.get("nnamu") or {},
+        "upply": pi.get("upply") or {},
+        "alerts": pi.get("alerts") or {},
+        "platform_training": pi.get("platform_training") or {},
     }
 
 
@@ -479,6 +494,12 @@ def _e(v: Any) -> str:
     if v is None or v == "":
         return "—"
     return _html.escape(str(v))
+
+
+def _titleize(key: str) -> str:
+    """Convert a snake_case dict key into a human-readable Title Case
+    label for the generic module slides."""
+    return " ".join(w.capitalize() for w in str(key).replace("_", " ").split())
 
 
 def _money(v: Any) -> str:
@@ -705,6 +726,7 @@ h3.section{font-size:13px;font-weight:700;color:#001137;
 _ALL_SLIDE_IDS = (
     "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
     "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
+    "s19", "s20", "s21", "s22", "s23", "s24", "s25", "s26", "s27",
 )
 
 
@@ -1060,6 +1082,68 @@ def render_html(
         <tbody>{su_rows}</tbody>
       </table>"""
 
+    # ---- Generic module deep-dive slides (s19-s27) ----
+    # Each pulls from a permissive jsonb section on platform_intel.
+    # _module_slide_body emits a KPI grid from whatever scalar/list fields
+    # the section carries; when the section is empty it shows a pending
+    # message so the BR still renders cleanly.
+
+    def _module_slide_body(payload: dict[str, Any], hint: str) -> str:
+        if not payload:
+            return (
+                '<div style="padding:32px;text-align:center;color:#8496b0;'
+                'font-size:12px;border:1px dashed #c5d0e0;border-radius:8px">'
+                f'<div style="font-weight:700;color:#5a7896;margin-bottom:6px">Data pending</div>'
+                f'<div>{_e(hint)}</div></div>'
+            )
+        scalars = [(k, v) for k, v in payload.items()
+                   if not isinstance(v, (list, dict)) and v not in (None, "")]
+        lists = [(k, v) for k, v in payload.items() if isinstance(v, list) and v]
+        tiles = "".join(_kpi_tile(_titleize(k), _e(v)) for k, v in scalars[:12])
+        list_blocks = ""
+        for k, items in lists[:3]:
+            if items and isinstance(items[0], dict):
+                cols = list(items[0].keys())[:5]
+                rows = "".join(
+                    "<tr>" + "".join(
+                        f'<td>{_e(item.get(c))}</td>' for c in cols
+                    ) + "</tr>"
+                    for item in items[:8]
+                )
+                heads = "".join(f'<th>{_e(_titleize(c))}</th>' for c in cols)
+                list_blocks += (
+                    f'<h3 class="section">{_e(_titleize(k))}</h3>'
+                    f'<table><thead><tr>{heads}</tr></thead>'
+                    f'<tbody>{rows}</tbody></table>'
+                )
+            else:
+                bullets = "".join(f'<div class="bullet">{_e(x)}</div>' for x in items[:10])
+                list_blocks += (
+                    f'<h3 class="section">{_e(_titleize(k))}</h3>{bullets}'
+                )
+        return (
+            f'<div class="grid grid-4">{tiles or "&nbsp;"}</div>{list_blocks}'
+        )
+
+    s19_body = _module_slide_body(s.get("supplier_discovery", {}),
+                                  "Populate platform_intel.supplier_discovery to surface this slide.")
+    s20_body = _module_slide_body(s.get("custom_usage", {}),
+                                  "Populate platform_intel.custom_usage for deeper Custom Credits usage.")
+    s21_body = _module_slide_body(s.get("thought_leadership", {}),
+                                  "Populate platform_intel.thought_leadership for content engagement.")
+    s22_body = _module_slide_body(s.get("datahub", {}),
+                                  "Populate platform_intel.datahub for DataHub adoption metrics.")
+    s23_body = _module_slide_body(s.get("cirtuo", {}),
+                                  "Populate platform_intel.cirtuo for sourcing-strategy stats.")
+    s24_body = _module_slide_body(s.get("nnamu", {}),
+                                  "Populate platform_intel.nnamu for nnamu module engagement.")
+    s25_body = _module_slide_body(s.get("upply", {}),
+                                  "Populate platform_intel.upply for Upply integration usage.")
+    s26_body = _module_slide_body(s.get("alerts", {}),
+                                  "Populate platform_intel.alerts (or surface engagement.alerts breakdown).")
+    s27_body = _module_slide_body(s.get("platform_training", {}),
+                                  "Populate platform_intel.platform_training for training completions.")
+
     selected = _select_slides(slide_ids)
     parts: list[tuple[str, str]] = [
         ("s1", s1),
@@ -1079,6 +1163,15 @@ def render_html(
         ("s16", slide("INDUSTRY BENCHMARK", "Industry Benchmark", s16_body)),
         ("s17", slide("NPS · VOICE OF CUSTOMER", "NPS · Voice of Customer", s17_body)),
         ("s18", slide("SUPER USERS", "Super Users", s18_body)),
+        ("s19", slide("SUPPLIER DISCOVERY", "Supplier Discovery", s19_body)),
+        ("s20", slide("CUSTOM USAGE", "Custom Usage · deep dive", s20_body)),
+        ("s21", slide("THOUGHT LEADERSHIP", "Thought Leadership", s21_body)),
+        ("s22", slide("DATAHUB", "DataHub", s22_body)),
+        ("s23", slide("CIRTUO", "Cirtuo · Sourcing strategy", s23_body)),
+        ("s24", slide("NNAMU", "nnamu", s24_body)),
+        ("s25", slide("UPPLY", "Upply", s25_body)),
+        ("s26", slide("ALERTS", "Alerts", s26_body)),
+        ("s27", slide("PLATFORM TRAINING", "Platform Training", s27_body)),
         ("s12", s12),
     ]
     body = "".join(html for sid, html in parts if sid in selected)
@@ -1483,8 +1576,59 @@ def render_pptx(
                 _fmt(u.get("hours")),
             ]
             for x, val in zip(xs, row, strict=True):
-                bold = x in (0.5,)  # bold the name column only
+                bold = x in (0.5,)
                 _add_text(sl, x, y, 1.8, 0.4, val, size=11, color=DARK, bold=bold)
+
+    # ---- Generic module slides s19-s27 (PPTX) ----
+    # Same data-shape strategy as the HTML side: scalars become KPI tiles,
+    # list-of-dicts become a header-row table. Empty sections show a
+    # "Data pending" callout so the slide still appears in the deck.
+
+    def _pptx_module_slide(sid: str, eyebrow: str, title: str, payload: dict, hint: str) -> None:
+        if sid not in selected:
+            return
+        sl_local = _add_content(eyebrow, title)
+        if not payload:
+            _add_text(sl_local, 0.5, 3.2, 12.3, 0.5,
+                      "Data pending",
+                      size=14, bold=True, color=MUTED, align="center")
+            _add_text(sl_local, 0.5, 3.7, 12.3, 0.4,
+                      hint, size=11, color=MUTED, align="center")
+            return
+        scalars = [(k, v) for k, v in payload.items()
+                   if not isinstance(v, (list, dict)) and v not in (None, "")]
+        for j, (k, v) in enumerate(scalars[:8]):
+            x_loc = 0.5 + (j % 4) * 3.1
+            y_loc = 1.7 + (j // 4) * 1.4
+            _add_kpi(sl_local, x_loc, y_loc, 3.0, _titleize(k), _fmt(v))
+
+    _pptx_module_slide("s19", "Supplier Discovery", "Supplier Discovery",
+                       snapshot.get("supplier_discovery", {}) or {},
+                       "Populate platform_intel.supplier_discovery for this slide.")
+    _pptx_module_slide("s20", "Custom Usage", "Custom Usage · deep dive",
+                       snapshot.get("custom_usage", {}) or {},
+                       "Populate platform_intel.custom_usage for deeper credits usage.")
+    _pptx_module_slide("s21", "Thought Leadership", "Thought Leadership",
+                       snapshot.get("thought_leadership", {}) or {},
+                       "Populate platform_intel.thought_leadership for content engagement.")
+    _pptx_module_slide("s22", "DataHub", "DataHub",
+                       snapshot.get("datahub", {}) or {},
+                       "Populate platform_intel.datahub for adoption metrics.")
+    _pptx_module_slide("s23", "Cirtuo", "Cirtuo · Sourcing strategy",
+                       snapshot.get("cirtuo", {}) or {},
+                       "Populate platform_intel.cirtuo for sourcing strategy stats.")
+    _pptx_module_slide("s24", "nnamu", "nnamu",
+                       snapshot.get("nnamu", {}) or {},
+                       "Populate platform_intel.nnamu for nnamu engagement.")
+    _pptx_module_slide("s25", "Upply", "Upply",
+                       snapshot.get("upply", {}) or {},
+                       "Populate platform_intel.upply for Upply usage.")
+    _pptx_module_slide("s26", "Alerts", "Alerts",
+                       snapshot.get("alerts", {}) or {},
+                       "Populate platform_intel.alerts.")
+    _pptx_module_slide("s27", "Platform Training", "Platform Training",
+                       snapshot.get("platform_training", {}) or {},
+                       "Populate platform_intel.platform_training for completions.")
 
     if "s12" in selected:
         _add_cover(
