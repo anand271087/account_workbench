@@ -1,4 +1,5 @@
 from app.models.account import Account
+from app.models.account_product import AccountProduct
 from app.models.audit import AuditLog
 from app.models.business_review import BusinessReview
 from app.models.checkpoint import Checkpoint
@@ -21,6 +22,7 @@ __all__ = [
     "AccountActivity",
     "AccountEngagement",
     "AccountPlay",
+    "AccountProduct",
     "AccountSolutioning",
     "AuditLog",
     "BusinessReview",

@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import asc, cast, desc, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB
@@ -22,6 +22,7 @@ from sqlalchemy.orm import aliased
 
 from app.core.deps import CurrentUser
 from app.core.rbac import (
+    can_bulk_import,
     can_create_account,
     can_delete_account,
     can_edit_account,
@@ -1034,3 +1035,85 @@ def require_account_access(*, write: bool = False):
         return acc
 
     return _dep
+
+
+# ============================================================
+# POST /accounts/import — bulk XLSX upload (migration 0075)
+# ============================================================
+
+
+@router.post("/import", response_model=dict)
+async def import_accounts(
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+    dry_run: bool = False,
+) -> dict:
+    """Bulk-import accounts from the 5-account XLSX template.
+
+    Dedup rule: existing account with the same (case-insensitive trimmed)
+    name is renamed to "<name>_old" and a fresh row inserted with the
+    incoming data.
+
+    `dry_run=true` returns the parsed-row preview without writing.
+    """
+    if not can_bulk_import(user.role):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Only admin / cs_director / vp_csm can bulk-import accounts",
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
+
+    from app.services.account_import import (  # local import — avoids circular
+        ALL_PRODUCT_KEYS,
+        apply_import,
+        parse_xlsx,
+    )
+
+    try:
+        rows = parse_xlsx(data)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Could not parse XLSX: {e}",
+        )
+
+    preview = [
+        {
+            "row": r.raw_index,
+            "name": r.name,
+            "errors": r.errors,
+            "products_purchased": sum(1 for v in r.products.values() if v is True),
+            "products_unknown": sum(1 for v in r.products.values() if v is None),
+        }
+        for r in rows
+    ]
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "parsed": len(rows),
+            "preview": preview,
+            "products_catalog": ALL_PRODUCT_KEYS,
+        }
+
+    result = await apply_import(db, rows, actor_id=user.id)
+    await db.commit()
+
+    from app.core.scope import invalidate_account
+    for r in result.created:
+        invalidate_account(UUID(r["account_id"]))
+    for r in result.renamed:
+        invalidate_account(UUID(r["old_account_id"]))
+
+    return {
+        "dry_run": False,
+        "parsed": len(rows),
+        "created": result.created,
+        "renamed": result.renamed,
+        "skipped": result.skipped,
+        "errors": result.errors,
+    }
