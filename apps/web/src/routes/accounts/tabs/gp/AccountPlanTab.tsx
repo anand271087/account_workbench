@@ -129,11 +129,12 @@ export default function AccountPlanTab() {
             )}
           </div>
 
-          {/* ACV growth tile (mode-adaptive) */}
-          <AcvTile appetite={appetite} account={account} mode={mode} />
-
-          {/* ARR Growth Tracker — 27-May Row 61: always render. */}
-          <ArrBurnDown appetite={appetite} account={account} />
+          {/* 12-Jun · Stakeholder ask: removed the ARR Growth Tracker
+              and ACV Growth Path tiles — they overlapped with the
+              Pipeline + Appetite-score breakdown elsewhere on the page
+              and were leading the eye to a target the CSM hadn't set.
+              The pipeline value still surfaces inside Expansion Plays
+              and the renewal proximity feeds into the Mode banner. */}
 
           {/* 09-Jun bug (Bug Tracker · Jun-8 #6 part 1) — Product &
               Services Saturation moved ABOVE Expansion Plays (per spec
@@ -508,159 +509,6 @@ function ScoreBreakdownDetails({ appetite }: { appetite: Appetite }) {
 // ============================================================
 // ACV growth tile
 // ============================================================
-
-function AcvTile({
-  appetite,
-  account,
-  mode,
-}: {
-  appetite: Appetite;
-  account: { current_acv: string | null; target_acv: string | null };
-  mode: PlayMode;
-}) {
-  const current = parseFloat(account.current_acv || "0");
-  const target = parseFloat(account.target_acv || "0");
-  const gap = target - current;
-  const pipeline = parseFloat(appetite.breakdown.projected_acv_usd) - current;
-  const pct =
-    current && target ? Math.min(100, Math.round((current / target) * 100)) : 0;
-  const conf = MODE_CONF[mode];
-
-  // Row 56 — for retain + expand show the same 4-tile ACV Growth Path
-  // (Current / Target / Gap / Pipeline). Rescue keeps its at-risk shape.
-  const tiles =
-    mode === "rescue"
-      ? ([
-          ["ACV at Risk", fmtK(current), "#CF4548"],
-          ["Days to Renewal", "—", "#F0BC41"],
-          ["Risk Level", "Elevated", "#CF4548"],
-        ] as Array<[string, string, string]>)
-      : ([
-          ["Current", fmtK(current), "#0d1b2e"],
-          ["Target", target > 0 ? fmtK(target) : fmtK(current), "#6EC457"],
-          [
-            "Gap",
-            gap > 0 ? fmtK(gap) : "Done",
-            gap > 0 ? "#CF4548" : "#6EC457",
-          ],
-          ["Pipeline", fmtK(pipeline), "#C344C7"],
-        ] as Array<[string, string, string]>);
-
-  return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      <div className="text-[13px] font-bold mb-2.5">
-        {mode === "rescue" ? "⚠️ Renewal Risk" : "ACV Growth Path"}
-      </div>
-      <div
-        className={cn(
-          "grid gap-2 mb-2.5",
-          mode === "rescue" ? "grid-cols-3" : "grid-cols-4",
-        )}
-      >
-        {tiles.map(([label, value, col]) => (
-          <div
-            key={label}
-            className="bg-beroe-bg rounded-md px-2 py-2.5 text-center"
-          >
-            <div className="text-[9px] uppercase tracking-wider text-text-muted">
-              {label}
-            </div>
-            <div
-              className="font-bold mt-0.5"
-              style={{ color: col, fontSize: value.length > 12 ? 16 : 22 }}
-            >
-              {value}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="h-3 bg-beroe-bg rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, background: conf.col }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// ARR burn-down
-// ============================================================
-
-function ArrBurnDown({
-  appetite,
-  account,
-}: {
-  appetite: Appetite;
-  account: { current_acv: string | null; tier: string | null; account_type: string | null };
-}) {
-  const bd = appetite.breakdown;
-  const current = parseFloat(account.current_acv || "0");
-  const projected = parseFloat(bd.projected_acv_usd);
-  const target = parseFloat(bd.target_acv_usd);
-  const pct = target > 0 ? Math.min(100, Math.round((projected / target) * 100)) : 0;
-  const isNA = bd.arr_status === "n/a";
-  const statusCol = isNA
-    ? "#94a3b8"
-    : bd.arr_status === "on_track"
-      ? "#6EC457"
-      : bd.arr_status === "behind"
-        ? "#F0BC41"
-        : "#CF4548";
-  const statusLabel = isNA
-    ? "Set a target to track"
-    : bd.arr_status === "on_track"
-      ? "On Track"
-      : bd.arr_status === "behind"
-        ? "Behind Target"
-        : "Declining";
-
-  return (
-    <div className="bg-white border border-beroe-card-border rounded-card p-3.5">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[12px] font-bold">ARR Growth Tracker</div>
-        <span className="text-[10px] text-text-muted">
-          {account.account_type ?? "—"} · {account.tier ?? "—"} · Target:{" "}
-          {bd.arr_target_pct}% ARR growth
-        </span>
-      </div>
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        {[
-          ["Current ACV", fmtK(current), "#0d1b2e"],
-          ["Projected (ACV+Pipeline)", fmtK(projected), "#4A00F8"],
-          [`Target (${bd.arr_target_pct}% growth)`, fmtK(target), "#6EC457"],
-        ].map(([label, value, col]) => (
-          <div key={label} className="bg-beroe-bg rounded-md p-2 text-center">
-            <div className="text-[14px] font-extrabold" style={{ color: col }}>
-              {value}
-            </div>
-            <div className="text-[9px] text-text-muted">{label}</div>
-          </div>
-        ))}
-      </div>
-      <div className="relative h-5.5 bg-beroe-bg rounded-full overflow-visible">
-        <div
-          className="h-full rounded-full transition-all flex items-center justify-end pr-2"
-          style={{ width: `${pct}%`, background: statusCol }}
-        >
-          <span className="text-[9px] font-bold text-white">{pct}%</span>
-        </div>
-        <div
-          className="absolute top-[-3px] right-0 w-0.5 h-7 bg-beroe-green/150 rounded-sm"
-          title="Target"
-        />
-      </div>
-      <div className="flex justify-between text-[10px] text-text-muted mt-1">
-        <span>$0</span>
-        <span style={{ color: statusCol }} className="font-semibold">
-          {statusLabel}
-        </span>
-        <span>{fmtK(target)} target</span>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================
 // Plays list
