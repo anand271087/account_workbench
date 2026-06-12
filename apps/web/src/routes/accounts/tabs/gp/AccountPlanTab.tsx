@@ -2371,114 +2371,75 @@ function AiPlaysList({
   );
 }
 
+// 12-Jun · Informational list of initiatives from peer accounts in the
+// SAME INDUSTRY. No "Add" button per stakeholder ("just list out").
+// Rows show: initiative name + status pill + peer account · peer CSM ·
+// parent goal + optional target + notes.
 function PeerPlaysList({
   plays,
-  accountId,
-  editable,
-  allPlays,
+  accountId: _accountId,
+  editable: _editable,
+  allPlays: _allPlays,
 }: {
   plays: PeerPlaySuggestion[];
   accountId: string;
   editable: boolean;
   allPlays: Play[];
 }) {
-  const qc = useQueryClient();
-  const notify = useNotify();
-  const ownedTitles = new Set(allPlays.map((p) => p.title.toLowerCase().trim()));
-  const addMutation = useMutation({
-    mutationFn: (s: PeerPlaySuggestion) =>
-      api.post(`/api/v1/accounts/${accountId}/plays`, {
-        title: s.name,
-        value_usd: s.median_acv_k * 1000,
-        prob: s.prob_tier === "high" ? 80 : 50,
-        modes: ["expand"],
-        trigger_text: s.rationale,
-      } satisfies PlayCreate),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["plays", accountId] });
-      qc.invalidateQueries({ queryKey: ["appetite", accountId] });
-      notify({ title: "Peer play added to your account plan", tone: "success" });
-    },
-    onError: (e) =>
-      notify({
-        title: "Could not add play",
-        body: e instanceof ApiError ? e.message : "Unknown error",
-        tone: "error",
-      }),
-  });
-
   if (plays.length === 0) {
     return (
       <div className="text-[11px] text-text-muted italic py-4 text-center">
-        No peer plays yet — no other accounts in this cohort have plays recorded.
+        No peer plays yet — no other accounts in your industry have logged
+        initiatives, or the industry on this account isn't set.
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      {plays.map((p, i) => {
-        const pp = probPill(p.prob_tier);
-        const already = ownedTitles.has(p.name.toLowerCase().trim());
+      {plays.map((p) => {
+        const tone = _STATUS_TONE[p.status];
         return (
           <div
             key={p.id}
-            className="rounded-card border bg-white p-3 grid grid-cols-[28px_1fr_84px_70px_60px] gap-2 items-center"
-            style={{ borderLeftWidth: "4px", borderLeftColor: "#4A00F8", borderColor: "var(--card-border, #e4eaf6)" }}
+            className="rounded-card border bg-white p-3"
+            style={{
+              borderLeftWidth: "4px",
+              borderLeftColor: "#4A00F8",
+              borderColor: "#e4eaf6",
+            }}
           >
-            <div
-              className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-extrabold"
-              style={{ background: "#4A00F8" }}
-            >
-              P{i + 1}
-            </div>
-            <div className="min-w-0">
-              <div className="text-[12.5px] font-bold">{p.name}</div>
-              <div className="text-[10.5px] text-text-muted mt-0.5">{p.rationale}</div>
-              <div className="text-[10px] text-text-muted mt-1 flex flex-wrap gap-1.5 items-center">
-                <span
-                  className="w-[18px] h-[18px] rounded-full text-white text-[9px] font-extrabold flex items-center justify-center"
-                  style={{ background: "#4A00F8" }}
-                >
-                  {p.cohort_size}
-                </span>
-                <span>CSMs ran this · {p.cohort}</span>
-                <span
-                  className="text-[9.5px] font-bold rounded px-1.5 py-px"
-                  style={{ background: "#d4f5e5", color: "#146a45" }}
-                >
-                  {p.wins}
-                </span>
+            <div className="flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-bold text-text-primary">
+                  {p.name}
+                </div>
+                <div className="text-[10.5px] text-text-muted mt-1 flex flex-wrap gap-1.5 items-center">
+                  <span>👤</span>
+                  <b className="text-text-secondary">{p.peer_account_name}</b>
+                  <span>· CSM:</span>
+                  <b className="text-text-secondary">{p.peer_csm_name}</b>
+                  <span>· Under goal:</span>
+                  <i>{p.parent_goal_title}</i>
+                  {p.value_target && (
+                    <>
+                      <span>·</span>
+                      <b className="text-text-primary">{p.value_target}</b>
+                    </>
+                  )}
+                </div>
+                {p.notes && (
+                  <div className="text-[10.5px] text-text-muted mt-1.5 italic leading-snug">
+                    {p.notes}
+                  </div>
+                )}
               </div>
-            </div>
-            <div className="text-right font-mono text-[12.5px] font-extrabold">
-              ${p.median_acv_k}K
-              <div className="text-[9px] font-normal text-text-muted font-sans">peer median</div>
-            </div>
-            <span
-              className={cn(
-                "text-[9.5px] font-bold uppercase rounded-full px-2 py-1 text-center",
-                pp.cls,
-              )}
-            >
-              {pp.label}
-            </span>
-            {already ? (
               <span
-                className="text-[10px] font-bold rounded-md px-2 py-1 text-center"
-                style={{ background: "#d4f5e5", color: "#146a45" }}
+                className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide flex-shrink-0"
+                style={{ background: tone.bg, color: tone.fg }}
               >
-                ✓ Added
+                {_STATUS_LABEL[p.status]}
               </span>
-            ) : (
-              <button
-                type="button"
-                disabled={!editable || addMutation.isPending}
-                onClick={() => addMutation.mutate(p)}
-                className="text-[10.5px] font-bold rounded-md px-2 py-1 bg-beroe-blue/10 text-beroe-blue border border-beroe-blue/30 hover:bg-beroe-blue/15 disabled:opacity-50"
-              >
-                + Add
-              </button>
-            )}
+            </div>
           </div>
         );
       })}

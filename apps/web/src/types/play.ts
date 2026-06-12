@@ -187,15 +187,24 @@ export interface AiPlaySuggestion {
   prob_tier: "high" | "med" | "low";
 }
 
+// 12-Jun · Shape change: From-Peer-CSMs tab now lists initiatives
+// from other accounts in the SAME INDUSTRY (was: same industry+tier
+// aggregated plays). One row per initiative, with peer-account + peer-CSM
+// + parent-goal attribution.
 export interface PeerPlaySuggestion {
   id: string;
   name: string;
-  cohort_size: number;
-  cohort: string;
-  median_acv_k: number;
-  wins: string;
-  prob_tier: "high" | "med" | "low";
-  rationale: string;
+  status:
+    | "identification"
+    | "pipeline"
+    | "in_progress"
+    | "delivered"
+    | "not_started";
+  peer_account_name: string;
+  peer_csm_name: string;
+  parent_goal_title: string;
+  value_target: string | null;
+  notes: string | null;
 }
 
 export interface GrowthContext {

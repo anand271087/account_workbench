@@ -217,57 +217,114 @@ def _build_ai_plays(self_acc: Account, peers: list[Account]) -> list[dict[str, A
     return suggestions[:4]
 
 
-async def _build_peer_plays(
-    db: AsyncSession, self_acc: Account, peers: list[Account]
-) -> list[dict[str, Any]]:
-    """Cross-account play library — pull AccountPlays from peer accounts
-    sorted by value_usd desc; group by title to aggregate cohort_size +
-    wins + median value.
-    """
-    if not peers:
+async def _fetch_industry_peers(
+    db: AsyncSession, acc: Account
+) -> list[Account]:
+    """Same-industry peer accounts, excluding self. Distinct from
+    _fetch_cohort (industry + tier) — the Peer-CSM plays panel uses
+    industry-only per stakeholder ask 12-Jun: "list down the plays /
+    initiatives that other csm done for other accounts on the same
+    industry". Tier isn't relevant here — we want to see what peers
+    in the same industry are doing regardless of size band."""
+    if not acc.industry:
         return []
-    peer_ids = [p.id for p in peers]
     rs = await db.execute(
-        select(AccountPlay).where(
+        select(Account).where(
             and_(
-                AccountPlay.account_id.in_(peer_ids),
-                AccountPlay.hidden.is_(False),
-                AccountPlay.value_usd.isnot(None),
+                Account.industry == acc.industry,
+                Account.id != acc.id,
+                Account.deleted_at.is_(None),
             )
         )
     )
-    plays = list(rs.scalars().all())
-    if not plays:
+    return list(rs.scalars().all())
+
+
+# Initiative status → numeric sort key so the From-Peer list reads
+# delivered-first (most actionable) → identification last.
+_STATUS_ORDER: dict[str, int] = {
+    "delivered": 0,
+    "in_progress": 1,
+    "pipeline": 2,
+    "identification": 3,
+    "not_started": 4,
+}
+
+
+async def _build_peer_plays(
+    db: AsyncSession, self_acc: Account, _legacy_peers: list[Account]
+) -> list[dict[str, Any]]:
+    """Cross-account initiative library. Returns initiatives that other
+    CSMs are running on same-industry accounts (≠ self).
+
+    12-Jun: data source switched from account_plays (now empty after
+    migration 0076) to cs_goals[*].initiatives. Cohort widened from
+    (industry+tier) to industry-only per stakeholder. Includes initiatives
+    from auto-created "Migrated expansion plays" goals — peer CSMs who
+    haven't re-homed their migrated plays still surface here.
+    """
+    from app.models.cs_goal import CSGoal
+    from app.models.user import User
+
+    peers = await _fetch_industry_peers(db, self_acc)
+    if not peers:
         return []
 
-    # Aggregate by lowercased title — multiple peer CSMs running the
-    # same play converge into one row with cohort attribution.
-    by_title: dict[str, list[AccountPlay]] = {}
-    for pl in plays:
-        key = _normalize(pl.title)
-        by_title.setdefault(key, []).append(pl)
+    peer_id_to_account: dict[Any, Account] = {p.id: p for p in peers}
+
+    # Resolve CSM names in one batch query so we don't N+1.
+    csm_ids = [p.csm_user_id for p in peers if p.csm_user_id]
+    name_by_csm: dict[Any, str | None] = {}
+    if csm_ids:
+        u_rows = (
+            await db.execute(
+                select(User.id, User.full_name).where(User.id.in_(csm_ids))
+            )
+        ).all()
+        name_by_csm = {uid: name for uid, name in u_rows}
+
+    # Fetch all live goals for peer accounts in one query.
+    goal_rows = (
+        await db.execute(
+            select(CSGoal).where(
+                CSGoal.account_id.in_(list(peer_id_to_account.keys())),
+                CSGoal.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
 
     out: list[dict[str, Any]] = []
-    for _key, group in by_title.items():
-        values = [float(p.value_usd or 0) for p in group]
-        values.sort()
-        median = values[len(values) // 2] if values else 0.0
-        # Treat prob >= 80 as a win (Closed Won-ish band)
-        wins = sum(1 for p in group if (p.prob or 0) >= 80)
-        sample = group[0]
-        out.append({
-            "id": f"PEER-{sample.id}",
-            "name": sample.title,
-            "cohort_size": len(group),
-            "cohort": _cohort_label(self_acc, 0),
-            "median_acv_k": int(round(median / 1000)),
-            "wins": f"{wins} won · {int(round(wins / len(group) * 100))}%",
-            "prob_tier": "high" if wins / len(group) >= 0.6 else "med",
-            "rationale": sample.trigger_text or "Played by peer CSMs in your cohort.",
-        })
+    for goal in goal_rows:
+        peer_acc = peer_id_to_account.get(goal.account_id)
+        if not peer_acc:
+            continue
+        peer_csm = (
+            name_by_csm.get(peer_acc.csm_user_id)
+            if peer_acc.csm_user_id else None
+        ) or peer_acc.csm_owner_name  # fall back to free-text name
+        for idx, init in enumerate(goal.initiatives or []):
+            if not isinstance(init, dict):
+                continue
+            name = init.get("name") or init.get("title")  # title is legacy
+            if not name:
+                continue
+            status = init.get("status", "identification")
+            out.append({
+                "id": f"PEER-{goal.id}-{idx}",
+                "name": name,
+                "status": status,
+                "peer_account_name": peer_acc.name,
+                "peer_csm_name": peer_csm or "—",
+                "parent_goal_title": goal.title,
+                "value_target": init.get("value_target"),
+                "notes": init.get("notes"),
+            })
 
-    out.sort(key=lambda r: (-r["cohort_size"], -r["median_acv_k"]))
-    return out[:6]
+    # Sort: delivered → in_progress → pipeline → identification.
+    # Within each band, alphabetical by name for stable ordering.
+    out.sort(key=lambda r: (_STATUS_ORDER.get(r["status"], 9), r["name"].lower()))
+
+    return out[:20]
 
 
 async def build_growth_context(db: AsyncSession, acc: Account) -> dict[str, Any]:
