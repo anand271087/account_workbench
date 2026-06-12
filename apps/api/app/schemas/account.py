@@ -47,6 +47,20 @@ class AccountListItem(BaseModel):
     overdue_checkpoint_count: int = 0
     dr_outcome: str | None = None        # M23 final outcome if set
 
+    # 12-Jun · migration 0075 — real-data fields surfaced on the list.
+    sector: str | None = None
+    revenue_bucket: str | None = None
+    renewal_risk: str | None = None      # Low | Medium | High | None
+    category_count: int | None = None
+    supplier_count: int | None = None
+    platform_status: str | None = None   # Active | Inactive | None
+    subscription_plan: str | None = None
+    is_fortune_500: bool = False
+    is_focus_region: bool = False
+    is_focus_industry: bool = False
+    procurement_maturity: str | None = None
+    genai_adoption: str | None = None
+
     model_config = {"from_attributes": True}
 
 

@@ -35,8 +35,14 @@ _CACHE: dict[UUID, tuple[float, dict]] = {}
 _TTL_SECONDS = 30.0
 _FIELDS = (
     "id", "name", "slug", "industry", "region", "country",
-    # M16.1 — header chips applied from MoM extraction.
-    "headquarters", "annual_revenue_text", "sf_link",
+    # M16.1 — header chips applied from MoM extraction. `headquarters`
+    # dropped 12-Jun (migration 0075).
+    "annual_revenue_text", "sf_link",
+    # 12-Jun · migration 0075 — onboarding-import fields.
+    "client_priority", "platform_status", "subscription_plan",
+    "category_count", "supplier_count", "sector", "revenue_bucket",
+    "renewal_risk", "is_fortune_500", "is_focus_region", "is_focus_industry",
+    "procurement_maturity", "genai_adoption",
     # 05-Jun · Intelligence — canonical Redshift companyname.
     "redshift_company_name",
     "csm_user_id", "co_user_id", "category", "tier",

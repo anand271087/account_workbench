@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core import redshift as redshift_core
 from app.core import bifrost as bifrost_core
+from app.routes import account_products as account_product_routes
 from app.routes import accounts as account_routes
 from app.routes import auth as auth_routes
 from app.routes import business_reviews as business_review_routes
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_routes.router)
     app.include_router(account_routes.router)
+    app.include_router(account_product_routes.router)
     app.include_router(user_routes.router)
     app.include_router(engagement_routes.router)
     app.include_router(engagement_routes.ai_router)

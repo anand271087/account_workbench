@@ -30,6 +30,19 @@ export interface AccountListItem {
   next_checkpoint_days_until: number | null;
   overdue_checkpoint_count: number;
   dr_outcome: "renewed" | "at_risk" | "not_renewed" | "undecided" | null;
+  // 12-Jun · migration 0075 onboarding-import fields
+  sector: string | null;
+  revenue_bucket: string | null;
+  renewal_risk: "Low" | "Medium" | "High" | null;
+  category_count: number | null;
+  supplier_count: number | null;
+  platform_status: "Active" | "Inactive" | null;
+  subscription_plan: string | null;
+  is_fortune_500: boolean;
+  is_focus_region: boolean;
+  is_focus_industry: boolean;
+  procurement_maturity: "Low" | "Medium" | "High" | null;
+  genai_adoption: "Low" | "Medium" | "High" | null;
 }
 
 export interface AccountListResponse {
@@ -47,9 +60,24 @@ export interface AccountDetail {
   region: string | null;
   country: string | null;
   // M16.1 — MoM-extraction header chips applied via PATCH /accounts/:id.
+  // `headquarters` always null after migration 0075 — kept for back-compat.
   headquarters: string | null;
   annual_revenue_text: string | null;
   sf_link: string | null;
+  // 12-Jun · migration 0075 onboarding-import fields
+  client_priority: string | null;
+  platform_status: "Active" | "Inactive" | null;
+  subscription_plan: string | null;
+  category_count: number | null;
+  supplier_count: number | null;
+  sector: string | null;
+  revenue_bucket: string | null;
+  renewal_risk: "Low" | "Medium" | "High" | null;
+  is_fortune_500: boolean;
+  is_focus_region: boolean;
+  is_focus_industry: boolean;
+  procurement_maturity: "Low" | "Medium" | "High" | null;
+  genai_adoption: "Low" | "Medium" | "High" | null;
   // 05-Jun · Intelligence & Reports — canonical Redshift companyname.
   redshift_company_name: string | null;
   csm_user_id: string | null;

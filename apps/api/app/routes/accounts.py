@@ -207,6 +207,19 @@ async def list_accounts(
                 next_checkpoint_days_until=roll.get("next_checkpoint_days_until"),
                 overdue_checkpoint_count=roll.get("overdue_checkpoint_count", 0),
                 dr_outcome=a.dr_outcome,
+                # 12-Jun · migration 0075 fields
+                sector=a.sector,
+                revenue_bucket=a.revenue_bucket,
+                renewal_risk=a.renewal_risk,
+                category_count=a.category_count,
+                supplier_count=a.supplier_count,
+                platform_status=a.platform_status,
+                subscription_plan=a.subscription_plan,
+                is_fortune_500=a.is_fortune_500,
+                is_focus_region=a.is_focus_region,
+                is_focus_industry=a.is_focus_industry,
+                procurement_maturity=a.procurement_maturity,
+                genai_adoption=a.genai_adoption,
             )
         )
 
@@ -486,10 +499,26 @@ async def get_account(
     return AccountDetail(
         id=a.id, name=a.name, slug=a.slug,
         industry=a.industry, region=a.region, country=a.country,
-        headquarters=a.headquarters,
+        # headquarters column dropped by migration 0075 — surface as
+        # null for back-compat with any frontend reading it.
+        headquarters=None,
         annual_revenue_text=a.annual_revenue_text,
         sf_link=a.sf_link,
         redshift_company_name=a.redshift_company_name,
+        # 12-Jun · migration 0075 fields
+        client_priority=a.client_priority,
+        platform_status=a.platform_status,
+        subscription_plan=a.subscription_plan,
+        category_count=a.category_count,
+        supplier_count=a.supplier_count,
+        sector=a.sector,
+        revenue_bucket=a.revenue_bucket,
+        renewal_risk=a.renewal_risk,
+        is_fortune_500=a.is_fortune_500,
+        is_focus_region=a.is_focus_region,
+        is_focus_industry=a.is_focus_industry,
+        procurement_maturity=a.procurement_maturity,
+        genai_adoption=a.genai_adoption,
         csm_user_id=a.csm_user_id, co_user_id=a.co_user_id,
         csm_full_name=row[1], co_full_name=row[4],
         category=a.category, tier=a.tier,
@@ -1000,6 +1029,13 @@ async def _get_one_as_listitem(db: AsyncSession, account_id: UUID, user: User) -
         days_to_renewal=(a.renewal_date - today).days if a.renewal_date else None,
         health_score=a.health_score, last_activity_at=a.last_activity_at,
         is_editable=can_edit_account(user.role, is_assigned=is_assigned, is_team=is_team),
+        # 12-Jun · migration 0075 fields
+        sector=a.sector, revenue_bucket=a.revenue_bucket, renewal_risk=a.renewal_risk,
+        category_count=a.category_count, supplier_count=a.supplier_count,
+        platform_status=a.platform_status, subscription_plan=a.subscription_plan,
+        is_fortune_500=a.is_fortune_500, is_focus_region=a.is_focus_region,
+        is_focus_industry=a.is_focus_industry,
+        procurement_maturity=a.procurement_maturity, genai_adoption=a.genai_adoption,
     )
 
 

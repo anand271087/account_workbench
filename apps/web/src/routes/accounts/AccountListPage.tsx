@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/components/AuthProvider";
 import { ReassignOwnerModal } from "@/components/ReassignOwnerModal";
 import { StarButton } from "@/components/StarButton";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useFavoriteAccounts } from "@/lib/use-favorites";
 import { cn } from "@/lib/utils";
 import { useNotify } from "@/components/DialogProvider";
@@ -83,6 +83,7 @@ export default function AccountListPage() {
   const canCreateAccount =
     me?.user.role === "admin" || me?.user.role === "cs_director" || me?.user.role === "vp_csm";
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const [searchInput, setSearchInput] = useState(q);
 
@@ -166,6 +167,14 @@ export default function AccountListPage() {
           <div className="flex items-center gap-3">
             {isFetching && !isLoading && (
               <div className="text-xs text-text-muted">Refreshing…</div>
+            )}
+            {canCreateAccount && (
+              <button
+                onClick={() => setImportOpen(true)}
+                className="px-3 py-1.5 rounded-lg border border-beroe-card-border bg-white text-sm font-semibold text-text-primary hover:bg-beroe-bg/60"
+              >
+                📥 Import accounts
+              </button>
             )}
             {canCreateAccount && (
               <button
@@ -468,6 +477,15 @@ export default function AccountListPage() {
             onCreated={(newId) => {
               setCreateOpen(false);
               navigate(`/accounts/${newId}/overview`);
+            }}
+          />
+        )}
+        {importOpen && canCreateAccount && (
+          <ImportAccountsModal
+            onClose={() => setImportOpen(false)}
+            onImported={() => {
+              setImportOpen(false);
+              qc.invalidateQueries({ queryKey: ["accounts"] });
             }}
           />
         )}
@@ -1293,3 +1311,269 @@ function ModalField({ label, full, children }: { label: string; full?: boolean; 
 
 const modalInputCls =
   "w-full px-3 py-1.5 rounded-lg border border-beroe-card-border text-sm focus:outline-none focus:border-beroe-blue";
+
+
+// ============================================================
+// Import Accounts modal (bulk XLSX upload — migration 0075)
+// ============================================================
+
+type ImportPreviewRow = {
+  row: number;
+  name: string | null;
+  errors: string[];
+  products_purchased: number;
+  products_unknown: number;
+};
+type ImportPreview = {
+  parsed: number;
+  preview: ImportPreviewRow[];
+};
+type ImportFinalRow = {
+  row: number;
+  name: string;
+  account_id?: string;
+  slug?: string;
+  old_renamed_to?: string;
+  reason?: string;
+};
+type ImportFinal = {
+  parsed: number;
+  created: ImportFinalRow[];
+  renamed: ImportFinalRow[];
+  skipped: ImportFinalRow[];
+  errors: ImportFinalRow[];
+};
+
+function ImportAccountsModal({
+  onClose,
+  onImported,
+}: {
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const notify = useNotify();
+  const [file, setFile] = useState<File | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [committing, setCommitting] = useState(false);
+  const [result, setResult] = useState<ImportFinal | null>(null);
+
+  async function doPreview(f: File) {
+    setPreviewing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const r = await api.postForm<ImportPreview>(
+        "/api/v1/accounts/import?dry_run=true", fd,
+      );
+      setPreview(r);
+    } catch (e) {
+      const err = e as ApiError;
+      notify({ title: "Could not parse file", body: err.message, tone: "error" });
+      setFile(null);
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function doImport() {
+    if (!file) return;
+    setCommitting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await api.postForm<ImportFinal>("/api/v1/accounts/import", fd);
+      setResult(r);
+      notify({
+        title: "Import complete",
+        body: `${r.created.length} created · ${r.renamed.length} renamed · ${r.errors.length} errors`,
+        tone: r.errors.length ? "warning" : "success",
+      });
+    } catch (e) {
+      const err = e as ApiError;
+      notify({ title: "Import failed", body: err.message, tone: "error" });
+    } finally {
+      setCommitting(false);
+    }
+  }
+
+  function onFilePicked(f: File | null) {
+    setFile(f);
+    setPreview(null);
+    setResult(null);
+    if (f) doPreview(f);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-3 border-b border-beroe-card-border flex items-center">
+          <div className="font-bold text-base">Import accounts from XLSX</div>
+          <span className="flex-1" />
+          <button
+            onClick={onClose}
+            className="text-text-muted hover:text-text-primary text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="p-5 overflow-y-auto flex-1">
+          {!result && (
+            <>
+              <label className="block">
+                <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted mb-1">
+                  XLSX file
+                </div>
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm border border-beroe-card-border rounded-lg p-2"
+                />
+                <div className="text-[11px] text-text-muted mt-1">
+                  Expects the canonical column shape (Client Name in row 4 or earlier;
+                  data rows below). Existing accounts with the same name will be
+                  renamed to "&lt;name&gt;_old" and a fresh row inserted.
+                </div>
+              </label>
+
+              {previewing && (
+                <div className="mt-3 text-sm text-text-muted">Parsing…</div>
+              )}
+
+              {preview && (
+                <div className="mt-4">
+                  <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted mb-2">
+                    Preview · {preview.parsed} rows parsed
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-beroe-bg text-text-muted uppercase tracking-wide text-[10px] font-bold">
+                        <th className="px-2 py-1.5 text-left">Row</th>
+                        <th className="px-2 py-1.5 text-left">Client Name</th>
+                        <th className="px-2 py-1.5 text-right">Products: ✓ / ?</th>
+                        <th className="px-2 py-1.5 text-left">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.preview.map((p) => (
+                        <tr key={p.row} className="border-b border-beroe-card-border">
+                          <td className="px-2 py-1.5">{p.row}</td>
+                          <td className="px-2 py-1.5 font-semibold">{p.name ?? "—"}</td>
+                          <td className="px-2 py-1.5 text-right">
+                            <span className="text-beroe-green font-bold">
+                              {p.products_purchased}
+                            </span>
+                            {" / "}
+                            <span className="text-text-muted">{p.products_unknown}</span>
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {p.errors.length === 0 ? (
+                              <span className="text-text-muted">—</span>
+                            ) : (
+                              p.errors.map((e, i) => (
+                                <div key={i} className="text-beroe-red">
+                                  {e}
+                                </div>
+                              ))
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {result && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted mb-2">
+                Result · {result.parsed} rows parsed
+              </div>
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="bg-beroe-bg rounded-md p-2.5 text-center">
+                  <div className="text-2xl font-bold text-beroe-green">
+                    {result.created.length}
+                  </div>
+                  <div className="text-[10px] uppercase text-text-muted">Created</div>
+                </div>
+                <div className="bg-beroe-bg rounded-md p-2.5 text-center">
+                  <div className="text-2xl font-bold text-beroe-amber">
+                    {result.renamed.length}
+                  </div>
+                  <div className="text-[10px] uppercase text-text-muted">Renamed (old)</div>
+                </div>
+                <div className="bg-beroe-bg rounded-md p-2.5 text-center">
+                  <div className="text-2xl font-bold text-beroe-red">
+                    {result.errors.length}
+                  </div>
+                  <div className="text-[10px] uppercase text-text-muted">Errors</div>
+                </div>
+              </div>
+              {result.renamed.length > 0 && (
+                <div className="text-xs">
+                  <div className="font-bold mb-1">Renamed accounts</div>
+                  <ul className="list-disc ml-5 text-text-muted mb-3">
+                    {result.renamed.map((r) => (
+                      <li key={r.row}>
+                        Row {r.row} · &quot;{r.name}&quot; — old row renamed to{" "}
+                        &quot;{r.old_renamed_to}&quot;
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {result.errors.length > 0 && (
+                <div className="text-xs">
+                  <div className="font-bold mb-1">Errors</div>
+                  <ul className="list-disc ml-5 text-beroe-red mb-3">
+                    {result.errors.map((r) => (
+                      <li key={r.row}>
+                        Row {r.row} · {r.name ?? "—"} · {r.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-beroe-card-border flex justify-end gap-2 bg-beroe-bg/40">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg border border-beroe-card-border bg-white text-sm font-semibold"
+          >
+            {result ? "Close" : "Cancel"}
+          </button>
+          {!result && (
+            <button
+              onClick={doImport}
+              disabled={!file || !preview || committing || previewing}
+              className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold disabled:opacity-60"
+            >
+              {committing ? "Importing…" : `Import ${preview?.parsed ?? 0} rows →`}
+            </button>
+          )}
+          {result && (
+            <button
+              onClick={onImported}
+              className="px-4 py-1.5 rounded-lg bg-beroe-blue text-white text-sm font-semibold"
+            >
+              Done · refresh list
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
