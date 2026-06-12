@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ import {
   type ExtractedGoal,
   type CSGoalCategory,
 } from "@/types/cs_goals_extraction";
+import type { CSGoal } from "@/types/cs_goal";
 
 type RowStatus = "idle" | "running" | "done" | "skipped" | "failed";
 
@@ -56,6 +57,25 @@ export function VpdGoalsExtractionReview({
 }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
+
+  // 12-Jun bug 258 — Fetch existing goals so we can grey out candidates
+  // whose title already exists on the account. Comparison is
+  // case-insensitive on the trimmed title. Pre-existing rows render
+  // disabled + de-selected so re-applying never tries to re-create them.
+  const existingGoalsQ = useQuery<{ items: CSGoal[] }>({
+    queryKey: ["cs-goals", accountId, false],
+    queryFn: () =>
+      api.get(`/api/v1/accounts/${accountId}/cs-goals?include_deleted=false`),
+  });
+  const existingTitles = useMemo(() => {
+    const set = new Set<string>();
+    (existingGoalsQ.data?.items ?? []).forEach((g) => {
+      const t = (g.title ?? "").trim().toLowerCase();
+      if (t) set.add(t);
+    });
+    return set;
+  }, [existingGoalsQ.data]);
+
   const [rows, setRows] = useState<RowState[]>(() =>
     result.goals.map((g) => ({
       ...g,
@@ -64,6 +84,11 @@ export function VpdGoalsExtractionReview({
     })),
   );
   const [running, setRunning] = useState(false);
+
+  // 12-Jun bug 258 — once existingTitles loads, mark any row whose title
+  // already exists as not-selected so the Create-selected count is honest.
+  const alreadyExists = (title: string | null | undefined) =>
+    existingTitles.has((title ?? "").trim().toLowerCase());
 
   const summary = useMemo(() => {
     const sel = rows.filter((r) => r._selected).length;
@@ -77,9 +102,14 @@ export function VpdGoalsExtractionReview({
 
   const onCreateSelected = async () => {
     setRunning(true);
+    // 12-Jun bug 258 — Already-existing rows can't be selected (checkbox
+    // disabled) but defend in depth here too in case state drifts.
     const targets = rows
       .map((r, i) => ({ r, i }))
-      .filter(({ r }) => r._selected && r._status !== "done");
+      .filter(
+        ({ r }) =>
+          r._selected && r._status !== "done" && !alreadyExists(r.title),
+      );
     targets.forEach(({ i }) => updateRow(i, { _status: "running", _message: undefined }));
 
     await Promise.allSettled(
@@ -161,25 +191,36 @@ export function VpdGoalsExtractionReview({
           </button>
         </div>
 
-        {/* 12-Jun bug 227 — Select-all toolbar. Harish asked for a way
-            to toggle every candidate in one click instead of ticking
-            them one by one. Master checkbox flips every row's _selected;
-            'indeterminate' visual when some-but-not-all are picked. */}
+        {/* 12-Jun bug 227 — Select-all toolbar. Master checkbox flips
+            every eligible row's _selected; 'indeterminate' visual when
+            some-but-not-all are picked.
+            12-Jun bug 258 — Already-existing rows are excluded from the
+            count + toggle so the master checkbox represents only rows
+            that CAN be created. */}
         {rows.length > 0 && (
           <div className="px-5 py-2 border-b border-beroe-card-border bg-beroe-bg/40 flex items-center gap-2">
             <input
               type="checkbox"
               ref={(el) => {
                 if (el) {
-                  const total = rows.length;
-                  const sel = rows.filter((r) => r._selected).length;
-                  el.indeterminate = sel > 0 && sel < total;
+                  const eligible = rows.filter((r) => !alreadyExists(r.title));
+                  const sel = eligible.filter((r) => r._selected).length;
+                  el.indeterminate = sel > 0 && sel < eligible.length;
                 }
               }}
-              checked={rows.length > 0 && rows.every((r) => r._selected)}
+              checked={
+                rows.filter((r) => !alreadyExists(r.title)).length > 0 &&
+                rows
+                  .filter((r) => !alreadyExists(r.title))
+                  .every((r) => r._selected)
+              }
               onChange={(e) => {
                 const next = e.target.checked;
-                setRows((prev) => prev.map((r) => ({ ...r, _selected: next })));
+                setRows((prev) =>
+                  prev.map((r) =>
+                    alreadyExists(r.title) ? r : { ...r, _selected: next },
+                  ),
+                );
               }}
               disabled={running}
               className="cursor-pointer"
@@ -189,7 +230,7 @@ export function VpdGoalsExtractionReview({
               htmlFor="goals-select-all"
               className="text-[12px] font-semibold text-text-secondary cursor-pointer select-none"
             >
-              Select all ({rows.length})
+              Select all ({rows.filter((r) => !alreadyExists(r.title)).length})
             </label>
           </div>
         )}
@@ -207,6 +248,7 @@ export function VpdGoalsExtractionReview({
                 row={r}
                 onChange={(patch) => updateRow(i, patch)}
                 disabled={running}
+                existsAlready={alreadyExists(r.title)}
               />
             ))
           )}
@@ -305,31 +347,38 @@ function GoalRow({
   row,
   onChange,
   disabled,
+  existsAlready,
 }: {
   row: RowState;
   onChange: (p: Partial<RowState>) => void;
   disabled: boolean;
+  // 12-Jun bug 258 — true when a cs_goal with the same title already
+  // exists on the account. Row renders disabled + dimmed + pill.
+  existsAlready?: boolean;
 }) {
   return (
     <div
       className={cn(
         "border rounded-md p-3 transition-colors",
-        row._status === "done"
-          ? "border-beroe-green/40 bg-beroe-green/15/40"
-          : row._status === "failed"
-            ? "border-beroe-red/40 bg-beroe-red/10/40"
-            : row._status === "skipped"
-              ? "border-beroe-card-border bg-beroe-bg"
-              : "border-beroe-card-border bg-white",
+        existsAlready
+          ? "border-beroe-card-border bg-beroe-bg opacity-60"
+          : row._status === "done"
+            ? "border-beroe-green/40 bg-beroe-green/15/40"
+            : row._status === "failed"
+              ? "border-beroe-red/40 bg-beroe-red/10/40"
+              : row._status === "skipped"
+                ? "border-beroe-card-border bg-beroe-bg"
+                : "border-beroe-card-border bg-white",
       )}
     >
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
-          checked={row._selected}
+          checked={row._selected && !existsAlready}
           onChange={(e) => onChange({ _selected: e.target.checked })}
-          disabled={disabled || row._status === "done"}
+          disabled={disabled || row._status === "done" || existsAlready}
           className="mt-1.5"
+          title={existsAlready ? "A goal with this title already exists on this account" : undefined}
         />
         <div className="flex-1 space-y-2">
           <div className="flex items-start justify-between gap-3">
@@ -342,13 +391,20 @@ function GoalRow({
               className="flex-1 text-[13px] font-medium border-b border-transparent focus:border-beroe-card-border focus:outline-none px-1 py-0.5"
             />
             <div className="flex gap-1.5 flex-shrink-0">
+              {/* 12-Jun bug 258 — existing-on-account pill takes precedence
+                  over confidence so the user knows why the row is greyed. */}
+              {existsAlready && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-semibold bg-beroe-bg text-text-muted border-beroe-card-border">
+                  Already exists
+                </span>
+              )}
               {/* 10-Jun · Manual rows added via the footer button get
                   an "✋ Manual" chip in place of the AI confidence pill. */}
               {row._source === "manual" ? (
                 <span className="text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-semibold bg-beroe-blue/10 text-beroe-blue border-beroe-blue/30">
                   ✋ Manual
                 </span>
-              ) : row.confidence && (
+              ) : !existsAlready && row.confidence && (
                 <span
                   className={cn(
                     "text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider font-semibold",
