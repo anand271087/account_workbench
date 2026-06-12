@@ -19,17 +19,18 @@ import {
   ACTIVITY_TYPES,
   IMPACT_LABELS,
   SIG_CONF,
-  SIGNAL_IMPACTS,
   SIGNAL_TYPES,
   type Activity,
   type ActivityCreate,
   type ActivityListResponse,
   type ActivityType,
-  type SignalImpact,
   type SoftSignal,
   type SoftSignalCreate,
   type SoftSignalListResponse,
 } from "@/types/signal";
+// 12-Jun bug 255 — SIGNAL_IMPACTS + SignalImpact imports dropped after
+// the Impact select was removed from the Add-Signal modal. IMPACT_LABELS
+// is still needed to render the impact value on existing signals.
 
 export default function SignalsActivityTab() {
   const account = useAccountFromLayout();
@@ -411,22 +412,12 @@ function AddSignalModal({
             className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
           />
         </FormRow>
-        <div className="grid grid-cols-2 gap-2">
-          <FormRow label="Impact">
-            <select
-              value={form.impact ?? "medium"}
-              onChange={(e) =>
-                setForm({ ...form, impact: e.target.value as SignalImpact })
-              }
-              className="w-full text-[12px] border border-beroe-card-border rounded-md px-2 py-1.5"
-            >
-              {SIGNAL_IMPACTS.map((i) => (
-                <option key={i} value={i}>
-                  {IMPACT_LABELS[i]}
-                </option>
-              ))}
-            </select>
-          </FormRow>
+        <div className="grid grid-cols-1 gap-2">
+          {/* 12-Jun bug 255 — "Impact" select removed from the Add-Signal
+              modal. The Signal Type pill (risk / critical / positive /
+              expansion / neutral) already conveys the same dimension;
+              the duplicate field caused confusion. Default impact still
+              writes as "medium" on the backend payload. */}
           {/* 29-May bug 29-49 — "Date noticed" renamed to "Valid until"
               per stakeholder feedback. Same date column under the hood. */}
           <FormRow label="Valid until">
@@ -480,7 +471,7 @@ function ActivityCard({ accountId }: { accountId: string }) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[14px] font-bold">💬 Activity Feed</div>
+        <div className="text-[14px] font-bold">💬 Touchpoint Feed</div>
         {editable && (
           <button
             onClick={() => setShowLog(true)}

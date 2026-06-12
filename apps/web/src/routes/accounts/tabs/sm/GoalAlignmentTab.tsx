@@ -1130,18 +1130,10 @@ function StakeholderEditPanel({
     phone: stk.commercial?.phone ?? "",
   });
 
-  // Client-side same-name guard mirrors the backend dedup_check so the
-  // user sees the conflict before they click Save.
-  const localDupName = useMemo(() => {
-    const a = (spoc.name ?? "").trim().toLowerCase();
-    const b = (budget.name ?? "").trim().toLowerCase();
-    return !!a && !!b && a === b;
-  }, [spoc.name, budget.name]);
-  const localDupEmail = useMemo(() => {
-    const a = (spoc.email ?? "").trim().toLowerCase();
-    const b = (budget.email ?? "").trim().toLowerCase();
-    return !!a && !!b && a === b;
-  }, [spoc.email, budget.email]);
+  // 12-Jun bug 239 — Same-person guard removed. Stakeholder feedback:
+  // POC / Budget Owner / Primary Contact can legitimately be the same
+  // individual at the client. Removed both the local checks AND the
+  // backend `_dedup_check` it mirrored.
 
   const save = useMutation({
     mutationFn: () =>
@@ -1159,7 +1151,6 @@ function StakeholderEditPanel({
       ? save.error.message
       : "Couldn't save stakeholders — please try again."
     : null;
-  const localBlocked = localDupName || localDupEmail;
 
   return (
     <div
@@ -1204,7 +1195,7 @@ function StakeholderEditPanel({
         CXO/VP/Director). To add or edit power users, head to the Pre-Sales →
         Client Contacts shortcut.
       </div>
-      {(errMsg || localBlocked) && (
+      {errMsg && (
         <div
           className="rounded-card px-3 py-2 mb-2.5 text-[11.5px]"
           style={{
@@ -1214,11 +1205,7 @@ function StakeholderEditPanel({
             fontWeight: 600,
           }}
         >
-          {localDupName
-            ? "SPOC and Budget Owner can't share the same name — they need to be different people."
-            : localDupEmail
-              ? "SPOC and Budget Owner can't share the same email — they need to be different people."
-              : errMsg}
+          {errMsg}
         </div>
       )}
       <div className="flex justify-end gap-2">
@@ -1240,12 +1227,7 @@ function StakeholderEditPanel({
             save.reset();
             save.mutate();
           }}
-          disabled={save.isPending || localBlocked}
-          title={
-            localBlocked
-              ? "Resolve the duplicate first"
-              : undefined
-          }
+          disabled={save.isPending}
           className="text-[12px] font-semibold px-3 py-1.5 rounded-card text-white disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: BRAND.indigo }}
         >
