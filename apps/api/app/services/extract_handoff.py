@@ -192,14 +192,43 @@ _MODULE_VOCAB = [
     "Supply Chain Risk",
 ]
 
+# 13-Jun bug 229 — Beroe contracts use varied phrasings for module names
+# (e.g. "Live AI Platform" / "Beroe Abi" / "Custom Credit subscription").
+# Strict literal matching against the canonical vocab missed every one of
+# them, so `gate_contract_modules` came back empty even on contracts that
+# clearly listed modules. Each entry maps canonical → list of aliases the
+# contract text may use; matching is case-insensitive substring. Aliases
+# are conservative — only common rephrasings of the SAME module, no new
+# modules introduced.
+_MODULE_ALIASES: dict[str, list[str]] = {
+    "Category Watch": ["category watch", "category intelligence", "category monitoring"],
+    "Abi Intelligence": ["abi intelligence", "beroe abi", "abi assistant", "abi platform", "abi tool"],
+    "Benchmarks": ["benchmarks", "benchmark suite", "benchmarking suite", "price benchmarks"],
+    "Custom Credits": ["custom credits", "custom credit", "custom-credit", "custom hours", "research credits"],
+    "Supplier Discovery": ["supplier discovery", "supplier search", "supplier finder"],
+    "Supplier Risk": ["supplier risk", "supplier risk monitoring", "supplier risk intel"],
+    "Live.ai": ["live.ai", "live ai", "liveai", "live ai platform", "live-ai"],
+    "MMD": ["mmd", "market monitoring dashboard", "market monitoring"],
+    "Sourcing Optimizer": ["sourcing optimizer", "sourcing optimiser"],
+    "Copilot": ["copilot", "co-pilot", "beroe copilot"],
+    "DataHub": ["datahub", "data hub", "data-hub"],
+    "Diverse Supplier Directory": ["diverse supplier directory", "diversity supplier directory", "diverse supplier"],
+    "Supply Chain Risk": ["supply chain risk", "scr platform", "scr suite"],
+}
+
 
 def _parse_modules(text: str) -> list[str]:
-    """Return module names from the vocab that appear in the text."""
-    found: list[str] = []
+    """Return canonical module names whose name or close variant appears
+    in the text. Falls back to the alias map (case-insensitive substring)
+    so contracts that say e.g. 'Live AI Platform' still resolve to 'Live.ai'.
+    Duplicates suppressed; canonical order preserved (matches vocab order).
+    """
     lower = text.lower()
-    for m in _MODULE_VOCAB:
-        if m.lower() in lower:
-            found.append(m)
+    found: list[str] = []
+    for canonical in _MODULE_VOCAB:
+        aliases = _MODULE_ALIASES.get(canonical, [canonical.lower()])
+        if any(a in lower for a in aliases):
+            found.append(canonical)
     return found
 
 
@@ -510,7 +539,7 @@ Output a SINGLE JSON object with this exact shape — omit any field you cannot 
 Rules:
 - gate_contract_acv_usd is the ANNUAL contract value in USD as a plain number (no $ or commas). If the doc only states a multi-year total, divide by the year count.
 - gate_contract_term must be one of the enumerated values; map "annual" → "1 year", "biennial" → "2 years", anything bespoke → "Custom".
-- gate_contract_modules: include only modules whose names appear literally in the text.
+- gate_contract_modules: include modules whose name OR a close variant appears in the text. Common aliases: "Live AI"/"Live AI Platform"="Live.ai"; "Custom Credit"/"Custom Credit subscription"="Custom Credits"; "Beroe Abi"/"Abi Platform"="Abi Intelligence"; "Co-pilot"="Copilot"; "Data Hub"="DataHub"; "Market Monitoring Dashboard"="MMD"; "Category Intelligence"="Category Watch". ALWAYS snap to the canonical vocab name above — do NOT invent or rename modules.
 - gate_renewal_date: parse from "expires on", "renewal date", "term ends", or compute from signed_date + term if the doc states the term unambiguously.
 - tcv: keep the doc's verbatim formatting ("$2.4M" / "USD 930,000") — the UI displays it as-is.
 - billing_freq / payment_terms / geography: pick the closest enumerated value; if the doc says "billed annually in arrears, Net 60", emit billing_freq="Annual" + payment_terms="Net 60".
