@@ -129,12 +129,13 @@ export default function AccountPlanTab() {
             )}
           </div>
 
-          {/* 12-Jun · Stakeholder ask: removed the ARR Growth Tracker
-              and ACV Growth Path tiles — they overlapped with the
-              Pipeline + Appetite-score breakdown elsewhere on the page
-              and were leading the eye to a target the CSM hadn't set.
-              The pipeline value still surfaces inside Expansion Plays
-              and the renewal proximity feeds into the Mode banner. */}
+          {/* ACV Growth Path — 4-tile Current / Target / Gap / Pipeline.
+              Mode-adaptive: rescue mode swaps to a Renewal-Risk shape.
+              All values pulled from account.current_acv / target_acv +
+              appetite.breakdown.projected_acv_usd. The ARR Growth
+              Tracker that lived next to this was retired 12-Jun
+              (redundant with Renewal Proximity in the appetite score). */}
+          <AcvTile appetite={appetite} account={account} mode={mode} />
 
           {/* 09-Jun bug (Bug Tracker · Jun-8 #6 part 1) — Product &
               Services Saturation moved ABOVE Expansion Plays (per spec
@@ -509,6 +510,85 @@ function ScoreBreakdownDetails({ appetite }: { appetite: Appetite }) {
 // ============================================================
 // ACV growth tile
 // ============================================================
+
+// ============================================================
+// ACV Growth Path tile
+// ============================================================
+
+function AcvTile({
+  appetite,
+  account,
+  mode,
+}: {
+  appetite: Appetite;
+  account: { current_acv: string | null; target_acv: string | null };
+  mode: PlayMode;
+}) {
+  const current = parseFloat(account.current_acv || "0");
+  const target = parseFloat(account.target_acv || "0");
+  const gap = target - current;
+  const pipeline = parseFloat(appetite.breakdown.projected_acv_usd) - current;
+  const pct =
+    current && target ? Math.min(100, Math.round((current / target) * 100)) : 0;
+  const conf = MODE_CONF[mode];
+
+  // Row 56 — for retain + expand show the same 4-tile ACV Growth Path
+  // (Current / Target / Gap / Pipeline). Rescue keeps its at-risk shape.
+  const tiles =
+    mode === "rescue"
+      ? ([
+          ["ACV at Risk", fmtK(current), "#CF4548"],
+          ["Days to Renewal", "—", "#F0BC41"],
+          ["Risk Level", "Elevated", "#CF4548"],
+        ] as Array<[string, string, string]>)
+      : ([
+          ["Current", fmtK(current), "#0d1b2e"],
+          ["Target", target > 0 ? fmtK(target) : fmtK(current), "#6EC457"],
+          [
+            "Gap",
+            gap > 0 ? fmtK(gap) : "Done",
+            gap > 0 ? "#CF4548" : "#6EC457",
+          ],
+          ["Pipeline", fmtK(pipeline), "#C344C7"],
+        ] as Array<[string, string, string]>);
+
+  return (
+    <div className="bg-white border border-beroe-card-border rounded-card p-4">
+      <div className="text-[13px] font-bold mb-2.5">
+        {mode === "rescue" ? "⚠️ Renewal Risk" : "ACV Growth Path"}
+      </div>
+      <div
+        className={cn(
+          "grid gap-2 mb-2.5",
+          mode === "rescue" ? "grid-cols-3" : "grid-cols-4",
+        )}
+      >
+        {tiles.map(([label, value, col]) => (
+          <div
+            key={label}
+            className="bg-beroe-bg rounded-md px-2 py-2.5 text-center"
+          >
+            <div className="text-[9px] uppercase tracking-wider text-text-muted">
+              {label}
+            </div>
+            <div
+              className="font-bold mt-0.5"
+              style={{ color: col, fontSize: value.length > 12 ? 16 : 22 }}
+            >
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="h-3 bg-beroe-bg rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, background: conf.col }}
+        />
+      </div>
+    </div>
+  );
+}
 
 // ============================================================
 // Plays list
