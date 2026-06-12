@@ -82,6 +82,97 @@ interface MetricRow {
   status: "green" | "amber" | "red" | "grey";
 }
 
+// 12-Jun bug 243 — Read-only roster of all Goals + Success Metrics for
+// the account. Surfaced inside the Commitment block so the CSM sees
+// what's in scope at hand-over time (previously only the primary metric
+// was visible). Edits route back to Goal Alignment / Value Tracking.
+function CommitmentMetricsAndGoalsRoster({
+  accountId,
+  metrics,
+  primaryId,
+}: {
+  accountId: string;
+  metrics: MetricRow[];
+  primaryId: string | null;
+}) {
+  const goalsQ = useQuery<{ items: CSGoal[] }>({
+    queryKey: ["cs-goals", accountId, false],
+    queryFn: () =>
+      api.get(`/api/v1/accounts/${accountId}/cs-goals?include_deleted=false`),
+    staleTime: 60_000,
+  });
+  const goals = goalsQ.data?.items ?? [];
+  const secondaryMetrics = metrics.filter((m) => m.id !== primaryId);
+
+  if (secondaryMetrics.length === 0 && goals.length === 0) return null;
+
+  const STATUS_DOT: Record<MetricRow["status"], string> = {
+    green: "#40CC8F",
+    amber: "#EF9637",
+    red: "#FD576B",
+    grey: "#94a3b8",
+  };
+
+  return (
+    <>
+      {secondaryMetrics.length > 0 && (
+        <>
+          <GroupHead>Other Success Metrics</GroupHead>
+          <div className="space-y-1.5 mb-3">
+            {secondaryMetrics.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center gap-2 text-[12px] px-2.5 py-1.5 rounded-[8px] border"
+                style={{ background: "#fdf0fd", borderColor: `${C.PURPLE}30` }}
+              >
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ background: STATUS_DOT[m.status] }}
+                />
+                <span className="font-semibold flex-1 truncate" title={m.name}>
+                  {m.name}
+                </span>
+                <span className="text-text-muted text-[11px] truncate" title={m.target_value ?? undefined}>
+                  {m.target_value ?? "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {goals.length > 0 && (
+        <>
+          <GroupHead>Aligned Goals</GroupHead>
+          <ul className="space-y-1 mb-2">
+            {goals.map((g) => (
+              <li
+                key={g.id}
+                className="flex items-center gap-2 text-[11.5px] px-2.5 py-1 rounded-[8px] border"
+                style={{ background: "#fff", borderColor: `${C.PURPLE}20` }}
+              >
+                <span
+                  className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: "#f5e0f6", color: "#8a1a90" }}
+                >
+                  {g.category}
+                </span>
+                <span className="flex-1 truncate" title={g.title}>
+                  {g.title}
+                </span>
+                {g.target_value && (
+                  <span className="text-text-muted text-[10.5px] truncate" title={g.target_value}>
+                    {g.target_value}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
+  );
+}
+
 // (phaseAOptions helper removed 11-Jun — only consumer was the
 // deleted DemoStateToggle's fast-fwd flow.)
 
@@ -605,6 +696,16 @@ function BlockCommitment({
           </div>
         </div>
       </div>
+      {/* 12-Jun bug 243 — Goals + Success Metrics roster surfaced in the
+          Commitment section. Previously only the "Primary" metric was
+          visible above; the rest (goals + secondary metrics) were not
+          readable at handover time. Read-only roster — edits stay in
+          Goal Alignment / Value Tracking. */}
+      <CommitmentMetricsAndGoalsRoster
+        accountId={accountId}
+        metrics={metrics.data?.items ?? []}
+        primaryId={primary?.id ?? null}
+      />
       <GroupHead>Kickoff Date</GroupHead>
       <RoGrid cols={2}>
         <RoTile label="Go-Live" value={fd(goLive)} valueColor={C.BLUE} sub="From Sales Handoff" />
