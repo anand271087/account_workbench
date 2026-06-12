@@ -313,12 +313,101 @@ async def gather_data(
             "neg_prep_runs": inflation.get("neg_prep_runs"),
             "trend_monthly": inflation.get("trend_monthly") or [],
         },
+        # ───────── New module-deep-dive sections (s13-s18) ─────────
+        "mmd_modules": {
+            # Per-period totals + 12-month monthly trends per module.
+            "mmd": modules.get("mmd"),
+            "abi": modules.get("abi"),
+            "sd": modules.get("sd"),
+            "dl": modules.get("dl"),
+            "bm": modules.get("bm"),
+            "monthly": modules.get("monthly") or {},
+        },
+        "abi_intel": {
+            "total_queries": (pi.get("abi") or {}).get("total_queries"),
+            "queries_per_user": (pi.get("abi") or {}).get("queries_per_user"),
+            "resolution_rate": (pi.get("abi") or {}).get("resolution_rate"),
+            "avg_response": (pi.get("abi") or {}).get("avg_response"),
+            "complexity_mix": (pi.get("abi") or {}).get("complexity_mix") or {},
+            "top_types": (pi.get("abi") or {}).get("top_types") or [],
+            "insight": (pi.get("abi") or {}).get("insight"),
+        },
+        "supplier_watch": {
+            "tracked": (pi.get("supplier_watch") or {}).get("tracked"),
+            "by_risk": (pi.get("supplier_watch") or {}).get("by_risk") or {},
+            "suppliers": [
+                {
+                    "name": s.get("name"),
+                    "cat": s.get("cat"),
+                    "country": s.get("country"),
+                    "risk": s.get("risk"),
+                }
+                for s in ((pi.get("supplier_watch") or {}).get("suppliers") or [])[:10]
+            ],
+        },
+        "benchmark": {
+            "avg_health": (pi.get("benchmark") or {}).get("avg_health"),
+            "avg_seat_pct": (pi.get("benchmark") or {}).get("avg_seat_pct"),
+            "avg_abi": (pi.get("benchmark") or {}).get("avg_abi"),
+            "avg_logins": (pi.get("benchmark") or {}).get("avg_logins"),
+            "avg_engagement": (pi.get("benchmark") or {}).get("avg_engagement"),
+            # The account's own values for side-by-side comparison.
+            "this_health": (pi.get("scores") or {}).get("composite"),
+            "this_seat_pct": _pct(usage.get("active_30d"), usage.get("licensed_seats")),
+            "this_abi": (pi.get("abi") or {}).get("total_queries"),
+            "this_logins": usage.get("logins_period"),
+            "this_engagement": (pi.get("engagement") or {}).get("alerts"),
+        },
+        "engagement": {
+            "alerts": (pi.get("engagement") or {}).get("alerts"),
+            "newsletters": (pi.get("engagement") or {}).get("newsletters"),
+            "webinars": (pi.get("engagement") or {}).get("webinars"),
+            "podcasts": (pi.get("engagement") or {}).get("podcasts"),
+            "training": (pi.get("engagement") or {}).get("training"),
+            "user_segmentation": (pi.get("engagement") or {}).get("user_segmentation") or {},
+        },
+        "super_users": [
+            {
+                "name": u.get("name"),
+                "role": u.get("role"),
+                "logins": u.get("logins"),
+                "cw_views": u.get("cw_views"),
+                "abi_queries": u.get("abi_queries"),
+                "sd_searches": u.get("sd_searches"),
+                "hours": u.get("hours"),
+            }
+            for u in (pi.get("super_users") or [])[:5]
+        ],
         "nps": {
             "score": nps.get("score"),
+            "voc": [
+                {
+                    "quote": v.get("quote"),
+                    "author": v.get("author"),
+                    "role": v.get("role"),
+                    "sentiment": v.get("sentiment", "neutral"),
+                }
+                for v in (nps.get("voc") or [])[:6]
+            ],
             "promoters": nps.get("promoters"),
             "passives": nps.get("passives"),
             "detractors": nps.get("detractors"),
         },
+        # ───────── 9 additional module deep-dives (s19-s27) ─────────
+        # Mirror the Analytics tab's remaining sub-tabs. Pulled directly
+        # from `platform_intel.<key>` jsonb — each is permissive (extra="allow"),
+        # so when a section is populated by ETL it flows through without
+        # schema changes. Empty sections render em-dashes with a
+        # "Data pending" note.
+        "supplier_discovery": pi.get("supplier_discovery") or {},
+        "custom_usage": pi.get("custom_usage") or {},
+        "thought_leadership": pi.get("thought_leadership") or {},
+        "datahub": pi.get("datahub") or {},
+        "cirtuo": pi.get("cirtuo") or {},
+        "nnamu": pi.get("nnamu") or {},
+        "upply": pi.get("upply") or {},
+        "alerts": pi.get("alerts") or {},
+        "platform_training": pi.get("platform_training") or {},
     }
 
 
@@ -405,6 +494,12 @@ def _e(v: Any) -> str:
     if v is None or v == "":
         return "—"
     return _html.escape(str(v))
+
+
+def _titleize(key: str) -> str:
+    """Convert a snake_case dict key into a human-readable Title Case
+    label for the generic module slides."""
+    return " ".join(w.capitalize() for w in str(key).replace("_", " ").split())
 
 
 def _money(v: Any) -> str:
@@ -628,7 +723,29 @@ h3.section{font-size:13px;font-weight:700;color:#001137;
 """
 
 
-def render_html(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = None) -> str:
+_ALL_SLIDE_IDS = (
+    "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+    "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
+    "s19", "s20", "s21", "s22", "s23", "s24", "s25", "s26", "s27",
+)
+
+
+def _select_slides(slide_ids: list[str] | None) -> set[str]:
+    """Normalise the slide selection. None / empty → all 12."""
+    if not slide_ids:
+        return set(_ALL_SLIDE_IDS)
+    keep = {sid for sid in slide_ids if sid in _ALL_SLIDE_IDS}
+    # Belt-and-braces: an empty filter would yield a blank deck — fall
+    # back to "all" rather than emit a zero-slide PPTX.
+    return keep or set(_ALL_SLIDE_IDS)
+
+
+def render_html(
+    snapshot: dict[str, Any],
+    *,
+    charts: dict[str, bytes] | None = None,
+    slide_ids: list[str] | None = None,
+) -> str:
     s = snapshot
     cover = s["cover"]
     cc = s["custom_credits"]
@@ -846,20 +963,218 @@ def render_html(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = N
       <div class="brand">{_e(cover.get('footer'))}</div>
     </section>"""
 
-    body = "".join([
-        s1,
-        slide("CUSTOM CREDITS", "Custom Credits", s2_body),
-        slide("RISKS · OPEN · ASKS", "Risks · Open · Asks", s3_body),
-        slide("EXECUTIVE SNAPSHOT", "Executive Snapshot", s4_body),
-        slide("CONTRACT SUMMARY", "Contract Summary", s5_body),
-        slide("ACCOMPLISHMENTS & MILESTONES", "Accomplishments & Milestones", s6_body),
-        slide("UPSELL & EXPANSION PIPELINE", "Upsell & Expansion Pipeline", s7_body),
-        slide("ACCOUNT HEALTH · 12 SCORES", "Account Health · 12 scores", s8_body),
-        slide("SUBSCRIBERS & ENGAGEMENT", "Subscribers & Engagement", s9_body),
-        slide("LIVE.AI · CATEGORY WATCH", "Live.ai · Category Watch", s10_body),
-        slide("INFLATION WATCH GIT", "Inflation Watch GIT", s11_body),
-        s12,
-    ])
+    # ---- Module deep-dives s13-s18 (Modules group) ----
+    mm = s.get("mmd_modules", {}) or {}
+    ai = s.get("abi_intel", {}) or {}
+    sw = s.get("supplier_watch", {}) or {}
+    bm = s.get("benchmark", {}) or {}
+    eg = s.get("engagement", {}) or {}
+    su = s.get("super_users", []) or []
+    nps = s.get("nps", {}) or {}
+
+    # s13 MMD · Module Activity
+    s13_body = f"""
+      <div class="grid grid-3">
+        {_kpi_tile("MMD", _e(mm.get('mmd')), "Market Movement Dashboard")}
+        {_kpi_tile("Abi", _e(mm.get('abi')), "AI Assistant queries")}
+        {_kpi_tile("Supplier Discovery", _e(mm.get('sd')), "searches")}
+        {_kpi_tile("DataLake", _e(mm.get('dl')))}
+        {_kpi_tile("Benchmark", _e(mm.get('bm')))}
+      </div>"""
+
+    # s14 Abi Intelligence
+    cx = ai.get("complexity_mix") or {}
+    complexity_html = "".join(
+        f'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #e4eaf6">'
+        f'<span style="color:#5a7896;font-size:11px;font-weight:600">{_e(k)}</span>'
+        f'<span style="font-weight:700;color:#001137">{_e(v)}</span></div>'
+        for k, v in cx.items()
+    ) or '<div style="color:#8496b0;font-size:11px;padding:8px 0">—</div>'
+    top_types_html = "".join(
+        f'<span style="display:inline-block;background:#ede6ff;color:#4A00F8;'
+        f'padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;margin:3px">{_e(t)}</span>'
+        for t in (ai.get("top_types") or [])[:8]
+    ) or "—"
+    s14_body = f"""
+      <div class="grid grid-4">
+        {_kpi_tile("Total queries", _e(ai.get('total_queries')))}
+        {_kpi_tile("Queries / user", _e(ai.get('queries_per_user')))}
+        {_kpi_tile("Resolution rate", _e(ai.get('resolution_rate')))}
+        {_kpi_tile("Avg response", _e(ai.get('avg_response')))}
+      </div>
+      <div class="grid grid-2" style="margin-top:14px">
+        <div><h3 class="section">Complexity mix</h3>{complexity_html}</div>
+        <div><h3 class="section">Top query types</h3><div>{top_types_html}</div>
+        {(f'<p style="font-size:11px;color:#5a7896;margin-top:12px;font-style:italic">{_e(ai.get("insight"))}</p>') if ai.get("insight") else ""}
+        </div>
+      </div>"""
+
+    # s15 Supplier Watch
+    by_risk = sw.get("by_risk") or {}
+    sup_rows = "".join(
+        f'<tr><td>{_e(x.get("name"))}</td><td>{_e(x.get("cat"))}</td>'
+        f'<td>{_e(x.get("country"))}</td>'
+        f'<td>{_heat_cell(x.get("risk"))}</td></tr>'
+        for x in (sw.get("suppliers") or [])
+    ) or '<tr><td colspan="4">—</td></tr>'
+    s15_body = f"""
+      <div class="grid grid-4">
+        {_kpi_tile("Tracked", _e(sw.get('tracked')))}
+        {_kpi_tile("High risk", _e(by_risk.get('high')))}
+        {_kpi_tile("Med-high risk", _e(by_risk.get('med_high')))}
+        {_kpi_tile("Med + low risk", f"{_e(by_risk.get('med') or 0)} + {_e(by_risk.get('low') or 0)}")}
+      </div>
+      <h3 class="section">Tracked suppliers</h3>
+      <table><thead><tr><th>Supplier</th><th>Category</th><th>Country</th><th>Risk</th></tr></thead>
+        <tbody>{sup_rows}</tbody></table>"""
+
+    # s16 Industry Benchmark — side-by-side
+    def _row(label: str, this_v: Any, avg_v: Any) -> str:
+        return (
+            f'<tr><td style="font-weight:600">{_e(label)}</td>'
+            f'<td style="font-weight:800;color:#4A00F8">{_e(this_v)}</td>'
+            f'<td style="color:#5a7896">{_e(avg_v)}</td></tr>'
+        )
+    s16_body = f"""
+      <table>
+        <thead><tr><th>Dimension</th><th>This account</th><th>Industry average</th></tr></thead>
+        <tbody>
+          {_row("Health score", bm.get('this_health'), bm.get('avg_health'))}
+          {_row("Seat activation %", bm.get('this_seat_pct'), bm.get('avg_seat_pct'))}
+          {_row("Abi queries", bm.get('this_abi'), bm.get('avg_abi'))}
+          {_row("Logins (period)", bm.get('this_logins'), bm.get('avg_logins'))}
+          {_row("Engagement alerts", bm.get('this_engagement'), bm.get('avg_engagement'))}
+        </tbody>
+      </table>"""
+
+    # s17 NPS · Voice of Customer
+    sentiment_tone = {"positive": "green", "neutral": "blue", "negative": "red"}
+    voc_html = "".join(
+        f'<div style="border-left:3px solid #c5d0e0;padding:10px 14px;margin:8px 0;background:#f7f9fd;border-radius:6px">'
+        f'<div style="font-size:12px;font-style:italic;color:#0d1b2e">"{_e(v.get("quote"))}"</div>'
+        f'<div style="margin-top:6px"><span class="pill {sentiment_tone.get(v.get("sentiment", "neutral"), "blue")}">{_e(v.get("sentiment"))}</span> '
+        f'<span style="font-size:10px;color:#5a7896;margin-left:6px">{_e(v.get("author"))} · {_e(v.get("role"))}</span></div>'
+        f'</div>'
+        for v in (nps.get("voc") or [])
+    ) or '<div style="padding:14px;color:#8496b0;font-size:11px">No voice-of-customer quotes captured this period.</div>'
+    s17_body = f"""
+      <div class="grid grid-4">
+        {_kpi_tile("NPS", _e(nps.get('score')))}
+        {_kpi_tile("Promoters", _e(nps.get('promoters')))}
+        {_kpi_tile("Passives", _e(nps.get('passives')))}
+        {_kpi_tile("Detractors", _e(nps.get('detractors')))}
+      </div>
+      <h3 class="section">Voice of Customer</h3>
+      {voc_html}"""
+
+    # s18 Super Users
+    su_rows = "".join(
+        f'<tr><td>{_e(u.get("name"))}</td><td>{_e(u.get("role"))}</td>'
+        f'<td>{_e(u.get("logins"))}</td><td>{_e(u.get("cw_views"))}</td>'
+        f'<td>{_e(u.get("abi_queries"))}</td><td>{_e(u.get("sd_searches"))}</td>'
+        f'<td>{_e(u.get("hours"))}</td></tr>'
+        for u in su
+    ) or '<tr><td colspan="7">—</td></tr>'
+    s18_body = f"""
+      <table>
+        <thead><tr><th>Name</th><th>Role</th><th>Logins</th><th>CW views</th>
+          <th>Abi queries</th><th>SD searches</th><th>Hours</th></tr></thead>
+        <tbody>{su_rows}</tbody>
+      </table>"""
+
+    # ---- Generic module deep-dive slides (s19-s27) ----
+    # Each pulls from a permissive jsonb section on platform_intel.
+    # _module_slide_body emits a KPI grid from whatever scalar/list fields
+    # the section carries; when the section is empty it shows a pending
+    # message so the BR still renders cleanly.
+
+    def _module_slide_body(payload: dict[str, Any], hint: str) -> str:
+        if not payload:
+            return (
+                '<div style="padding:32px;text-align:center;color:#8496b0;'
+                'font-size:12px;border:1px dashed #c5d0e0;border-radius:8px">'
+                f'<div style="font-weight:700;color:#5a7896;margin-bottom:6px">Data pending</div>'
+                f'<div>{_e(hint)}</div></div>'
+            )
+        scalars = [(k, v) for k, v in payload.items()
+                   if not isinstance(v, (list, dict)) and v not in (None, "")]
+        lists = [(k, v) for k, v in payload.items() if isinstance(v, list) and v]
+        tiles = "".join(_kpi_tile(_titleize(k), _e(v)) for k, v in scalars[:12])
+        list_blocks = ""
+        for k, items in lists[:3]:
+            if items and isinstance(items[0], dict):
+                cols = list(items[0].keys())[:5]
+                rows = "".join(
+                    "<tr>" + "".join(
+                        f'<td>{_e(item.get(c))}</td>' for c in cols
+                    ) + "</tr>"
+                    for item in items[:8]
+                )
+                heads = "".join(f'<th>{_e(_titleize(c))}</th>' for c in cols)
+                list_blocks += (
+                    f'<h3 class="section">{_e(_titleize(k))}</h3>'
+                    f'<table><thead><tr>{heads}</tr></thead>'
+                    f'<tbody>{rows}</tbody></table>'
+                )
+            else:
+                bullets = "".join(f'<div class="bullet">{_e(x)}</div>' for x in items[:10])
+                list_blocks += (
+                    f'<h3 class="section">{_e(_titleize(k))}</h3>{bullets}'
+                )
+        return (
+            f'<div class="grid grid-4">{tiles or "&nbsp;"}</div>{list_blocks}'
+        )
+
+    s19_body = _module_slide_body(s.get("supplier_discovery", {}),
+                                  "Populate platform_intel.supplier_discovery to surface this slide.")
+    s20_body = _module_slide_body(s.get("custom_usage", {}),
+                                  "Populate platform_intel.custom_usage for deeper Custom Credits usage.")
+    s21_body = _module_slide_body(s.get("thought_leadership", {}),
+                                  "Populate platform_intel.thought_leadership for content engagement.")
+    s22_body = _module_slide_body(s.get("datahub", {}),
+                                  "Populate platform_intel.datahub for DataHub adoption metrics.")
+    s23_body = _module_slide_body(s.get("cirtuo", {}),
+                                  "Populate platform_intel.cirtuo for sourcing-strategy stats.")
+    s24_body = _module_slide_body(s.get("nnamu", {}),
+                                  "Populate platform_intel.nnamu for nnamu module engagement.")
+    s25_body = _module_slide_body(s.get("upply", {}),
+                                  "Populate platform_intel.upply for Upply integration usage.")
+    s26_body = _module_slide_body(s.get("alerts", {}),
+                                  "Populate platform_intel.alerts (or surface engagement.alerts breakdown).")
+    s27_body = _module_slide_body(s.get("platform_training", {}),
+                                  "Populate platform_intel.platform_training for training completions.")
+
+    selected = _select_slides(slide_ids)
+    parts: list[tuple[str, str]] = [
+        ("s1", s1),
+        ("s2", slide("CUSTOM CREDITS", "Custom Credits", s2_body)),
+        ("s3", slide("RISKS · OPEN · ASKS", "Risks · Open · Asks", s3_body)),
+        ("s4", slide("EXECUTIVE SNAPSHOT", "Executive Snapshot", s4_body)),
+        ("s5", slide("CONTRACT SUMMARY", "Contract Summary", s5_body)),
+        ("s6", slide("ACCOMPLISHMENTS & MILESTONES", "Accomplishments & Milestones", s6_body)),
+        ("s7", slide("UPSELL & EXPANSION PIPELINE", "Upsell & Expansion Pipeline", s7_body)),
+        ("s8", slide("ACCOUNT HEALTH · 12 SCORES", "Account Health · 12 scores", s8_body)),
+        ("s9", slide("SUBSCRIBERS & ENGAGEMENT", "Subscribers & Engagement", s9_body)),
+        ("s10", slide("LIVE.AI · CATEGORY WATCH", "Live.ai · Category Watch", s10_body)),
+        ("s11", slide("INFLATION WATCH GIT", "Inflation Watch GIT", s11_body)),
+        ("s13", slide("MMD · MODULE ACTIVITY", "MMD · Module Activity", s13_body)),
+        ("s14", slide("ABI INTELLIGENCE", "Abi Intelligence", s14_body)),
+        ("s15", slide("SUPPLIER WATCH", "Supplier Watch", s15_body)),
+        ("s16", slide("INDUSTRY BENCHMARK", "Industry Benchmark", s16_body)),
+        ("s17", slide("NPS · VOICE OF CUSTOMER", "NPS · Voice of Customer", s17_body)),
+        ("s18", slide("SUPER USERS", "Super Users", s18_body)),
+        ("s19", slide("SUPPLIER DISCOVERY", "Supplier Discovery", s19_body)),
+        ("s20", slide("CUSTOM USAGE", "Custom Usage · deep dive", s20_body)),
+        ("s21", slide("THOUGHT LEADERSHIP", "Thought Leadership", s21_body)),
+        ("s22", slide("DATAHUB", "DataHub", s22_body)),
+        ("s23", slide("CIRTUO", "Cirtuo · Sourcing strategy", s23_body)),
+        ("s24", slide("NNAMU", "nnamu", s24_body)),
+        ("s25", slide("UPPLY", "Upply", s25_body)),
+        ("s26", slide("ALERTS", "Alerts", s26_body)),
+        ("s27", slide("PLATFORM TRAINING", "Platform Training", s27_body)),
+        ("s12", s12),
+    ]
+    body = "".join(html for sid, html in parts if sid in selected)
 
     title_text = _html.escape(f"{cover.get('account_name', 'Business Review')} · {cover.get('period_label', '')}")
     return f"""<!doctype html>
@@ -905,7 +1220,12 @@ def render_pdf(html: str) -> bytes:
 # ============================================================
 
 
-def render_pptx(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = None) -> bytes:
+def render_pptx(
+    snapshot: dict[str, Any],
+    *,
+    charts: dict[str, bytes] | None = None,
+    slide_ids: list[str] | None = None,
+) -> bytes:
     try:
         from pptx import Presentation  # type: ignore
         from pptx.dml.color import RGBColor  # type: ignore
@@ -915,6 +1235,7 @@ def render_pptx(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = N
         return b""
     if charts is None:
         charts = _build_chart_pngs(snapshot)
+    selected = _select_slides(slide_ids)
 
     s = snapshot
     prs = Presentation()
@@ -995,168 +1316,327 @@ def render_pptx(snapshot: dict[str, Any], *, charts: dict[str, bytes] | None = N
     la = s["live_ai"]
     iw = s["inflation_watch"]
 
-    # 1 Cover
-    _add_cover(
-        cover.get("period_label", ""),
-        cover.get("account_name", ""),
-        cover.get("title", ""),
-        cover.get("footer", "Beroe"),
-    )
+    # Per-slide builders. Each block is independently guarded so the
+    # user can deselect any subset and the deck still renders cleanly.
 
-    # 2 Custom Credits
-    sl = _add_content("Custom Credits", "Custom Credits")
-    tiles = [
-        ("FTE allocation", _fmt(cc.get("fte"))),
-        ("Hours purchased", _fmt(cc.get("hours_purchased"))),
-        ("Hours consumed YTD", _fmt(cc.get("hours_consumed"))),
-        ("Hours remaining", _fmt(cc.get("hours_remaining"))),
-        ("Fixed-fee instances", f"{_fmt(cc.get('fixed_fee_done'))}/{_fmt(cc.get('fixed_fee_total'))}"),
-        ("Instances in flight", _fmt(cc.get("instances_in_flight"))),
-        ("Infinity Slots active", _fmt(cc.get("slots_active"))),
-        ("Slot refresh cadence", _fmt(cc.get("slot_cadence"))),
-    ]
-    for i, (lab, val) in enumerate(tiles):
-        x = 0.5 + (i % 4) * 3.1
-        y = 1.7 + (i // 4) * 1.4
-        _add_kpi(sl, x, y, 3.0, lab, val)
+    if "s1" in selected:
+        _add_cover(
+            cover.get("period_label", ""),
+            cover.get("account_name", ""),
+            cover.get("title", ""),
+            cover.get("footer", "Beroe"),
+        )
 
-    # 3 Risks · Open · Asks
-    sl = _add_content("Risks · Open · Asks", "Risks · Open · Asks")
-    for col, (label, items) in enumerate([
-        ("Open items (Beroe-side)", ro.get("open_items") or ["—"]),
-        ("Risks", ro.get("risks") or ["—"]),
-        ("Asks from client", ro.get("asks") or ["—"]),
-    ]):
-        x = 0.5 + col * 4.3
-        _add_text(sl, x, 1.7, 4.0, 0.35, label, size=12, bold=True, color=NAVY)
-        for i, txt in enumerate(items[:8]):
-            _add_text(sl, x, 2.1 + i * 0.45, 4.0, 0.45, "• " + str(txt), size=11, color=DARK)
+    if "s2" in selected:
+        sl = _add_content("Custom Credits", "Custom Credits")
+        tiles = [
+            ("FTE allocation", _fmt(cc.get("fte"))),
+            ("Hours purchased", _fmt(cc.get("hours_purchased"))),
+            ("Hours consumed YTD", _fmt(cc.get("hours_consumed"))),
+            ("Hours remaining", _fmt(cc.get("hours_remaining"))),
+            ("Fixed-fee instances", f"{_fmt(cc.get('fixed_fee_done'))}/{_fmt(cc.get('fixed_fee_total'))}"),
+            ("Instances in flight", _fmt(cc.get("instances_in_flight"))),
+            ("Infinity Slots active", _fmt(cc.get("slots_active"))),
+            ("Slot refresh cadence", _fmt(cc.get("slot_cadence"))),
+        ]
+        for i, (lab, val) in enumerate(tiles):
+            x = 0.5 + (i % 4) * 3.1
+            y = 1.7 + (i // 4) * 1.4
+            _add_kpi(sl, x, y, 3.0, lab, val)
 
-    # 4 Executive Snapshot
-    sl = _add_content("Executive Snapshot", "Executive Snapshot")
-    _add_kpi(sl, 0.5, 1.7, 3.0, "Account Health", f"{_fmt(ex.get('health'))} / 100",
-             _fmt(ex.get("health_trend") or ex.get("health_band") or ""))
-    _add_kpi(sl, 3.7, 1.7, 3.0, "ARR in scope", _money(ex.get("arr_usd")),
-             _fmt(ex.get("expansion_note") or ""))
-    _add_kpi(sl, 6.9, 1.7, 3.0, "Cost avoidance", _money(ex.get("cost_avoidance_usd")),
-             f"target {_money(ex.get('cost_target_usd'))}" if ex.get("cost_target_usd") else "")
-    _add_kpi(sl, 10.1, 1.7, 2.7, "Renewal", _fmt(ex.get("renewal_date")),
-             f"{ex.get('days_to_renewal')} days" if ex.get("days_to_renewal") is not None else "")
-    _add_text(sl, 0.5, 3.3, 5, 0.3, "Engagement", size=12, bold=True, color=NAVY)
-    _add_kpi(sl, 0.5, 3.7, 3.0, "Active 30d",
-             f"{_fmt(ex.get('active_30d'))} / {_fmt(ex.get('licensed_seats'))}")
-    _add_kpi(sl, 3.7, 3.7, 3.0, "Logins", _fmt(ex.get("logins")))
-    _add_kpi(sl, 6.9, 3.7, 3.0, "Hours", _fmt(ex.get("hours")))
-    _add_kpi(sl, 10.1, 3.7, 2.7, "Abi queries", _fmt(ex.get("abi_queries")))
+    if "s3" in selected:
+        sl = _add_content("Risks · Open · Asks", "Risks · Open · Asks")
+        for col, (label, items) in enumerate([
+            ("Open items (Beroe-side)", ro.get("open_items") or ["—"]),
+            ("Risks", ro.get("risks") or ["—"]),
+            ("Asks from client", ro.get("asks") or ["—"]),
+        ]):
+            x = 0.5 + col * 4.3
+            _add_text(sl, x, 1.7, 4.0, 0.35, label, size=12, bold=True, color=NAVY)
+            for i, txt in enumerate(items[:8]):
+                _add_text(sl, x, 2.1 + i * 0.45, 4.0, 0.45, "• " + str(txt), size=11, color=DARK)
 
-    # 5 Contract Summary
-    sl = _add_content("Contract Summary", "Contract Summary")
-    items = [
-        ("Contract start", _fmt(cs.get("start"))),
-        ("Contract end / renewal", _fmt(cs.get("end"))),
-        ("Term", _fmt(cs.get("term"))),
-        ("ACV", _money(cs.get("acv_usd"))),
-        ("Billing", _fmt(cs.get("billing"))),
-        ("Licensed seats", _fmt(cs.get("seats_current"))),
-        ("Geography", _fmt(cs.get("geography"))),
-        ("Sponsor", f"{_fmt(cs.get('sponsor_name'))} · {_fmt(cs.get('sponsor_role'))}"),
-    ]
-    for i, (lab, val) in enumerate(items):
-        x = 0.5 + (i % 4) * 3.1
-        y = 1.7 + (i // 4) * 1.4
-        _add_kpi(sl, x, y, 3.0, lab, val)
-    mods = ", ".join(cs.get("modules") or []) or "—"
-    _add_text(sl, 0.5, 4.7, 12.3, 0.3, "Modules in scope", size=12, bold=True, color=NAVY)
-    _add_text(sl, 0.5, 5.0, 12.3, 1.5, mods, size=11, color=DARK)
+    if "s4" in selected:
+        sl = _add_content("Executive Snapshot", "Executive Snapshot")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Account Health", f"{_fmt(ex.get('health'))} / 100",
+                 _fmt(ex.get("health_trend") or ex.get("health_band") or ""))
+        _add_kpi(sl, 3.7, 1.7, 3.0, "ARR in scope", _money(ex.get("arr_usd")),
+                 _fmt(ex.get("expansion_note") or ""))
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Cost avoidance", _money(ex.get("cost_avoidance_usd")),
+                 f"target {_money(ex.get('cost_target_usd'))}" if ex.get("cost_target_usd") else "")
+        _add_kpi(sl, 10.1, 1.7, 2.7, "Renewal", _fmt(ex.get("renewal_date")),
+                 f"{ex.get('days_to_renewal')} days" if ex.get("days_to_renewal") is not None else "")
+        _add_text(sl, 0.5, 3.3, 5, 0.3, "Engagement", size=12, bold=True, color=NAVY)
+        _add_kpi(sl, 0.5, 3.7, 3.0, "Active 30d",
+                 f"{_fmt(ex.get('active_30d'))} / {_fmt(ex.get('licensed_seats'))}")
+        _add_kpi(sl, 3.7, 3.7, 3.0, "Logins", _fmt(ex.get("logins")))
+        _add_kpi(sl, 6.9, 3.7, 3.0, "Hours", _fmt(ex.get("hours")))
+        _add_kpi(sl, 10.1, 3.7, 2.7, "Abi queries", _fmt(ex.get("abi_queries")))
 
-    # 6 Accomplishments
-    sl = _add_content("Accomplishments & Milestones", "Accomplishments & Milestones")
-    for i, a in enumerate((acc or [{}])[:6]):
-        x = 0.5 + (i % 3) * 4.2
-        y = 1.7 + (i // 3) * 2.5
-        _add_text(sl, x, y, 4.0, 0.5, _money(a.get("amount_usd")), size=22, bold=True, color=INDIGO)
-        _add_text(sl, x, y + 0.6, 4.0, 0.35, _fmt(a.get("title")), size=11, bold=True, color=NAVY)
-        _add_text(sl, x, y + 1.0, 4.0, 0.3, _fmt(a.get("bu")), size=9, color=MUTED)
-        _add_text(sl, x, y + 1.3, 4.0, 1.0, _fmt(a.get("description")), size=10, color=DARK)
+    if "s5" in selected:
+        sl = _add_content("Contract Summary", "Contract Summary")
+        items = [
+            ("Contract start", _fmt(cs.get("start"))),
+            ("Contract end / renewal", _fmt(cs.get("end"))),
+            ("Term", _fmt(cs.get("term"))),
+            ("ACV", _money(cs.get("acv_usd"))),
+            ("Billing", _fmt(cs.get("billing"))),
+            ("Licensed seats", _fmt(cs.get("seats_current"))),
+            ("Geography", _fmt(cs.get("geography"))),
+            ("Sponsor", f"{_fmt(cs.get('sponsor_name'))} · {_fmt(cs.get('sponsor_role'))}"),
+        ]
+        for i, (lab, val) in enumerate(items):
+            x = 0.5 + (i % 4) * 3.1
+            y = 1.7 + (i // 4) * 1.4
+            _add_kpi(sl, x, y, 3.0, lab, val)
+        mods = ", ".join(cs.get("modules") or []) or "—"
+        _add_text(sl, 0.5, 4.7, 12.3, 0.3, "Modules in scope", size=12, bold=True, color=NAVY)
+        _add_text(sl, 0.5, 5.0, 12.3, 1.5, mods, size=11, color=DARK)
 
-    # 7 Upsell pipeline
-    sl = _add_content("Upsell & Expansion Pipeline", "Upsell & Expansion Pipeline")
-    _add_text(sl, 0.5, 1.7, 5, 0.3, "Conversation", size=10, bold=True, color=MUTED)
-    _add_text(sl, 5.0, 1.7, 2, 0.3, "Status", size=10, bold=True, color=MUTED)
-    _add_text(sl, 7.0, 1.7, 2, 0.3, "Value", size=10, bold=True, color=MUTED)
-    _add_text(sl, 9.0, 1.7, 1.5, 0.3, "Prob", size=10, bold=True, color=MUTED)
-    _add_text(sl, 10.5, 1.7, 2.5, 0.3, "When", size=10, bold=True, color=MUTED)
-    for i, p in enumerate(up[:8]):
-        y = 2.1 + i * 0.5
-        _add_text(sl, 0.5, y, 4.5, 0.4, _fmt(p.get("title")), size=11, color=DARK)
-        _add_text(sl, 5.0, y, 2, 0.4, _fmt(p.get("status")), size=10, color=INDIGO, bold=True)
-        _add_text(sl, 7.0, y, 2, 0.4, _money(p.get("value_usd")), size=11, color=DARK, bold=True)
-        _add_text(sl, 9.0, y, 1.5, 0.4, f"{p.get('prob', 0)}%", size=11, color=DARK)
-        _add_text(sl, 10.5, y, 2.5, 0.4, _fmt(p.get("when_text")), size=10, color=MUTED)
+    if "s6" in selected:
+        sl = _add_content("Accomplishments & Milestones", "Accomplishments & Milestones")
+        for i, a in enumerate((acc or [{}])[:6]):
+            x = 0.5 + (i % 3) * 4.2
+            y = 1.7 + (i // 3) * 2.5
+            _add_text(sl, x, y, 4.0, 0.5, _money(a.get("amount_usd")), size=22, bold=True, color=INDIGO)
+            _add_text(sl, x, y + 0.6, 4.0, 0.35, _fmt(a.get("title")), size=11, bold=True, color=NAVY)
+            _add_text(sl, x, y + 1.0, 4.0, 0.3, _fmt(a.get("bu")), size=9, color=MUTED)
+            _add_text(sl, x, y + 1.3, 4.0, 1.0, _fmt(a.get("description")), size=10, color=DARK)
 
-    # 8 Scores · 12
-    sl = _add_content("Account Health · 12 scores", "Account Health · 12 scores")
-    for i, r in enumerate(sc):
-        x = 0.5 + (i % 4) * 3.1
-        y = 1.7 + (i // 4) * 1.5
-        _add_kpi(sl, x, y, 3.0, r.get("name", ""), str(_fmt(r.get("score"))), _fmt(r.get("band")))
+    if "s7" in selected:
+        sl = _add_content("Upsell & Expansion Pipeline", "Upsell & Expansion Pipeline")
+        _add_text(sl, 0.5, 1.7, 5, 0.3, "Conversation", size=10, bold=True, color=MUTED)
+        _add_text(sl, 5.0, 1.7, 2, 0.3, "Status", size=10, bold=True, color=MUTED)
+        _add_text(sl, 7.0, 1.7, 2, 0.3, "Value", size=10, bold=True, color=MUTED)
+        _add_text(sl, 9.0, 1.7, 1.5, 0.3, "Prob", size=10, bold=True, color=MUTED)
+        _add_text(sl, 10.5, 1.7, 2.5, 0.3, "When", size=10, bold=True, color=MUTED)
+        for i, p in enumerate(up[:8]):
+            y = 2.1 + i * 0.5
+            _add_text(sl, 0.5, y, 4.5, 0.4, _fmt(p.get("title")), size=11, color=DARK)
+            _add_text(sl, 5.0, y, 2, 0.4, _fmt(p.get("status")), size=10, color=INDIGO, bold=True)
+            _add_text(sl, 7.0, y, 2, 0.4, _money(p.get("value_usd")), size=11, color=DARK, bold=True)
+            _add_text(sl, 9.0, y, 1.5, 0.4, f"{p.get('prob', 0)}%", size=11, color=DARK)
+            _add_text(sl, 10.5, y, 2.5, 0.4, _fmt(p.get("when_text")), size=10, color=MUTED)
 
-    # 9 Subscribers & Engagement
-    sl = _add_content("Subscribers & Engagement", "Subscribers & Engagement")
-    _add_kpi(sl, 0.5, 1.7, 3.0, "Licensed seats", _fmt(se.get("licensed_seats")),
-             f"+{se.get('seats_proposed')} in proposal" if se.get("seats_proposed") else "")
-    _add_kpi(sl, 3.7, 1.7, 3.0, "Active 30d", _fmt(se.get("active_30d")),
-             f"{se.get('activation_pct')}% activation" if se.get("activation_pct") is not None else "")
-    _add_kpi(sl, 6.9, 1.7, 3.0, "Logins (period)", _fmt(se.get("logins_total")))
-    _add_kpi(sl, 10.1, 1.7, 2.7, "Hours (period)", _fmt(se.get("hours_total")))
-    chart9_bytes = charts.get("slide9", b"")
-    if chart9_bytes:
-        sl.shapes.add_picture(BytesIO(chart9_bytes), Inches(0.5), Inches(3.2),
-                              width=Inches(12.3), height=Inches(3.8))
-    else:
-        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
-                  "Trend chart unavailable — need ≥2 months of usage data.",
-                  size=11, color=MUTED, align="center")
+    if "s8" in selected:
+        sl = _add_content("Account Health · 12 scores", "Account Health · 12 scores")
+        for i, r in enumerate(sc):
+            x = 0.5 + (i % 4) * 3.1
+            y = 1.7 + (i // 4) * 1.5
+            _add_kpi(sl, x, y, 3.0, r.get("name", ""), str(_fmt(r.get("score"))), _fmt(r.get("band")))
 
-    # 10 Live.ai
-    sl = _add_content("Live.ai · Category Watch", "Live.ai · Category Watch")
-    _add_kpi(sl, 0.5, 1.7, 3.0, "Subscribers",
-             f"{_fmt(la.get('subscribers'))} of {_fmt(la.get('total_subs'))}")
-    _add_kpi(sl, 3.7, 1.7, 3.0, "Categories unlocked", _fmt(la.get("categories_unlocked")),
-             f"{la.get('ent_cats') or '—'} Ent + {la.get('non_ent_cats') or '—'} Non-Ent")
-    _add_kpi(sl, 6.9, 1.7, 3.0, "Avg cat/user", _fmt(la.get("avg_per_user")),
-             f"benchmark {la.get('benchmark')}" if la.get("benchmark") else "")
-    chart10_bytes = charts.get("slide10", b"")
-    if chart10_bytes:
-        sl.shapes.add_picture(BytesIO(chart10_bytes), Inches(0.5), Inches(3.2),
-                              width=Inches(12.3), height=Inches(3.8))
-    else:
-        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
-                  "No top-category data — populate platform_intel.cat_intel.top_cats.",
-                  size=11, color=MUTED, align="center")
+    if "s9" in selected:
+        sl = _add_content("Subscribers & Engagement", "Subscribers & Engagement")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Licensed seats", _fmt(se.get("licensed_seats")),
+                 f"+{se.get('seats_proposed')} in proposal" if se.get("seats_proposed") else "")
+        _add_kpi(sl, 3.7, 1.7, 3.0, "Active 30d", _fmt(se.get("active_30d")),
+                 f"{se.get('activation_pct')}% activation" if se.get("activation_pct") is not None else "")
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Logins (period)", _fmt(se.get("logins_total")))
+        _add_kpi(sl, 10.1, 1.7, 2.7, "Hours (period)", _fmt(se.get("hours_total")))
+        chart9_bytes = charts.get("slide9", b"")
+        if chart9_bytes:
+            sl.shapes.add_picture(BytesIO(chart9_bytes), Inches(0.5), Inches(3.2),
+                                  width=Inches(12.3), height=Inches(3.8))
+        else:
+            _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                      "Trend chart unavailable — need ≥2 months of usage data.",
+                      size=11, color=MUTED, align="center")
 
-    # 11 Inflation Watch GIT
-    sl = _add_content("Inflation Watch GIT", "Inflation Watch GIT")
-    _add_kpi(sl, 0.5, 1.7, 4.0, "Categories tracked",
-             f"{_fmt(iw.get('categories_tracked'))} of {_fmt(iw.get('categories_in_scope'))}")
-    _add_kpi(sl, 4.7, 1.7, 4.0, "Views (period)", _fmt(iw.get("views_period")))
-    _add_kpi(sl, 8.9, 1.7, 3.9, "Negotiation prep runs", _fmt(iw.get("neg_prep_runs")))
-    chart11_bytes = charts.get("slide11", b"")
-    if chart11_bytes:
-        sl.shapes.add_picture(BytesIO(chart11_bytes), Inches(0.5), Inches(3.2),
-                              width=Inches(12.3), height=Inches(3.8))
-    else:
-        _add_text(sl, 0.5, 3.5, 12.3, 0.4,
-                  "No inflation trend data — populate platform_intel.inflation_watch.trend_monthly.",
-                  size=11, color=MUTED, align="center")
+    if "s10" in selected:
+        sl = _add_content("Live.ai · Category Watch", "Live.ai · Category Watch")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Subscribers",
+                 f"{_fmt(la.get('subscribers'))} of {_fmt(la.get('total_subs'))}")
+        _add_kpi(sl, 3.7, 1.7, 3.0, "Categories unlocked", _fmt(la.get("categories_unlocked")),
+                 f"{la.get('ent_cats') or '—'} Ent + {la.get('non_ent_cats') or '—'} Non-Ent")
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Avg cat/user", _fmt(la.get("avg_per_user")),
+                 f"benchmark {la.get('benchmark')}" if la.get("benchmark") else "")
+        chart10_bytes = charts.get("slide10", b"")
+        if chart10_bytes:
+            sl.shapes.add_picture(BytesIO(chart10_bytes), Inches(0.5), Inches(3.2),
+                                  width=Inches(12.3), height=Inches(3.8))
+        else:
+            _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                      "No top-category data — populate platform_intel.cat_intel.top_cats.",
+                      size=11, color=MUTED, align="center")
 
-    # 12 Closer
-    _add_cover(
-        "Next review scheduled per cadence",
-        f"Thank you, {cover.get('account_name', '')}",
-        cover.get("title", ""),
-        cover.get("footer", "Beroe"),
-    )
+    if "s11" in selected:
+        sl = _add_content("Inflation Watch GIT", "Inflation Watch GIT")
+        _add_kpi(sl, 0.5, 1.7, 4.0, "Categories tracked",
+                 f"{_fmt(iw.get('categories_tracked'))} of {_fmt(iw.get('categories_in_scope'))}")
+        _add_kpi(sl, 4.7, 1.7, 4.0, "Views (period)", _fmt(iw.get("views_period")))
+        _add_kpi(sl, 8.9, 1.7, 3.9, "Negotiation prep runs", _fmt(iw.get("neg_prep_runs")))
+        chart11_bytes = charts.get("slide11", b"")
+        if chart11_bytes:
+            sl.shapes.add_picture(BytesIO(chart11_bytes), Inches(0.5), Inches(3.2),
+                                  width=Inches(12.3), height=Inches(3.8))
+        else:
+            _add_text(sl, 0.5, 3.5, 12.3, 0.4,
+                      "No inflation trend data — populate platform_intel.inflation_watch.trend_monthly.",
+                      size=11, color=MUTED, align="center")
+
+    # ---- Module deep-dives s13-s18 ----
+    mm = snapshot.get("mmd_modules", {}) or {}
+    ai = snapshot.get("abi_intel", {}) or {}
+    sw = snapshot.get("supplier_watch", {}) or {}
+    bm = snapshot.get("benchmark", {}) or {}
+    su = snapshot.get("super_users", []) or []
+    nps_s = snapshot.get("nps", {}) or {}
+
+    if "s13" in selected:
+        sl = _add_content("MMD · Module Activity", "MMD · Module Activity")
+        cards = [
+            ("MMD", _fmt(mm.get("mmd"))),
+            ("Abi", _fmt(mm.get("abi"))),
+            ("Supplier Disc.", _fmt(mm.get("sd"))),
+            ("DataLake", _fmt(mm.get("dl"))),
+            ("Benchmark", _fmt(mm.get("bm"))),
+        ]
+        for i, (lab, val) in enumerate(cards):
+            x = 0.5 + (i % 5) * 2.55
+            _add_kpi(sl, x, 1.7, 2.4, lab, val)
+
+    if "s14" in selected:
+        sl = _add_content("Abi Intelligence", "Abi Intelligence")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Total queries", _fmt(ai.get("total_queries")))
+        _add_kpi(sl, 3.7, 1.7, 3.0, "Queries / user", _fmt(ai.get("queries_per_user")))
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Resolution rate", _fmt(ai.get("resolution_rate")))
+        _add_kpi(sl, 10.1, 1.7, 2.7, "Avg response", _fmt(ai.get("avg_response")))
+        _add_text(sl, 0.5, 3.3, 6, 0.3, "Complexity mix", size=12, bold=True, color=NAVY)
+        for i, (k, v) in enumerate((ai.get("complexity_mix") or {}).items()):
+            _add_text(sl, 0.5, 3.7 + i * 0.35, 6, 0.3, f"{k} · {v}", size=10, color=DARK)
+        _add_text(sl, 7.0, 3.3, 6, 0.3, "Top query types", size=12, bold=True, color=NAVY)
+        for i, t in enumerate((ai.get("top_types") or [])[:6]):
+            _add_text(sl, 7.0, 3.7 + i * 0.35, 6, 0.3, "• " + str(t), size=10, color=DARK)
+
+    if "s15" in selected:
+        sl = _add_content("Supplier Watch", "Supplier Watch")
+        bri = sw.get("by_risk") or {}
+        _add_kpi(sl, 0.5, 1.7, 3.0, "Tracked", _fmt(sw.get("tracked")))
+        _add_kpi(sl, 3.7, 1.7, 3.0, "High risk", _fmt(bri.get("high")))
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Med-high risk", _fmt(bri.get("med_high")))
+        _add_kpi(sl, 10.1, 1.7, 2.7, "Med + low",
+                 f"{bri.get('med', 0)} + {bri.get('low', 0)}")
+        _add_text(sl, 0.5, 3.3, 12.3, 0.3, "Tracked suppliers", size=12, bold=True, color=NAVY)
+        sup_list = (sw.get("suppliers") or [])[:8]
+        for i, x in enumerate(sup_list):
+            y = 3.7 + i * 0.4
+            _add_text(sl, 0.5, y, 4.0, 0.35, _fmt(x.get("name")), size=10, bold=True, color=DARK)
+            _add_text(sl, 4.5, y, 3.5, 0.35, _fmt(x.get("cat")), size=10, color=MUTED)
+            _add_text(sl, 8.0, y, 2.5, 0.35, _fmt(x.get("country")), size=10, color=MUTED)
+            _add_text(sl, 10.5, y, 2.3, 0.35, _fmt(x.get("risk")), size=10, color=INDIGO, bold=True)
+
+    if "s16" in selected:
+        sl = _add_content("Industry Benchmark", "Industry Benchmark")
+        rows = [
+            ("Health score", bm.get("this_health"), bm.get("avg_health")),
+            ("Seat activation %", bm.get("this_seat_pct"), bm.get("avg_seat_pct")),
+            ("Abi queries", bm.get("this_abi"), bm.get("avg_abi")),
+            ("Logins (period)", bm.get("this_logins"), bm.get("avg_logins")),
+            ("Engagement alerts", bm.get("this_engagement"), bm.get("avg_engagement")),
+        ]
+        _add_text(sl, 0.5, 1.7, 4, 0.3, "Dimension", size=10, bold=True, color=MUTED)
+        _add_text(sl, 5.5, 1.7, 3, 0.3, "This account", size=10, bold=True, color=MUTED)
+        _add_text(sl, 9.0, 1.7, 3, 0.3, "Industry average", size=10, bold=True, color=MUTED)
+        for i, (label, this_v, avg_v) in enumerate(rows):
+            y = 2.2 + i * 0.6
+            _add_text(sl, 0.5, y, 4.5, 0.5, label, size=11, color=DARK)
+            _add_text(sl, 5.5, y, 3.0, 0.5, _fmt(this_v), size=13, bold=True, color=INDIGO)
+            _add_text(sl, 9.0, y, 3.0, 0.5, _fmt(avg_v), size=12, color=MUTED)
+
+    if "s17" in selected:
+        sl = _add_content("NPS · Voice of Customer", "NPS · Voice of Customer")
+        _add_kpi(sl, 0.5, 1.7, 3.0, "NPS", _fmt(nps_s.get("score")))
+        _add_kpi(sl, 3.7, 1.7, 3.0, "Promoters", _fmt(nps_s.get("promoters")))
+        _add_kpi(sl, 6.9, 1.7, 3.0, "Passives", _fmt(nps_s.get("passives")))
+        _add_kpi(sl, 10.1, 1.7, 2.7, "Detractors", _fmt(nps_s.get("detractors")))
+        _add_text(sl, 0.5, 3.3, 12.3, 0.3, "Voice of Customer", size=12, bold=True, color=NAVY)
+        for i, v in enumerate((nps_s.get("voc") or [])[:4]):
+            y = 3.8 + i * 0.8
+            _add_text(sl, 0.5, y, 12.3, 0.4, '"' + str(_fmt(v.get("quote"))) + '"',
+                      size=11, color=DARK)
+            _add_text(sl, 0.5, y + 0.4, 12.3, 0.3,
+                      f"— {_fmt(v.get('author'))} · {_fmt(v.get('role'))} · {_fmt(v.get('sentiment'))}",
+                      size=9, color=MUTED)
+
+    if "s18" in selected:
+        sl = _add_content("Super Users", "Super Users")
+        headers = ["Name", "Role", "Logins", "CW views", "Abi", "SD", "Hours"]
+        xs = [0.5, 3.5, 6.0, 7.5, 9.0, 10.3, 11.5]
+        for x, h in zip(xs, headers, strict=True):
+            _add_text(sl, x, 1.7, 1.8, 0.3, h, size=10, bold=True, color=MUTED)
+        for i, u in enumerate(su[:5]):
+            y = 2.2 + i * 0.55
+            row = [
+                _fmt(u.get("name")),
+                _fmt(u.get("role")),
+                _fmt(u.get("logins")),
+                _fmt(u.get("cw_views")),
+                _fmt(u.get("abi_queries")),
+                _fmt(u.get("sd_searches")),
+                _fmt(u.get("hours")),
+            ]
+            for x, val in zip(xs, row, strict=True):
+                bold = x in (0.5,)
+                _add_text(sl, x, y, 1.8, 0.4, val, size=11, color=DARK, bold=bold)
+
+    # ---- Generic module slides s19-s27 (PPTX) ----
+    # Same data-shape strategy as the HTML side: scalars become KPI tiles,
+    # list-of-dicts become a header-row table. Empty sections show a
+    # "Data pending" callout so the slide still appears in the deck.
+
+    def _pptx_module_slide(sid: str, eyebrow: str, title: str, payload: dict, hint: str) -> None:
+        if sid not in selected:
+            return
+        sl_local = _add_content(eyebrow, title)
+        if not payload:
+            _add_text(sl_local, 0.5, 3.2, 12.3, 0.5,
+                      "Data pending",
+                      size=14, bold=True, color=MUTED, align="center")
+            _add_text(sl_local, 0.5, 3.7, 12.3, 0.4,
+                      hint, size=11, color=MUTED, align="center")
+            return
+        scalars = [(k, v) for k, v in payload.items()
+                   if not isinstance(v, (list, dict)) and v not in (None, "")]
+        for j, (k, v) in enumerate(scalars[:8]):
+            x_loc = 0.5 + (j % 4) * 3.1
+            y_loc = 1.7 + (j // 4) * 1.4
+            _add_kpi(sl_local, x_loc, y_loc, 3.0, _titleize(k), _fmt(v))
+
+    _pptx_module_slide("s19", "Supplier Discovery", "Supplier Discovery",
+                       snapshot.get("supplier_discovery", {}) or {},
+                       "Populate platform_intel.supplier_discovery for this slide.")
+    _pptx_module_slide("s20", "Custom Usage", "Custom Usage · deep dive",
+                       snapshot.get("custom_usage", {}) or {},
+                       "Populate platform_intel.custom_usage for deeper credits usage.")
+    _pptx_module_slide("s21", "Thought Leadership", "Thought Leadership",
+                       snapshot.get("thought_leadership", {}) or {},
+                       "Populate platform_intel.thought_leadership for content engagement.")
+    _pptx_module_slide("s22", "DataHub", "DataHub",
+                       snapshot.get("datahub", {}) or {},
+                       "Populate platform_intel.datahub for adoption metrics.")
+    _pptx_module_slide("s23", "Cirtuo", "Cirtuo · Sourcing strategy",
+                       snapshot.get("cirtuo", {}) or {},
+                       "Populate platform_intel.cirtuo for sourcing strategy stats.")
+    _pptx_module_slide("s24", "nnamu", "nnamu",
+                       snapshot.get("nnamu", {}) or {},
+                       "Populate platform_intel.nnamu for nnamu engagement.")
+    _pptx_module_slide("s25", "Upply", "Upply",
+                       snapshot.get("upply", {}) or {},
+                       "Populate platform_intel.upply for Upply usage.")
+    _pptx_module_slide("s26", "Alerts", "Alerts",
+                       snapshot.get("alerts", {}) or {},
+                       "Populate platform_intel.alerts.")
+    _pptx_module_slide("s27", "Platform Training", "Platform Training",
+                       snapshot.get("platform_training", {}) or {},
+                       "Populate platform_intel.platform_training for completions.")
+
+    if "s12" in selected:
+        _add_cover(
+            "Next review scheduled per cadence",
+            f"Thank you, {cover.get('account_name', '')}",
+            cover.get("title", ""),
+            cover.get("footer", "Beroe"),
+        )
 
     buf = BytesIO()
     prs.save(buf)

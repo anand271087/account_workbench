@@ -114,11 +114,15 @@ async def generate_business_review(
     snapshot = await gather_data(
         db=db, account=acc, period=period, cadence=body.cadence
     )
+    # Persist the slide selection alongside the snapshot so re-render
+    # is deterministic and the audit trail shows what was included.
+    snapshot["meta"]["slide_ids"] = body.slide_ids or None
+
     # Build chart PNGs ONCE so HTML/PDF/PPTX carry identical visuals.
     charts = _build_chart_pngs(snapshot)
-    html = render_html(snapshot, charts=charts)
+    html = render_html(snapshot, charts=charts, slide_ids=body.slide_ids)
     pdf = render_pdf(html)
-    pptx = render_pptx(snapshot, charts=charts)
+    pptx = render_pptx(snapshot, charts=charts, slide_ids=body.slide_ids)
 
     row = BusinessReview(
         account_id=account_id,

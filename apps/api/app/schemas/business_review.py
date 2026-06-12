@@ -17,11 +17,26 @@ from pydantic import BaseModel, ConfigDict, Field
 BRCadence = Literal["monthly", "quarterly", "renewal", "custom"]
 
 
+SLIDE_IDS = (
+    "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+    "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
+    "s19", "s20", "s21", "s22", "s23", "s24", "s25", "s26", "s27",
+)
+SlideId = Literal[
+    "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+    "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18",
+    "s19", "s20", "s21", "s22", "s23", "s24", "s25", "s26", "s27",
+]
+
+
 class GenerateBRRequest(BaseModel):
     """POST /accounts/:id/business-reviews/generate body.
 
     For `cadence='custom'` the caller MUST supply both period_start and
     period_end. For other cadences they're derived server-side.
+
+    `slide_ids` lets the user customize which of the 12 slides land in
+    the rendered deck. Omit / send null to include all 12 (default).
     """
 
     cadence: BRCadence
@@ -30,6 +45,7 @@ class GenerateBRRequest(BaseModel):
     # Optional manual label override. When omitted the service builds a
     # default label from cadence + dates (e.g. "June 2026", "Q2 2026").
     period_label: str | None = None
+    slide_ids: list[SlideId] | None = None
 
 
 class BROut(BaseModel):
@@ -75,3 +91,11 @@ class BRDataSnapshot(BaseModel):
     subscribers_engagement: dict[str, Any] = Field(default_factory=dict)
     live_ai: dict[str, Any] = Field(default_factory=dict)
     inflation_watch: dict[str, Any] = Field(default_factory=dict)
+    # Module deep-dives (slides 13-18).
+    mmd_modules: dict[str, Any] = Field(default_factory=dict)
+    abi_intel: dict[str, Any] = Field(default_factory=dict)
+    supplier_watch: dict[str, Any] = Field(default_factory=dict)
+    benchmark: dict[str, Any] = Field(default_factory=dict)
+    engagement: dict[str, Any] = Field(default_factory=dict)
+    super_users: list[dict[str, Any]] = Field(default_factory=list)
+    nps: dict[str, Any] = Field(default_factory=dict)
