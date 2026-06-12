@@ -23,7 +23,9 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { MoneyInput } from "@/components/MoneyInput";
+import { useNavigate } from "react-router-dom";
 import { useProductRoster } from "@/components/ProductRoster";
+import type { CSGoal, Initiative, InitiativeStatus } from "@/types/cs_goal";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   fmtK,
@@ -43,6 +45,9 @@ import {
   type TopPeerModule,
 } from "@/types/play";
 
+// 12-Jun · MODE_TITLES kept for the (mode-aware) AI / Peer tab heuristics.
+// Active tab no longer reads it after the initiative refactor.
+// @ts-expect-error — temporarily unused
 const MODE_TITLES: Record<PlayMode, string> = {
   rescue: "Rescue Plays",
   retain: "Retention & Adoption Plays",
@@ -74,7 +79,8 @@ export default function AccountPlanTab() {
       api.get<GrowthContext>(`/api/v1/accounts/${account.id}/growth-context`),
   });
 
-  const [showAddModal, setShowAddModal] = useState(false);
+  // 12-Jun · `showAddModal` removed — Add play moved into the Active
+  // tab inside PlayTabsSection (it now opens AddInitiativeFromPlaysModal).
   const [showModeModal, setShowModeModal] = useState(false);
   const [showAllPlays, setShowAllPlays] = useState(false);
 
@@ -115,19 +121,14 @@ export default function AccountPlanTab() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-3 items-start">
         {/* LEFT — main content */}
         <div className="space-y-3 min-w-0">
-          {/* Header + Add play */}
-          <div className="flex items-center justify-between">
+          {/* Header — Add play moved to bottom-right of Active tab list
+              (12-Jun stakeholder ask). Plays are now initiatives under
+              the success-metric goals; the button lives next to the
+              list it adds to. */}
+          <div className="flex items-center">
             <div className="text-[16px] font-bold text-text-primary">
               Account Plan
             </div>
-            {editable && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white hover:bg-beroe-bg/60 font-semibold"
-              >
-                + Add play
-              </button>
-            )}
           </div>
 
           {/* ACV Growth Path — 4-tile Current / Target / Gap / Pipeline.
@@ -195,18 +196,10 @@ export default function AccountPlanTab() {
         </aside>
       </div>
 
-      {showAddModal && (
-        <AddPlayModal
-          accountId={account.id}
-          defaultMode={mode}
-          onClose={() => setShowAddModal(false)}
-          onSaved={() => {
-            qc.invalidateQueries({ queryKey: playsKey });
-            qc.invalidateQueries({ queryKey: apptKey });
-            setShowAddModal(false);
-          }}
-        />
-      )}
+      {/* 12-Jun · AddPlayModal removed at this layer — Active tab now
+          opens its own AddInitiativeFromPlaysModal (goal picker → init
+          form). AI / Peer tabs still use the play creation flow inside
+          their list components. */}
 
       {showModeModal && (
         <ModeOverrideModal
@@ -598,6 +591,10 @@ function AcvTile({
 // Plays list
 // ============================================================
 
+// 12-Jun · PlayList is dead code after the Active tab moved to initiatives.
+// Retained here for the AI / Peer tabs (PlayCard layout still reusable) but
+// no current call site exists.
+// @ts-expect-error — temporarily unused
 function PlayList({
   plays,
   mode,
@@ -957,6 +954,10 @@ function EditPlayModal({
 // Add play modal
 // ============================================================
 
+// 12-Jun · AddPlayModal kept for AI / Peer accept flows. No active caller
+// at the moment (Active tab uses AddInitiativeFromPlaysModal); leave for
+// when those tabs are reconciled.
+// @ts-expect-error — temporarily unused
 function AddPlayModal({
   accountId,
   defaultMode,
@@ -2156,13 +2157,18 @@ function PeerBar({
 type PlayTab = "active" | "ai" | "peer";
 
 function PlayTabsSection({
-  mode,
+  // 12-Jun · `mode`, `plays`, `showAllPlays`, `onToggleShowAll` retained
+  // in the signature for caller compatibility but no longer consumed by
+  // the Active tab (which now reads goals/initiatives). Removing them
+  // would force every parent site to re-thread their state; cheaper
+  // to underscore-prefix.
+  mode: _mode,
   editable,
   accountId,
-  plays,
+  plays: _plays,
   allPlays,
-  showAllPlays,
-  onToggleShowAll,
+  showAllPlays: _showAllPlays,
+  onToggleShowAll: _onToggleShowAll,
   aiPlays,
   peerPlays,
 }: {
@@ -2177,8 +2183,26 @@ function PlayTabsSection({
   peerPlays: PeerPlaySuggestion[];
 }) {
   const [tab, setTab] = useState<PlayTab>("active");
+
+  // 12-Jun · Active tab now pulls initiatives from cs_goals instead of
+  // the legacy account_plays endpoint. Each initiative is rendered with
+  // its parent goal as context. PATCHes go back to the parent goal.
+  const goalsQ = useQuery<{ items: CSGoal[] }>({
+    queryKey: ["cs-goals", accountId, false],
+    queryFn: () =>
+      api.get<{ items: CSGoal[] }>(
+        `/api/v1/accounts/${accountId}/cs-goals?include_deleted=false`,
+      ),
+    enabled: tab === "active",
+  });
+  const goals = goalsQ.data?.items ?? [];
+  const activeInitiativeCount = goals.reduce(
+    (n, g) => n + (g.initiatives?.length ?? 0),
+    0,
+  );
+
   const counts: Record<PlayTab, number> = {
-    active: plays.length,
+    active: activeInitiativeCount,
     ai: aiPlays.length,
     peer: peerPlays.length,
   };
@@ -2192,16 +2216,9 @@ function PlayTabsSection({
     <div className="bg-white border border-beroe-card-border rounded-card p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="text-[13px] font-bold">Expansion Plays</div>
-        {tab === "active" && (
-          <label className="text-[11px] text-text-muted flex items-center gap-1 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showAllPlays}
-              onChange={(e) => onToggleShowAll(e.target.checked)}
-            />
-            Show all plays
-          </label>
-        )}
+        {/* "Show all plays" toggle retired 12-Jun — Active tab now shows
+            every initiative across goals; AI / Peer tabs still respect
+            mode-context via their own filters. */}
       </div>
 
       <div className="flex gap-1.5 mb-3 flex-wrap">
@@ -2235,20 +2252,12 @@ function PlayTabsSection({
       </div>
 
       {tab === "active" ? (
-        <>
-          {mode !== "expand" && (
-            <div className="text-[10.5px] text-text-muted mb-2">
-              Mode-aware view: {MODE_TITLES[mode]} (toggle "Show all plays" to see expansion plays here)
-            </div>
-          )}
-          <PlayList
-            plays={plays}
-            mode={mode}
-            editable={editable}
-            accountId={accountId}
-            showAllPlays={showAllPlays}
-          />
-        </>
+        <ActiveInitiativesList
+          accountId={accountId}
+          editable={editable}
+          goals={goals}
+          loading={goalsQ.isLoading}
+        />
       ) : tab === "ai" ? (
         <AiPlaysList plays={aiPlays} accountId={accountId} editable={editable} />
       ) : (
@@ -2621,6 +2630,543 @@ function PlanInputs({
       >
         {conf.desc}
       </div>
+    </div>
+  );
+}
+
+
+// ============================================================
+// 12-Jun · Active Expansion Plays = initiatives across goals
+// ============================================================
+
+const _STATUS_LABEL: Record<InitiativeStatus, string> = {
+  identification: "Identification",
+  pipeline: "Pipeline",
+  in_progress: "In progress",
+  delivered: "Delivered",
+  not_started: "Identification",
+};
+const _STATUS_TONE: Record<InitiativeStatus, { bg: string; fg: string }> = {
+  identification: { bg: "#f1f5f9", fg: "#5a7896" },
+  pipeline: { bg: "#dbeafe", fg: "#1e40af" },
+  in_progress: { bg: "#fef3c7", fg: "#854F0B" },
+  delivered: { bg: "#dcfce7", fg: "#146a45" },
+  not_started: { bg: "#f1f5f9", fg: "#5a7896" },
+};
+
+type InitiativeRow = {
+  goal: CSGoal;
+  init: Initiative;
+  index: number; // position inside the goal's initiatives array
+};
+
+function flattenInitiatives(goals: CSGoal[]): InitiativeRow[] {
+  const rows: InitiativeRow[] = [];
+  for (const g of goals) {
+    (g.initiatives ?? []).forEach((init, i) => rows.push({ goal: g, init, index: i }));
+  }
+  return rows;
+}
+
+function ActiveInitiativesList({
+  accountId,
+  editable,
+  goals,
+  loading,
+}: {
+  accountId: string;
+  editable: boolean;
+  goals: CSGoal[];
+  loading: boolean;
+}) {
+  const qc = useQueryClient();
+  const notify = useNotify();
+  const confirmDlg = useConfirm();
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<InitiativeRow | null>(null);
+
+  const rows = flattenInitiatives(goals);
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["cs-goals", accountId, false] });
+  };
+
+  async function onDelete(row: InitiativeRow) {
+    const ok = await confirmDlg({
+      title: "Remove this play?",
+      body: `"${row.init.name}" — under goal "${row.goal.title}". This deletes the initiative from the goal.`,
+      confirmLabel: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+    const next = (row.goal.initiatives ?? []).filter((_, i) => i !== row.index);
+    try {
+      await api.patch(`/api/v1/cs-goals/${row.goal.id}`, {
+        initiatives: next,
+      });
+      refresh();
+      notify({ title: "Play removed", tone: "success" });
+    } catch (e) {
+      const err = e as ApiError;
+      notify({ title: "Remove failed", body: err.message, tone: "error" });
+    }
+  }
+
+  if (loading) {
+    return <div className="text-[11px] text-text-muted italic">Loading plays…</div>;
+  }
+
+  return (
+    <div>
+      {rows.length === 0 ? (
+        <div
+          className="text-[11.5px] italic px-3 py-4 rounded-md mb-3"
+          style={{ background: "#fafbfd", color: "#8496b0" }}
+        >
+          No plays yet — every play lives under a goal. Click{" "}
+          <b>+ Add play</b> below to pick a goal and add the first one.
+        </div>
+      ) : (
+        <div className="space-y-2 mb-3">
+          {rows.map((row) => {
+            const tone = _STATUS_TONE[row.init.status];
+            return (
+              <div
+                key={`${row.goal.id}:${row.index}`}
+                className="bg-white border border-beroe-card-border rounded-card p-3 grid items-center"
+                style={{
+                  gridTemplateColumns: "1fr 120px 80px",
+                  gap: 12,
+                }}
+              >
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-bold text-text-primary truncate">
+                    {row.init.name}
+                  </div>
+                  <div className="text-[10.5px] text-text-muted mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span>📎 Under goal:</span>
+                    <b className="text-text-secondary">{row.goal.title}</b>
+                    {row.init.value_target && (
+                      <>
+                        <span>·</span>
+                        <b className="text-text-primary">{row.init.value_target}</b>
+                      </>
+                    )}
+                    {row.init.notes && (
+                      <>
+                        <span>·</span>
+                        <span
+                          className="truncate"
+                          title={row.init.notes ?? undefined}
+                          style={{ maxWidth: 380 }}
+                        >
+                          {row.init.notes}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <span
+                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-center"
+                  style={{ background: tone.bg, color: tone.fg }}
+                >
+                  {_STATUS_LABEL[row.init.status]}
+                </span>
+                {editable ? (
+                  <div className="flex gap-1 justify-end">
+                    <button
+                      onClick={() => setEditingRow(row)}
+                      className="text-[11px] px-2 py-1 rounded border border-beroe-card-border bg-white hover:bg-beroe-bg/60"
+                      title="Edit"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      onClick={() => onDelete(row)}
+                      className="text-[11px] px-2 py-1 rounded border border-beroe-red/30 bg-white text-beroe-red hover:bg-beroe-red/5"
+                      title="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {editable && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setAddOpen(true)}
+            className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white hover:bg-beroe-bg/60 font-semibold"
+          >
+            + Add play
+          </button>
+        </div>
+      )}
+
+      {addOpen && (
+        <AddInitiativeFromPlaysModal
+          accountId={accountId}
+          goals={goals}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => {
+            refresh();
+            setAddOpen(false);
+          }}
+        />
+      )}
+
+      {editingRow && (
+        <EditInitiativeModal
+          row={editingRow}
+          onClose={() => setEditingRow(null)}
+          onSaved={() => {
+            refresh();
+            setEditingRow(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+
+// ============================================================
+// Two-step: goal picker → initiative form
+// ============================================================
+
+function _newInitiative(name: string): Initiative {
+  return {
+    name,
+    sub_initiatives: null,
+    status: "identification",
+    value_stage: null,
+    value_target: null,
+    value_delivered: null,
+    notes: null,
+    completion_pct: null,
+    client_acknowledged: "pending",
+    evidence: null,
+    implementation_status: null,
+    implementation_note: null,
+    value_fields: {},
+    client_data: [],
+    value_history: [],
+  };
+}
+
+function _initialDraft(row: InitiativeRow | null): Initiative {
+  return row ? { ...row.init } : _newInitiative("");
+}
+
+function AddInitiativeFromPlaysModal({
+  accountId,
+  goals,
+  onClose,
+  onSaved,
+}: {
+  accountId: string;
+  goals: CSGoal[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const navigate = useNavigate();
+  const notify = useNotify();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [pickedGoalId, setPickedGoalId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Initiative>(_newInitiative(""));
+  const [saving, setSaving] = useState(false);
+
+  const pickedGoal = goals.find((g) => g.id === pickedGoalId) ?? null;
+
+  async function onSave() {
+    if (!pickedGoal) return;
+    if (!draft.name.trim()) {
+      notify({ title: "Title is required", tone: "warning" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const next = [...(pickedGoal.initiatives ?? []), draft];
+      await api.patch(`/api/v1/cs-goals/${pickedGoal.id}`, {
+        initiatives: next,
+      });
+      notify({
+        title: "Play added",
+        body: `Under goal "${pickedGoal.title}"`,
+        tone: "success",
+      });
+      onSaved();
+    } catch (e) {
+      const err = e as ApiError;
+      notify({ title: "Save failed", body: err.message, tone: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} title={step === 1 ? "Pick a goal" : "Add play"}>
+      {step === 1 ? (
+        <div>
+          <div className="text-[11.5px] text-text-muted mb-3">
+            Which success metric does this play live under? Every play is an
+            initiative on a goal.
+          </div>
+          {goals.length === 0 ? (
+            <div
+              className="px-3 py-4 rounded-md text-[11.5px] italic"
+              style={{ background: "#fef3c7", color: "#854F0B" }}
+            >
+              This account has no goals yet. Create one in{" "}
+              <b>Goal Alignment</b> first, then come back here.
+              <div className="mt-2">
+                <button
+                  onClick={() => {
+                    onClose();
+                    navigate(`/accounts/${accountId}/success-management/goal-alignment`);
+                  }}
+                  className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-blue bg-beroe-blue text-white font-semibold"
+                >
+                  Go to Goal Alignment →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[340px] overflow-y-auto">
+              {goals.map((g) => {
+                const selected = g.id === pickedGoalId;
+                return (
+                  <label
+                    key={g.id}
+                    className="block cursor-pointer rounded-md border p-3 transition-colors"
+                    style={{
+                      borderColor: selected ? "#4A00F8" : "#e4eaf6",
+                      background: selected ? "#f5f3ff" : "#fff",
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        checked={selected}
+                        onChange={() => setPickedGoalId(g.id)}
+                        className="flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-bold text-text-primary">
+                          {g.title}
+                        </div>
+                        <div className="text-[10.5px] text-text-muted mt-0.5">
+                          Category: <b>{g.category}</b>
+                          {g.target_value && <> · Target: <b>{g.target_value}</b></>}
+                          {g.target_date && <> · Due: <b>{g.target_date}</b></>}
+                          <> · {g.initiatives?.length ?? 0} existing initiative{(g.initiatives?.length ?? 0) === 1 ? "" : "s"}</>
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              onClick={onClose}
+              className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => setStep(2)}
+              disabled={!pickedGoalId || goals.length === 0}
+              className="text-[12px] px-4 py-1.5 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="text-[10.5px] text-text-muted mb-3">
+            Adding to: <b className="text-text-primary">{pickedGoal?.title}</b>
+          </div>
+          <InitiativeFormFields draft={draft} setDraft={setDraft} />
+          <div className="flex justify-between gap-2 mt-4">
+            <button
+              onClick={() => setStep(1)}
+              className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
+            >
+              ← Back
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={onClose}
+                className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onSave}
+                disabled={saving || !draft.name.trim()}
+                className="text-[12px] px-4 py-1.5 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save play"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
+function EditInitiativeModal({
+  row,
+  onClose,
+  onSaved,
+}: {
+  row: InitiativeRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const notify = useNotify();
+  const [draft, setDraft] = useState<Initiative>(() => _initialDraft(row));
+  const [saving, setSaving] = useState(false);
+
+  async function onSave() {
+    if (!draft.name.trim()) {
+      notify({ title: "Title is required", tone: "warning" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const next = (row.goal.initiatives ?? []).map((it, i) =>
+        i === row.index ? draft : it,
+      );
+      await api.patch(`/api/v1/cs-goals/${row.goal.id}`, {
+        initiatives: next,
+      });
+      notify({ title: "Play updated", tone: "success" });
+      onSaved();
+    } catch (e) {
+      const err = e as ApiError;
+      notify({ title: "Update failed", body: err.message, tone: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} title="Edit play">
+      <div className="text-[10.5px] text-text-muted mb-3">
+        Under goal: <b className="text-text-primary">{row.goal.title}</b>
+      </div>
+      <InitiativeFormFields draft={draft} setDraft={setDraft} />
+      <div className="flex justify-end gap-2 mt-4">
+        <button
+          onClick={onClose}
+          className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          disabled={saving || !draft.name.trim()}
+          className="text-[12px] px-4 py-1.5 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function InitiativeFormFields({
+  draft,
+  setDraft,
+}: {
+  draft: Initiative;
+  setDraft: (next: Initiative) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <ModalField label="Title">
+        <input
+          type="text"
+          value={draft.name}
+          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          placeholder="What's this play about?"
+          className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
+        />
+      </ModalField>
+      <div className="grid grid-cols-2 gap-3">
+        <ModalField label="Status">
+          <select
+            value={draft.status}
+            onChange={(e) =>
+              setDraft({ ...draft, status: e.target.value as InitiativeStatus })
+            }
+            className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px] bg-white"
+          >
+            <option value="identification">Identification</option>
+            <option value="pipeline">Pipeline</option>
+            <option value="in_progress">In progress</option>
+            <option value="delivered">Delivered</option>
+          </select>
+        </ModalField>
+        <ModalField label="Owner">
+          <input
+            type="text"
+            value={(draft.value_fields?.owner as string) ?? ""}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                value_fields: { ...draft.value_fields, owner: e.target.value },
+              })
+            }
+            placeholder="Person responsible"
+            className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
+          />
+        </ModalField>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <ModalField label="Target ($ / text)">
+          <input
+            type="text"
+            value={draft.value_target ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, value_target: e.target.value || null })
+            }
+            placeholder="$500K · 15% adoption · …"
+            className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
+          />
+        </ModalField>
+        <ModalField label="Delivered ($ / text)">
+          <input
+            type="text"
+            value={draft.value_delivered ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, value_delivered: e.target.value || null })
+            }
+            placeholder="$120K · 5% so far · …"
+            className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px]"
+          />
+        </ModalField>
+      </div>
+      <ModalField label="Notes">
+        <textarea
+          value={draft.notes ?? ""}
+          onChange={(e) => setDraft({ ...draft, notes: e.target.value || null })}
+          placeholder="Trigger, context, next steps…"
+          rows={3}
+          className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px] resize-y"
+        />
+      </ModalField>
     </div>
   );
 }
