@@ -161,6 +161,39 @@ export function VpdGoalsExtractionReview({
           </button>
         </div>
 
+        {/* 12-Jun bug 227 — Select-all toolbar. Harish asked for a way
+            to toggle every candidate in one click instead of ticking
+            them one by one. Master checkbox flips every row's _selected;
+            'indeterminate' visual when some-but-not-all are picked. */}
+        {rows.length > 0 && (
+          <div className="px-5 py-2 border-b border-beroe-card-border bg-beroe-bg/40 flex items-center gap-2">
+            <input
+              type="checkbox"
+              ref={(el) => {
+                if (el) {
+                  const total = rows.length;
+                  const sel = rows.filter((r) => r._selected).length;
+                  el.indeterminate = sel > 0 && sel < total;
+                }
+              }}
+              checked={rows.length > 0 && rows.every((r) => r._selected)}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setRows((prev) => prev.map((r) => ({ ...r, _selected: next })));
+              }}
+              disabled={running}
+              className="cursor-pointer"
+              id="goals-select-all"
+            />
+            <label
+              htmlFor="goals-select-all"
+              className="text-[12px] font-semibold text-text-secondary cursor-pointer select-none"
+            >
+              Select all ({rows.length})
+            </label>
+          </div>
+        )}
+
         {/* Rows */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {rows.length === 0 ? (
