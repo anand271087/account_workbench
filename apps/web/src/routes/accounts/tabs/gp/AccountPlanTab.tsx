@@ -23,7 +23,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { MoneyInput } from "@/components/MoneyInput";
-import { ProductRoster } from "@/components/ProductRoster";
+import { useProductRoster } from "@/components/ProductRoster";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   fmtK,
@@ -136,10 +136,10 @@ export default function AccountPlanTab() {
               appetite.breakdown.projected_acv_usd. */}
           <AcvTile appetite={appetite} account={account} mode={mode} />
 
-          {/* 12-Jun · Product Roster — 28 Beroe products with purchase
-              flags from the bulk-import / manual roster (migration 0075).
-              Lives between ACV growth and Product Saturation. */}
-          <ProductRoster accountId={account.id} />
+          {/* 12-Jun · Earlier separate <ProductRoster> card retired —
+              <ProductSaturation> below now reads the same account_products
+              roster AND renders it in the prototype's amber-gradient
+              Saturation layout, so a separate card was duplicate. */}
 
           {/* 09-Jun bug (Bug Tracker · Jun-8 #6 part 1) — Product &
               Services Saturation moved ABOVE Expansion Plays (per spec
@@ -1821,19 +1821,11 @@ function ChecklistRow({
   );
 }
 
-// 2. Product & Services Saturation — count of contracted Beroe modules
-//    out of the 8 named modules, with a per-module owned/gap grid. Mirrors
-//    prototype `bProductSaturation`. Reads gate.gate_contract_modules.
-const BEROE_MODULES = [
-  "Live.ai",
-  "MMD",
-  "Supplier Risk",
-  "Supply Chain Risk",
-  "Copilot",
-  "DataHub",
-  "Sourcing Optimizer",
-  "Diverse Supplier Directory",
-];
+// 2. Product & Services Saturation — count of OWNED Beroe products out
+//    of the canonical 28-product roster (account_products table). Visual
+//    layout faithfully ports beroe_growth_pipeline_proto_revised.html
+//    § "Product & Services Saturation". The legacy BEROE_MODULES list
+//    (8 module names tied to gate_contract_modules) was retired 12-Jun.
 
 function ProductSaturation({
   accountId,
@@ -1844,91 +1836,153 @@ function ProductSaturation({
   peerBenchmark?: PeerBenchmark;
   topPeerModules: TopPeerModule[];
 }) {
-  const { data, isLoading } = useQuery<{
-    gate_contract_modules: string[];
+  // 12-Jun · Data source switched from the legacy gate_contract_modules
+  // (which only carried a handful of contract-line names) to the canonical
+  // account_products roster (28 Beroe products, populated by the bulk
+  // import or manual edit). Visual layout faithfully ports
+  // beroe_growth_pipeline_proto_revised.html § "Product & Services
+  // Saturation" — amber→red progress gradient, green Owned rows,
+  // dashed-grey Gap rows.
+  const gateQ = useQuery<{
     gate_platform_tier: string | null;
     gate_account_segment: string | null;
   }>({
     queryKey: ["signing-gate", accountId],
     queryFn: () => api.get(`/api/v1/accounts/${accountId}/sign`),
   });
-  const owned = new Set((data?.gate_contract_modules ?? []).map((m) => m.toLowerCase()));
-  const total = BEROE_MODULES.length;
-  const ownedCount = BEROE_MODULES.filter((m) =>
-    owned.has(m.toLowerCase()),
-  ).length;
-  const pct = Math.round((ownedCount / total) * 100);
+  const { data: roster, isLoading } = useProductRoster(accountId);
+
+  const items = roster?.items ?? [];
+  const ownedCount = items.filter((r) => r.purchased === true).length;
+  const total = items.length || 28;
+  const pct = total > 0 ? Math.round((ownedCount / total) * 100) : 0;
+
+  // Sort owned first so the green block reads top-down.
+  const sorted = [...items].sort((a, b) => {
+    const av = a.purchased === true ? 0 : 1;
+    const bv = b.purchased === true ? 0 : 1;
+    return av - bv;
+  });
+
   return (
     <div className="bg-white border border-beroe-card-border rounded-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div className="text-[13px] font-bold">📦 Product & Services Saturation</div>
-          <div className="text-[10px] text-text-muted mt-0.5">
-            Tier:{" "}
-            <b className="text-text-primary">
-              {data?.gate_platform_tier ?? "—"}
-            </b>{" "}
-            · Segment:{" "}
-            <b className="text-text-primary">
-              {data?.gate_account_segment ?? "—"}
-            </b>
+      {/* section-h */}
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-baseline gap-2">
+          <div className="text-[14px] font-extrabold text-[#0d1b2e]">
+            🎯 Product &amp; Services Saturation
           </div>
         </div>
-        <div className="text-center">
+        <div className="text-[10.5px] text-[#5a7896]">
+          Tier:{" "}
+          <b className="text-[#0d1b2e]">
+            {gateQ.data?.gate_platform_tier ?? "—"}
+          </b>{" "}
+          · Segment:{" "}
+          <b className="text-[#0d1b2e]">
+            {gateQ.data?.gate_account_segment ?? "—"}
+          </b>
+        </div>
+      </div>
+
+      {/* progress bar row — prototype § Saturation */}
+      <div className="flex items-center gap-3 mb-2.5">
+        <div className="flex-1">
           <div
-            className="text-[20px] font-extrabold"
             style={{
-              color: pct >= 50 ? "#6EC457" : pct >= 25 ? "#F0BC41" : "#CF4548",
+              height: 10,
+              background: "#e8eef8",
+              borderRadius: 5,
+              overflow: "hidden",
             }}
           >
-            {pct}%
+            <div
+              style={{
+                height: "100%",
+                width: `${pct}%`,
+                background:
+                  "linear-gradient(90deg, #EF9637 0%, #FD576B 100%)",
+                transition: "width 0.4s ease",
+              }}
+            />
           </div>
-          <div className="text-[9px] text-text-muted">Saturation</div>
+        </div>
+        <div
+          style={{
+            fontSize: 18,
+            fontWeight: 800,
+            color: "#EF9637",
+          }}
+        >
+          {pct}%
+        </div>
+        <div style={{ fontSize: 10.5, color: "#8496b0" }}>
+          {ownedCount} of {total} products
         </div>
       </div>
-      <div className="h-1.5 bg-beroe-bg rounded-full overflow-hidden mb-3">
-        <div
-          className="h-full"
-          style={{
-            width: `${pct}%`,
-            background: pct >= 50 ? "#6EC457" : pct >= 25 ? "#F0BC41" : "#CF4548",
-          }}
-        />
-      </div>
+
+      {/* 2-col sat-row grid */}
       {isLoading ? (
-        <div className="text-[11px] text-text-muted italic">Loading modules…</div>
+        <div className="text-[11px] text-text-muted italic">Loading roster…</div>
+      ) : items.length === 0 ? (
+        <div
+          className="text-[11px] italic px-3 py-3 rounded-md"
+          style={{ background: "#fafbfd", color: "#8496b0" }}
+        >
+          No product roster yet for this account. Use the{" "}
+          <b>📥 Import accounts</b> button on the list page to upload, or
+          PATCH each row admin-side.
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-          {BEROE_MODULES.map((m) => {
-            const has = owned.has(m.toLowerCase());
+          {sorted.map((p) => {
+            const owned = p.purchased === true;
+            const styles = owned
+              ? {
+                  background: "#f0fdf4",
+                  border: "1px solid #a8e5c4",
+                  color: "#146a45",
+                }
+              : {
+                  background: "#fafbfd",
+                  border: "1px dashed #e4eaf6",
+                  color: "#5a7896",
+                };
             return (
               <div
-                key={m}
-                className={cn(
-                  "flex items-center gap-2 px-2 py-1 rounded-md border text-[11px]",
-                  has
-                    ? "border-beroe-green/30 bg-beroe-green/15/40"
-                    : "border-beroe-card-border bg-white",
-                )}
+                key={p.product_key}
+                style={{
+                  ...styles,
+                  display: "grid",
+                  gridTemplateColumns: "20px 1fr 60px",
+                  alignItems: "center",
+                  padding: "7px 10px",
+                  borderRadius: 7,
+                  fontSize: 11.5,
+                  gap: 10,
+                  transition: "border-color 0.12s, background 0.12s",
+                }}
+                title={
+                  p.purchased === true
+                    ? "Purchased"
+                    : p.purchased === false
+                      ? "Not purchased — pitch via Growth & Pipeline Plays"
+                      : "Status unknown — populate via account_products"
+                }
               >
+                <span style={{ fontSize: 14 }}>{owned ? "✓" : "○"}</span>
+                <span style={{ fontWeight: 600 }}>{p.label}</span>
                 <span
-                  className={cn(
-                    "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
-                    has
-                      ? "bg-beroe-green/20 text-beroe-green"
-                      : "bg-beroe-amber/20 text-beroe-amber",
-                  )}
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: 800,
+                    textAlign: "right",
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                    color: owned ? "#146a45" : "#8496b0",
+                  }}
                 >
-                  {has ? "✓" : "→"}
-                </span>
-                <span className="flex-1 font-medium">{m}</span>
-                <span
-                  className={cn(
-                    "text-[9px] font-bold uppercase",
-                    has ? "text-beroe-green" : "text-beroe-amber",
-                  )}
-                >
-                  {has ? "Owned" : "Gap"}
+                  {owned ? "Owned" : "Gap"}
                 </span>
               </div>
             );
