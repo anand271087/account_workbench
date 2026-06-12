@@ -196,48 +196,11 @@ export default function HomeTab() {
         </div>
       )}
 
-      {/* 12-Jun · Procurement Maturity + GenAI Adoption + counts —
-          the small-fact strip from the bulk-import. Renders when any
-          field is set. */}
-      {(account.procurement_maturity || account.genai_adoption
-        || account.category_count != null || account.supplier_count != null) && (
+      {/* 13-Jun · Procurement Maturity + GenAI Adoption chips removed
+          per stakeholder ask. Categories / Suppliers tracked counts
+          kept — they're operational metrics, not subjective ratings. */}
+      {(account.category_count != null || (account.supplier_count != null && account.supplier_count > 0)) && (
         <div className="flex flex-wrap gap-1.5 items-center text-[11px]">
-          {account.procurement_maturity && (
-            <span
-              className="px-2 py-0.5 rounded font-bold uppercase tracking-wide"
-              style={{
-                background:
-                  account.procurement_maturity === "High" ? "#dcfce7"
-                  : account.procurement_maturity === "Medium" ? "#fef3c7"
-                  : "#fee2e2",
-                color:
-                  account.procurement_maturity === "High" ? "#146a45"
-                  : account.procurement_maturity === "Medium" ? "#854F0B"
-                  : "#8B1F1F",
-                fontSize: 10,
-              }}
-            >
-              Procurement · {account.procurement_maturity}
-            </span>
-          )}
-          {account.genai_adoption && (
-            <span
-              className="px-2 py-0.5 rounded font-bold uppercase tracking-wide"
-              style={{
-                background:
-                  account.genai_adoption === "High" ? "#dcfce7"
-                  : account.genai_adoption === "Medium" ? "#fef3c7"
-                  : "#fee2e2",
-                color:
-                  account.genai_adoption === "High" ? "#146a45"
-                  : account.genai_adoption === "Medium" ? "#854F0B"
-                  : "#8B1F1F",
-                fontSize: 10,
-              }}
-            >
-              GenAI · {account.genai_adoption}
-            </span>
-          )}
           {account.category_count != null && (
             <span className="text-text-muted">
               <b className="text-text-primary">{account.category_count}</b> categories tracked

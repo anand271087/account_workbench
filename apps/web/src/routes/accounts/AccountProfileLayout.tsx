@@ -238,76 +238,11 @@ export default function AccountProfileLayout() {
               ) : null}
               {data.tier && <> · {data.tier}</>}
             </div>
-            {/* 12-Jun · Bulk-import flag row — only renders if any of the
-                onboarding flags are set. Keeps the header clean for the
-                seeded demo accounts and growing for the real ones. */}
-            {(data.platform_status || data.is_fortune_500 || data.is_focus_region
-              || data.is_focus_industry || data.subscription_plan
-              || data.renewal_risk) && (
-              <div className="mt-1.5 flex gap-1.5 flex-wrap items-center">
-                {data.platform_status && (
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
-                    style={{
-                      background: data.platform_status === "Active" ? "#dcfce7" : "#f1f5f9",
-                      color: data.platform_status === "Active" ? "#146a45" : "#64748b",
-                    }}
-                  >
-                    {data.platform_status}
-                  </span>
-                )}
-                {data.is_fortune_500 && (
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
-                    style={{ background: "#FFE61E30", color: "#854F0B" }}
-                  >
-                    Fortune 500
-                  </span>
-                )}
-                {data.is_focus_region && (
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
-                    style={{ background: "#ede6ff", color: "#4A00F8" }}
-                  >
-                    Focus Region
-                  </span>
-                )}
-                {data.is_focus_industry && (
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
-                    style={{ background: "#ede6ff", color: "#4A00F8" }}
-                  >
-                    Focus Industry
-                  </span>
-                )}
-                {data.renewal_risk && (
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
-                    style={{
-                      background:
-                        data.renewal_risk === "Low"
-                          ? "#dcfce7"
-                          : data.renewal_risk === "Medium"
-                            ? "#fef3c7"
-                            : "#fee2e2",
-                      color:
-                        data.renewal_risk === "Low"
-                          ? "#146a45"
-                          : data.renewal_risk === "Medium"
-                            ? "#854F0B"
-                            : "#8B1F1F",
-                    }}
-                  >
-                    Renewal {data.renewal_risk}
-                  </span>
-                )}
-                {data.subscription_plan && (
-                  <span className="text-[10px] text-text-muted italic ml-1">
-                    {data.subscription_plan}
-                  </span>
-                )}
-              </div>
-            )}
+            {/* 13-Jun · Bulk-import chip row removed per stakeholder ask
+                (Platform status, Fortune 500, Focus Region/Industry,
+                Renewal Risk, Subscription Plan all gone). The data
+                still lives on the row — surfaced inline on the
+                AccountList page columns / Home tab callouts instead. */}
             {/* 12-Jun · Admin-only inline edit for the Redshift mapping.
                 The /intel/* endpoints 409 when this is null, which
                 quietly blanks the Analytics tab. Surfacing it here so
