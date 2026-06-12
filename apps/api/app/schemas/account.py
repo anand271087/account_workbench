@@ -126,6 +126,10 @@ class AccountHeaderUpdate(BaseModel):
     annual_revenue_text: str | None = Field(None, max_length=80)
     tier: str | None = Field(None, max_length=40)
     sf_link: str | None = Field(None, max_length=2000)
+    # 12-Jun · Admin-edit path for the Redshift companyname mapping.
+    # Surfaced inline on the Account header (admin-only pencil) so a
+    # mismatched name can be corrected without a SQL trip.
+    redshift_company_name: str | None = Field(None, max_length=200)
 
     # Contract Audit gate_* fields. Edited inline from SalesHandoffTab.
     gate_signed_date: date | None = None

@@ -370,6 +370,13 @@ async def apply_import(
                 setattr(new_acc, b, False)
         # Default platform status to a known state if we couldn't parse.
         new_acc.cs_entry_type = "A"  # Match the default-on-create rule we already have.
+        # 12-Jun · default redshift_company_name to the imported name.
+        # All 5 onboarding-spreadsheet accounts matched Redshift's
+        # `companyname` verbatim (TAKEDA PHARMACEUTICAL CO., BP P.L.C.
+        # (ULTIMATE PARENT), Prestige Brands Inc., Idorsia (Actelion),
+        # ABN Group). Admins can override via PATCH if a future account
+        # uses a different spelling in Redshift.
+        new_acc.redshift_company_name = norm
         db.add(new_acc)
         await db.flush()  # need id for account_products inserts
 

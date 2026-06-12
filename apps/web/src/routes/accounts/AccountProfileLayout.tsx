@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNotify } from "@/components/DialogProvider";
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from "react-router-dom";
 
 import { AppShell } from "@/components/AppShell";
@@ -307,6 +308,16 @@ export default function AccountProfileLayout() {
                 )}
               </div>
             )}
+            {/* 12-Jun · Admin-only inline edit for the Redshift mapping.
+                The /intel/* endpoints 409 when this is null, which
+                quietly blanks the Analytics tab. Surfacing it here so
+                admins can fix mismatches without a SQL trip. */}
+            {me?.user.role === "admin" && (
+              <RedshiftMappingEditor
+                accountId={data.id}
+                current={data.redshift_company_name ?? ""}
+              />
+            )}
           </div>
 
           {/* M33 — Header trio (faithful port of prototype account-header
@@ -549,6 +560,115 @@ interface AccountOutletContext {
 
 export function useAccountFromLayout(): AccountDetail {
   return (useOutletContext<AccountOutletContext>()).account;
+}
+
+
+/**
+ * Admin-only inline editor for `accounts.redshift_company_name` — the
+ * canonical key that Analytics queries use to look up usage / category
+ * watch / Abi data on the live Redshift cluster. When this is null
+ * (or wrong), the /intel/* endpoints 409 and the Analytics tab blanks.
+ *
+ * Surfaces the current value as a small `🔗 RS:` tag with a pencil
+ * action that swaps in an inline input. Saves via PATCH /accounts/:id.
+ */
+function RedshiftMappingEditor({
+  accountId,
+  current,
+}: {
+  accountId: string;
+  current: string;
+}) {
+  const qc = useQueryClient();
+  const notify = useNotify();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(current);
+
+  useEffect(() => setDraft(current), [current]);
+
+  const save = useMutation({
+    mutationFn: (val: string) =>
+      api.patch(`/api/v1/accounts/${accountId}`, {
+        redshift_company_name: val.trim() || null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["account", accountId] });
+      // Bust any intel cache so Analytics re-fetches with the new name.
+      qc.invalidateQueries({ queryKey: ["intel", accountId] });
+      notify({ title: "Redshift mapping updated", tone: "success" });
+      setEditing(false);
+    },
+    onError: (e) =>
+      notify({
+        title: "Save failed",
+        body: e instanceof ApiError ? e.message : "Unknown error",
+        tone: "error",
+      }),
+  });
+
+  if (editing) {
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
+        <span className="text-text-muted uppercase tracking-wide font-bold">
+          🔗 Redshift mapping:
+        </span>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save.mutate(draft);
+            if (e.key === "Escape") {
+              setDraft(current);
+              setEditing(false);
+            }
+          }}
+          autoFocus
+          placeholder="(unset)"
+          className="px-2 py-0.5 border border-beroe-card-border rounded text-[11px] min-w-[260px]"
+        />
+        <button
+          type="button"
+          onClick={() => save.mutate(draft)}
+          disabled={save.isPending}
+          className="text-[10px] font-bold rounded px-1.5 py-0.5 bg-beroe-blue text-white disabled:opacity-50"
+        >
+          {save.isPending ? "…" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(current);
+            setEditing(false);
+          }}
+          className="text-[10px] text-text-muted px-1.5 py-0.5"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-text-muted">
+      <span className="uppercase tracking-wide font-bold">🔗 Redshift:</span>
+      <span
+        className={cn(
+          current ? "text-text-secondary" : "italic",
+          current ? "" : "text-beroe-red",
+        )}
+        title="The `companyname` value Analytics uses to look up Redshift data for this account."
+      >
+        {current || "(unset — Analytics blank)"}
+      </span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-beroe-blue hover:underline font-semibold"
+      >
+        edit
+      </button>
+    </div>
+  );
 }
 
 /** Hook for tabs that want to react to the period selector. */
