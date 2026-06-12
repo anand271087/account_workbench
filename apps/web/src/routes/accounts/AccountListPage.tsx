@@ -1097,13 +1097,20 @@ interface CreateAccountForm {
   industry: string;
   country: string;
   region: string;
-  // Hardcoded staff-name dropdowns. The backend stores these as text;
-  // the FK csm_user_id / co_user_id stays empty until the named staff
-  // are invited as real users.
+  // 12-Jun · Sector, Commercial Owner, CSM brought back into the
+  // always-visible top section per stakeholder ask. Stored as free text
+  // (matching the bulk-import behaviour); the FK csm_user_id /
+  // co_user_id stays empty until the named staff are invited as
+  // real users.
+  sector: string;
   csm_owner_name: string;
   commercial_owner_name: string;
   tier: string;
   account_type: string;
+  // 12-Jun · Real-data fields surfaced under "Add more details".
+  revenue_bucket: string;
+  procurement_maturity: string;  // Low | Medium | High
+  genai_adoption: string;        // Low | Medium | High
   current_acv: string;
   target_acv: string;
   contract_start: string;
@@ -1130,8 +1137,10 @@ function CreateAccountModal({
   const [showMore, setShowMore] = useState(false);
   const [form, setForm] = useState<CreateAccountForm>({
     name: "", industry: "", country: "", region: "",
+    sector: "",
     csm_owner_name: "", commercial_owner_name: "",
     tier: "", account_type: "",
+    revenue_bucket: "", procurement_maturity: "", genai_adoption: "",
     current_acv: "", target_acv: "",
     contract_start: "", contract_end: "", renewal_date: "",
   });
@@ -1150,11 +1159,15 @@ function CreateAccountModal({
         form[k] && (body[k] = (form[k] as string).trim());
       optStr("industry"); optStr("country"); optStr("region");
       optStr("tier"); optStr("account_type");
-      // 04-Jun bug — csm_owner_name / commercial_owner_name / renewal_date
-      // intentionally NOT sent. CSM is assigned via Admin → Reassign
-      // (admin-only); Commercial Owner gets picked at signing; Renewal
-      // date auto-derives from signed_date + term on the Sales Hand-off
-      // tab. Keeping them on the create modal was double-entry.
+      // 12-Jun · Sector, Commercial Owner, CSM brought back into the
+      // create-account body. Free-text matches the bulk-import shape.
+      optStr("sector");
+      optStr("commercial_owner_name");
+      optStr("csm_owner_name");
+      // 12-Jun · Real-data fields under Add more details.
+      optStr("revenue_bucket");
+      optStr("procurement_maturity");
+      optStr("genai_adoption");
       if (form.current_acv) body.current_acv = form.current_acv;
       if (form.target_acv) body.target_acv = form.target_acv;
       if (form.contract_start) body.contract_start = form.contract_start;
@@ -1214,7 +1227,10 @@ function CreateAccountModal({
               testId="add-account-region"
             />
           </ModalField>
-          <ModalField label="Country">
+          {/* 12-Jun · Label updated from "Country" to "Country / Headquarters".
+              Beroe data team confirmed billing-country IS the headquarters
+              for every imported account; one input populates both intents. */}
+          <ModalField label="Country / Headquarters">
             <SearchablePicker
               value={form.country}
               options={COUNTRY_OPTIONS}
@@ -1222,6 +1238,19 @@ function CreateAccountModal({
               pinned={["United States", "United Kingdom", "India", "Germany", "Singapore", "Australia"]}
               onChange={(v) => setForm({ ...form, country: v })}
               testId="add-account-country"
+            />
+          </ModalField>
+
+          {/* 12-Jun · Sector (always-visible). Distinct from Industry —
+              e.g. Industry=Pharmaceuticals · Sector=Health Care. Free text
+              so any sector taxonomy works. */}
+          <ModalField label="Sector">
+            <input
+              type="text"
+              value={form.sector}
+              onChange={(e) => setForm({ ...form, sector: e.target.value })}
+              placeholder="e.g. Health Care, Industrials, Energy"
+              className={modalInputCls}
             />
           </ModalField>
 
@@ -1235,8 +1264,32 @@ function CreateAccountModal({
             />
           </ModalField>
 
-          {/* 04-Jun bug — CSM Owner field removed. Assignment happens via
-              Admin → Reassign (admin-only) after the account is created. */}
+          {/* 12-Jun · Commercial Owner + CSM brought back into the
+              always-visible section as free-text inputs (per stakeholder
+              ask). Matches the bulk-import shape — the named staff can
+              be invited later and have FKs back-filled. */}
+          <ModalField label="Commercial Owner">
+            <input
+              type="text"
+              value={form.commercial_owner_name}
+              onChange={(e) =>
+                setForm({ ...form, commercial_owner_name: e.target.value })
+              }
+              placeholder="e.g. Norman"
+              className={modalInputCls}
+            />
+          </ModalField>
+          <ModalField label="CSM">
+            <input
+              type="text"
+              value={form.csm_owner_name}
+              onChange={(e) =>
+                setForm({ ...form, csm_owner_name: e.target.value })
+              }
+              placeholder="e.g. Suchismita Dhal"
+              className={modalInputCls}
+            />
+          </ModalField>
 
           <button
             type="button"
@@ -1257,8 +1310,59 @@ function CreateAccountModal({
                   testId="add-account-type"
                 />
               </ModalField>
-              {/* 04-Jun bug — Commercial Owner field removed. Assignment
-                  happens during the Sales Hand-off / Signing flow. */}
+
+              {/* 12-Jun · Revenue bucket — same set the bulk-import sheet
+                  uses (Below 1B / 1B-3B / 3B-10B / 10B-25B / 25B-50B / Above 50B). */}
+              <ModalField label="Revenue Bucket">
+                <select
+                  value={form.revenue_bucket}
+                  onChange={(e) =>
+                    setForm({ ...form, revenue_bucket: e.target.value })
+                  }
+                  className={modalInputCls}
+                >
+                  <option value="">— select —</option>
+                  <option value="Below 1B">Below 1B</option>
+                  <option value="1B-3B">1B – 3B</option>
+                  <option value="3B-10B">3B – 10B</option>
+                  <option value="10B-25B">10B – 25B</option>
+                  <option value="25B-50B">25B – 50B</option>
+                  <option value="Above 50B">Above 50B</option>
+                </select>
+              </ModalField>
+
+              {/* 12-Jun · Low / Medium / High enums constrained by
+                  migration 0075 CHECK constraints on procurement_maturity
+                  and genai_adoption columns. */}
+              <ModalField label="Procurement Maturity">
+                <select
+                  value={form.procurement_maturity}
+                  onChange={(e) =>
+                    setForm({ ...form, procurement_maturity: e.target.value })
+                  }
+                  className={modalInputCls}
+                >
+                  <option value="">— select —</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </ModalField>
+
+              <ModalField label="GenAI Adoption">
+                <select
+                  value={form.genai_adoption}
+                  onChange={(e) =>
+                    setForm({ ...form, genai_adoption: e.target.value })
+                  }
+                  className={modalInputCls}
+                >
+                  <option value="">— select —</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </ModalField>
 
               <ModalField label="Current ACV ($)">
                 <input

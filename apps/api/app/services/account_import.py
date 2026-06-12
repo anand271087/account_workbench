@@ -54,6 +54,11 @@ COLUMN_MAP: dict[str, str] = {
     "Industry":                "industry",
     "Revenue Bucket":          "revenue_bucket",
     "Billing Country":         "country",
+    # 12-Jun · Trimmed-spreadsheet header alias. CSMs uploading their
+    # 12-column abbreviated sheet use "Company Headquarters" as the
+    # location field; the original 5-account sheet used "Billing Country".
+    # Both populate the same `country` column.
+    "Company Headquarters":    "country",
     "Billing Region":          "region",
     "Fortune 500 (Y/N)":       "is_fortune_500",
     "Focus Region (Y/N)":      "is_focus_region",

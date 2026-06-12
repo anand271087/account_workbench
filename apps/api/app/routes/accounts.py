@@ -429,6 +429,10 @@ async def create_account(
         tier=body.tier,
         account_type=body.account_type,
         segment=body.segment,
+        sector=body.sector,
+        revenue_bucket=body.revenue_bucket,
+        procurement_maturity=body.procurement_maturity,
+        genai_adoption=body.genai_adoption,
         current_acv=body.current_acv,
         target_acv=body.target_acv,
         contract_start=body.contract_start,
@@ -439,6 +443,10 @@ async def create_account(
         # hand-off). The future bulk-upload endpoint will default to 'B'
         # (mid-contract pickup). See decisions log 2026-06-11.
         cs_entry_type="A",
+        # 12-Jun · Default redshift_company_name to the trimmed name so
+        # Analytics works the moment the account is created (matches
+        # the bulk-import behaviour from PR #10).
+        redshift_company_name=body.name.strip(),
     )
     db.add(acc)
     await db.commit()
