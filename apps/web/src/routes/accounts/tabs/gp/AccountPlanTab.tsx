@@ -23,6 +23,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useConfirm, useNotify } from "@/components/DialogProvider";
 import { MoneyInput } from "@/components/MoneyInput";
+import { ProductRoster } from "@/components/ProductRoster";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   fmtK,
@@ -132,10 +133,13 @@ export default function AccountPlanTab() {
           {/* ACV Growth Path — 4-tile Current / Target / Gap / Pipeline.
               Mode-adaptive: rescue mode swaps to a Renewal-Risk shape.
               All values pulled from account.current_acv / target_acv +
-              appetite.breakdown.projected_acv_usd. The ARR Growth
-              Tracker that lived next to this was retired 12-Jun
-              (redundant with Renewal Proximity in the appetite score). */}
+              appetite.breakdown.projected_acv_usd. */}
           <AcvTile appetite={appetite} account={account} mode={mode} />
+
+          {/* 12-Jun · Product Roster — 28 Beroe products with purchase
+              flags from the bulk-import / manual roster (migration 0075).
+              Lives between ACV growth and Product Saturation. */}
+          <ProductRoster accountId={account.id} />
 
           {/* 09-Jun bug (Bug Tracker · Jun-8 #6 part 1) — Product &
               Services Saturation moved ABOVE Expansion Plays (per spec

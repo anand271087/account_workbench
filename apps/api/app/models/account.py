@@ -26,7 +26,8 @@ class Account(Base):
     country: Mapped[str | None] = mapped_column(String, nullable=True)
     # M16.1 — header chips populated by MoM extraction. `tier_band` lives on
     # the existing `tier` column; the rest are dedicated string columns.
-    headquarters: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 12-Jun · `headquarters` dropped (migration 0075). Billing Country
+    # (the `country` column) is now the single home for that data.
     annual_revenue_text: Mapped[str | None] = mapped_column(String, nullable=True)
     sf_link: Mapped[str | None] = mapped_column(String, nullable=True)
     # 05-Jun · Intelligence & Reports — canonical companyname value used
@@ -43,6 +44,23 @@ class Account(Base):
     # capture the named Beroe staff until those users are invited.
     commercial_owner_name: Mapped[str | None] = mapped_column(String, nullable=True)
     csm_owner_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # 12-Jun · Migration 0075 — real-data ingestion fields. Populated by
+    # the bulk-import endpoint (POST /accounts/import) from the 5-account
+    # XLSX template. Manual edits in the future via PATCH /accounts/:id.
+    client_priority: Mapped[str | None] = mapped_column(String, nullable=True)
+    platform_status: Mapped[str | None] = mapped_column(String, nullable=True)  # Active|Inactive
+    subscription_plan: Mapped[str | None] = mapped_column(String, nullable=True)
+    category_count: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    supplier_count: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    sector: Mapped[str | None] = mapped_column(String, nullable=True)
+    revenue_bucket: Mapped[str | None] = mapped_column(String, nullable=True)
+    renewal_risk: Mapped[str | None] = mapped_column(String, nullable=True)     # Low|Medium|High
+    is_fortune_500: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_focus_region: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_focus_industry: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    procurement_maturity: Mapped[str | None] = mapped_column(String, nullable=True)
+    genai_adoption: Mapped[str | None] = mapped_column(String, nullable=True)
 
     category: Mapped[str | None] = mapped_column(String, nullable=True)
     tier: Mapped[str | None] = mapped_column(String, nullable=True)

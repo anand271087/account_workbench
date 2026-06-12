@@ -22,10 +22,27 @@ class AccountDetail(BaseModel):
     industry: str | None
     region: str | None
     country: str | None
-    # M16.1 — MoM-extraction header chips.
+    # M16.1 — MoM-extraction header chips. `headquarters` was dropped
+    # by migration 0075 — kept as an optional API surface (returns null)
+    # so any existing frontend reference doesn't break.
     headquarters: str | None = None
     annual_revenue_text: str | None = None
     sf_link: str | None = None
+    # 12-Jun · migration 0075 — onboarding-import fields surfaced on
+    # the AK02 header so the chips can render without an extra call.
+    client_priority: str | None = None
+    platform_status: str | None = None     # Active | Inactive | None
+    subscription_plan: str | None = None
+    category_count: int | None = None
+    supplier_count: int | None = None
+    sector: str | None = None
+    revenue_bucket: str | None = None
+    renewal_risk: str | None = None
+    is_fortune_500: bool = False
+    is_focus_region: bool = False
+    is_focus_industry: bool = False
+    procurement_maturity: str | None = None
+    genai_adoption: str | None = None
     # 05-Jun · Intelligence & Reports — canonical Redshift companyname.
     redshift_company_name: str | None = None
 
