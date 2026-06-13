@@ -168,6 +168,7 @@ async def create_cs_goal(
     goal = CSGoal(
         account_id=account_id,
         title=body.title,
+        source=body.source,
         category=body.category,
         target_value=body.target_value,
         target_date=body.target_date,

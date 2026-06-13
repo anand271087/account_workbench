@@ -173,6 +173,7 @@ class CSGoalOut(BaseModel):
     account_id: UUID
 
     title: str
+    source: Literal["vpd", "manual", "mom"] = "manual"
     category: CSGoalCategory
     target_value: str | None
     target_date: date | None
@@ -218,6 +219,9 @@ class CSGoalCreate(BaseModel):
     target_value: str | None = Field(None, max_length=200)
     target_date: date | None = None
     owner: str | None = Field(None, max_length=200)
+    # 12-Jun bug 248-a — origin of the goal. VPD-extraction review sends
+    # "vpd"; manual create paths omit it → defaults to "manual".
+    source: Literal["vpd", "manual", "mom"] = "manual"
 
 
 class CSGoalUpdate(BaseModel):

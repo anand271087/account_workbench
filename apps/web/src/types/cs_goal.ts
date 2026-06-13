@@ -143,6 +143,9 @@ export interface CSGoal {
   account_id: string;
 
   title: string;
+  // 12-Jun bug 248-a — origin: "vpd" / "manual" / "mom". Drives the
+  // Goal Validation default filter.
+  source: "vpd" | "manual" | "mom";
   category: CSGoalCategory;
   target_value: string | null;
   target_date: string | null;
