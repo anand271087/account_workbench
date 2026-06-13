@@ -27,8 +27,6 @@ import type {
 import type {
   Play,
   PlayListResponse,
-  PlayCreate,
-  PlayMode,
 } from "@/types/play";
 import { type Activity, type ActivityListResponse } from "@/types/signal";
 
@@ -133,7 +131,6 @@ export default function RenewalReadinessTab() {
       <Track2Expand
         plays={plays.filter((p) => p.modes.includes("expand") && !p.hidden)}
         canWrite={playsQ.data?.is_editable ?? false}
-        accountId={account.id}
         onChanged={invalidatePlays}
       />
       <OutcomeRow
@@ -559,15 +556,13 @@ function RRCard({
 function Track2Expand({
   plays,
   canWrite,
-  accountId,
   onChanged,
 }: {
   plays: Play[];
   canWrite: boolean;
-  accountId: string;
   onChanged: () => void;
 }) {
-  const [addOpen, setAddOpen] = useState(false);
+  // 12-Jun bug 252 — addOpen state retired with the "+ Add play" button.
 
   const totalRaw = useMemo(
     () => plays.reduce((s, p) => s + parseUsd(p.value_usd), 0),
@@ -618,16 +613,13 @@ function Track2Expand({
           Expansion plays · pipeline value
         </div>
         <div className="flex-1" />
-        {canWrite && (
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="text-[11px] font-semibold px-3 py-1.5 rounded-card border"
-            style={{ borderColor: BRAND.cardBorder, color: BRAND.t2 }}
-          >
-            + Add play
-          </button>
-        )}
+        {/* 12-Jun bug 252 — "+ Add play" affordance removed from Renewal
+            Readiness per stakeholder ask. Plays are still created in
+            Growth & Pipeline → Account Plan; this tab is now read-only
+            on plays (which matches its "Readiness" framing). `addOpen`
+            state + AddInitiativeFromPlaysModal remain unused locally
+            but the linter will surface if anything else depended on
+            them. */}
       </div>
       <div
         className="text-[11px] mb-3"
@@ -722,16 +714,8 @@ function Track2Expand({
         ))
       )}
 
-      {addOpen && (
-        <AddPlayModal
-          accountId={accountId}
-          onClose={() => setAddOpen(false)}
-          onCreated={() => {
-            onChanged();
-            setAddOpen(false);
-          }}
-        />
-      )}
+      {/* 12-Jun bug 252 — AddPlayModal removed with the "+ Add play"
+          button. Plays are created from Growth & Pipeline → Account Plan. */}
     </div>
   );
 }
@@ -855,168 +839,11 @@ function PlayRow({
   );
 }
 
-function AddPlayModal({
-  accountId,
-  onClose,
-  onCreated,
-}: {
-  accountId: string;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [arr, setArr] = useState("");
-  const [prob, setProb] = useState(30);
-  const [when, setWhen] = useState("");
-  const [trigger, setTrigger] = useState("");
+// 12-Jun bug 252 — Local AddPlayModal definition removed. Plays are now
+// created exclusively from Growth & Pipeline → Account Plan.
 
-  const create = useMutation({
-    mutationFn: () => {
-      const body: PlayCreate = {
-        title: title.trim(),
-        value_usd: arr || "0",
-        prob,
-        when_text: when || null,
-        trigger_text: trigger || null,
-        modes: ["expand" as PlayMode],
-      };
-      return api.post(`/api/v1/accounts/${accountId}/plays`, body);
-    },
-    onSuccess: onCreated,
-  });
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-card p-5 w-[460px] max-w-[92vw] shadow-xl"
-        style={{ border: `1.5px solid ${BRAND.cardBorder}` }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <div
-            className="text-[14px] font-bold"
-            style={{ color: BRAND.midnight }}
-          >
-            Add expansion play
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[16px]"
-            style={{ color: BRAND.t3 }}
-          >
-            ×
-          </button>
-        </div>
-        <div className="space-y-3">
-          <Field
-            label="Play title"
-            required
-            value={title}
-            onChange={setTitle}
-            placeholder="e.g. Custom Credits — Quarterly Pack"
-          />
-          <div className="grid grid-cols-2 gap-2.5">
-            <Field
-              label="Est. ARR uplift"
-              value={arr}
-              onChange={setArr}
-              placeholder="e.g. 50000 or 50K"
-            />
-            <div>
-              <Label>Probability (%)</Label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={prob}
-                onChange={(e) => setProb(Number(e.target.value))}
-                className="w-full px-2.5 py-1.5 text-[12px] rounded-card border mt-1.5"
-                style={{ borderColor: BRAND.cardBorder }}
-              />
-            </div>
-          </div>
-          <Field
-            label="When"
-            value={when}
-            onChange={setWhen}
-            placeholder="e.g. Q3 FY-26"
-          />
-          <Field
-            label="Trigger / notes"
-            value={trigger}
-            onChange={setTrigger}
-            placeholder="What sparked this play? Any context for the next CSM?"
-          />
-        </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[12px] px-3 py-1.5 rounded-card border"
-            style={{ borderColor: BRAND.cardBorder, color: BRAND.t2 }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={title.trim().length < 3 || create.isPending}
-            onClick={() => create.mutate()}
-            className="text-[12px] px-3 py-1.5 rounded-card text-white font-semibold disabled:opacity-40"
-            style={{ background: BRAND.indigo }}
-          >
-            {create.isPending ? "Adding…" : "Add play"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  required?: boolean;
-}) {
-  return (
-    <div>
-      <Label>
-        {label}
-        {required && <span style={{ color: BRAND.red }}> *</span>}
-      </Label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-2.5 py-1.5 text-[12px] rounded-card border mt-1.5"
-        style={{ borderColor: BRAND.cardBorder }}
-      />
-    </div>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="text-[10.5px] font-bold uppercase tracking-wider"
-      style={{ color: BRAND.t2 }}
-    >
-      {children}
-    </div>
-  );
-}
+// 12-Jun bug 252 — Local Field + Label helpers removed (only used by
+// the deleted AddPlayModal).
 
 // ---------------------------------------------------------------------------
 // 4. Outcome row

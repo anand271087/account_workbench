@@ -1622,9 +1622,9 @@ function BriefOverlayButton({
         onClick={() => setOpen(true)}
         className="text-[11.5px] font-semibold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-white hover:opacity-90 transition-opacity"
         style={{ background: "#4A00F8" }}
-        title="Open the auto-populated Pre-Meeting Brief"
+        title="Open the auto-populated Account Brief"
       >
-        📝 Pre-Meeting Brief
+        📝 Account Brief
       </button>
       {open && (
         <div
@@ -1649,7 +1649,7 @@ function BriefOverlayButton({
                   Brief
                 </span>
                 <span className="text-[12px] text-white/85 font-semibold truncate">
-                  Pre-Meeting Brief ·{" "}
+                  Account Brief ·{" "}
                   {mode === "presentation"
                     ? "Presentation Mode"
                     : "Edit Mode"}

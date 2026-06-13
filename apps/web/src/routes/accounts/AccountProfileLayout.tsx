@@ -281,9 +281,18 @@ export default function AccountProfileLayout() {
                 1. Period selector (30d / 90d / FY) — pill group
                 2. Health score badge — score number + status label
                 3. Mode pill — current Appetite Score mode (rescue /
-                   retain / expand) with icon + label. */}
+                   retain / expand) with icon + label.
+              12-Jun bug 246 — Period selector hidden on every section
+              except Home (/overview) and Intel & Reports (/intel-reports).
+              Stakeholder ask: period scaling is only meaningful for the
+              KPI-tile / analytics views; the other sections (Account Kit,
+              Success Management, Growth & Pipeline) read static config,
+              not time-windowed telemetry. */}
           <div className="flex items-center gap-3 flex-wrap">
-            <PeriodBar value={period} onChange={setPeriod} />
+            {(loc.pathname.includes("/overview") ||
+              loc.pathname.includes("/intel-reports")) && (
+              <PeriodBar value={period} onChange={setPeriod} />
+            )}
             <HealthBadge score={data.health_score} />
             <ModePill appetite={apptQ.data} />
           </div>
