@@ -214,10 +214,15 @@ function goalAlignment(g: CSGoal) {
 function BlockEntry({
   form,
   locked,
+  entryBDisabled,
   onChange,
 }: {
   form: CSOnboarding;
   locked: boolean;
+  // 12-Jun bug 242 — true when the account arrived via the Pre-Sales →
+  // Sales Handoff path (gate_signed). Entry B is then not applicable
+  // and renders greyed out with an explanatory tooltip.
+  entryBDisabled: boolean;
   onChange: (t: CSEntryType) => void;
 }) {
   return (
@@ -226,6 +231,7 @@ function BlockEntry({
       <div className="grid sm:grid-cols-2 gap-2.5">
         {(["A", "B"] as const).map((t) => {
           const selected = form.cs_entry_type === t;
+          const notApplicable = t === "B" && entryBDisabled;
           const cfg = t === "A"
             ? { title: "Entry A · Clean Sales handoff", desc: "Sales has passed a complete handover package and Contract Audit is signed off." }
             : { title: "Entry B · Mid-contract pickup", desc: "Picking up an existing account with no clean handover — CSM uploads prior context." };
@@ -233,15 +239,28 @@ function BlockEntry({
             <button
               key={t}
               type="button"
-              disabled={locked || !form.is_editable}
+              disabled={locked || !form.is_editable || notApplicable}
               onClick={() => onChange(t)}
+              title={
+                notApplicable
+                  ? "Not applicable — this account came through Pre-Sales and Sales Handoff (Entry A)."
+                  : undefined
+              }
               className={cn(
-                "p-3.5 rounded-[10px] border-[2px] bg-white text-left transition disabled:opacity-60 disabled:cursor-not-allowed",
+                "p-3.5 rounded-[10px] border-[2px] bg-white text-left transition disabled:cursor-not-allowed",
+                notApplicable
+                  ? "opacity-40 grayscale"
+                  : "disabled:opacity-60",
                 selected ? "border-beroe-blue bg-[#f3f0ff]" : "border-beroe-card-border hover:border-beroe-blue/40",
               )}
             >
               <div className="text-[12px] font-bold text-beroe-blue mb-1">✅ {cfg.title}</div>
               <div className="text-[10px] text-text-muted leading-[1.5]">{cfg.desc}</div>
+              {notApplicable && (
+                <div className="text-[9.5px] mt-1 font-semibold" style={{ color: "#94a3b8" }}>
+                  Not applicable — signed via Sales Handoff
+                </div>
+              )}
             </button>
           );
         })}
@@ -1293,12 +1312,36 @@ export default function CSOnboardingTab() {
   const patch = useMutation({
     mutationFn: (body: CSOnboardingUpdate) =>
       api.patch<CSOnboarding>(`/api/v1/accounts/${account.id}/cs-onboarding`, body),
+    // 12-Jun bug 242 — checklist clicks felt slow because every toggle
+    // waited for PATCH + invalidate + refetch (~0.5-1s on the pooler).
+    // Optimistic merge into the cache makes the checkbox flip in the
+    // same tick; rollback on error restores the server truth.
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: ["cs-onboarding", account.id] });
+      const prev = qc.getQueryData<CSOnboarding>(["cs-onboarding", account.id]);
+      if (prev) {
+        qc.setQueryData<CSOnboarding>(["cs-onboarding", account.id], {
+          ...prev,
+          ...(body.cs_entry_type !== undefined
+            ? { cs_entry_type: body.cs_entry_type }
+            : {}),
+          cs_handover_checklist: body.cs_handover_checklist
+            ? { ...prev.cs_handover_checklist, ...body.cs_handover_checklist }
+            : prev.cs_handover_checklist,
+        });
+      }
+      return { prev };
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cs-onboarding", account.id] });
       qc.invalidateQueries({ queryKey: ["account", account.id] });
     },
-    onError: (e: ApiError) =>
-      notify({ title: "Save failed", body: e.message, tone: "error" }),
+    onError: (e: ApiError, _body, ctx) => {
+      if (ctx?.prev) {
+        qc.setQueryData(["cs-onboarding", account.id], ctx.prev);
+      }
+      notify({ title: "Save failed", body: e.message, tone: "error" });
+    },
   });
 
   // Auto-default entry: signed → A, else → B (one-shot)
@@ -1479,6 +1522,7 @@ export default function CSOnboardingTab() {
       <BlockEntry
         form={data}
         locked={journeyStarted}
+        entryBDisabled={account.gate_signed}
         onChange={(t) => patch.mutate({ cs_entry_type: t })}
       />
       {data.cs_entry_type === "A" && (
