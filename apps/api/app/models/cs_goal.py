@@ -52,6 +52,12 @@ class CSGoal(Base):
     )
 
     title: Mapped[str] = mapped_column(String, nullable=False)
+    # 12-Jun bug 248-a — origin: 'vpd' (extracted from a VPD), 'manual'
+    # (CSM-typed), 'mom' (reserved). Drives the Goal Validation default
+    # filter. Migration 0079.
+    source: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'manual'")
+    )
     category: Mapped[str] = mapped_column(
         String, nullable=False, server_default=text("'other'")
     )

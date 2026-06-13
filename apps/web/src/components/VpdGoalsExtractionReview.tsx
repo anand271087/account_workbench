@@ -119,6 +119,9 @@ export function VpdGoalsExtractionReview({
             `/api/v1/accounts/${accountId}/cs-goals`,
             {
               title: r.title,
+              // 12-Jun bug 248-a — manual rows added in this modal stay
+              // "manual"; AI candidates extracted from the VPD are "vpd".
+              source: r._source === "manual" ? "manual" : "vpd",
               category: r.category,
               target_value: r.target_value ?? null,
               target_date: r.target_date ?? null,

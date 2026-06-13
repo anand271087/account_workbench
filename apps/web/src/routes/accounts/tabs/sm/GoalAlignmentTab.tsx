@@ -669,6 +669,11 @@ export default function GoalAlignmentTab() {
   const account = useAccountFromLayout();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<FilterKey>("all");
+  // 12-Jun bug 248-a — "Only Success Goals from the VPD should be used."
+  // Default the tab to VPD-sourced goals; a toggle reveals all. Null =
+  // not-yet-initialised so the effect below can pick a sensible default
+  // based on whether the account actually has any VPD goals.
+  const [sourceFilter, setSourceFilter] = useState<"vpd" | "all" | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [openQ, setOpenQ] = useState<Record<string, 1 | 2 | 3 | null>>({});
   const [addOpen, setAddOpen] = useState(false);
@@ -710,6 +715,19 @@ export default function GoalAlignmentTab() {
       api.get(`/api/v1/accounts/${account.id}/cs-goals?include_deleted=false`),
   });
   const goals = useMemo(() => goalsQ.data?.items ?? [], [goalsQ.data]);
+
+  // 12-Jun bug 248-a — count VPD-sourced goals; once loaded, default the
+  // source filter to "vpd" if any exist, else "all" (so an account with
+  // only manual goals isn't shown an empty list).
+  const vpdCount = useMemo(
+    () => goals.filter((g) => g.source === "vpd").length,
+    [goals],
+  );
+  useEffect(() => {
+    if (sourceFilter === null && !goalsQ.isLoading) {
+      setSourceFilter(vpdCount > 0 ? "vpd" : "all");
+    }
+  }, [sourceFilter, goalsQ.isLoading, vpdCount]);
 
   // 09-Jun bug (Bug Tracker · Jun-8 #5) — VPD candidate-goals banner.
   // The worker extracts candidate goals + metrics from every VPD upload
@@ -780,6 +798,8 @@ export default function GoalAlignmentTab() {
     return goals.filter((g) => {
       const s = statusOf(g);
       if (s === "removed") return false;
+      // 12-Jun bug 248-a — source gate (VPD-only by default).
+      if (sourceFilter === "vpd" && g.source !== "vpd") return false;
       if (filter === "all") return true;
       if (filter === "pending")
         return s === "pending" || s === "in-progress";
@@ -788,7 +808,7 @@ export default function GoalAlignmentTab() {
       if (filter === "flagged") return s === "flagged";
       return true;
     });
-  }, [goals, filter]);
+  }, [goals, filter, sourceFilter]);
 
   const next = useMemo(() => nextActionOf(goals), [goals]);
 
@@ -884,6 +904,32 @@ export default function GoalAlignmentTab() {
         setEditing={setEditingStakeholders}
         onChanged={invalidateOnboarding}
       />
+      {/* 12-Jun bug 248-a — source toggle. VPD = only goals extracted from
+          a VPD (the bug's "only use VPD goals"); All = include manual ones. */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: BRAND.t3 }}>
+          Source
+        </span>
+        {(["vpd", "all"] as const).map((k) => {
+          const on = (sourceFilter ?? "all") === k;
+          const label = k === "vpd" ? `VPD goals (${vpdCount})` : `All (${goals.length})`;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setSourceFilter(k)}
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors"
+              style={
+                on
+                  ? { background: BRAND.indigo, color: "#fff", borderColor: BRAND.indigo }
+                  : { background: "#fff", color: BRAND.t2, borderColor: BRAND.cardBorder }
+              }
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
       <FilterBar filter={filter} setFilter={setFilter} counts={counts} />
 
       <div className="flex items-center gap-2">
