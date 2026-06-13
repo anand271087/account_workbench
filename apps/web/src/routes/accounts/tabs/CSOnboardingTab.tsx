@@ -71,8 +71,39 @@ interface SolutioningRow {
   // missing. CSM must infer from chips." Surfacing the prose
   // statement (sh_value_from_solutioning) on the Commitment card.
   sh_value_from_solutioning: string | null;
+  // 13-Jun — the live, current value definition. The Commitment block
+  // prefers this over the frozen sh_ snapshot so it reflects edits made
+  // after lock (the snapshot freezes at lock and went stale + carried
+  // old markdown-table junk).
+  value_definition: string | null;
   sh_go_live_date: string | null;
   sh_stakeholder_signoff: string | null;
+}
+
+// 13-Jun — strip markdown-table syntax (`| a | b |`, `---|---` rows) that
+// leaked into value definitions extracted from VPDs before the server-side
+// scrubber landed. Mirrors services/claude.py::_scrub_markdown_table_syntax.
+// Keeps cell text, drops the pipes/dash rules, so the Commitment narrative
+// reads as clean prose instead of "| | | --- | BEROE | …".
+function scrubMarkdownTables(s: string): string {
+  if (!s || !s.includes("|")) return s;
+  const sepRe = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/;
+  const out: string[] = [];
+  for (const line of s.split("\n")) {
+    if (sepRe.test(line)) continue;
+    if ((line.match(/\|/g) || []).length >= 2) {
+      const cells = line
+        .replace(/^\s*\|/, "")
+        .replace(/\|\s*$/, "")
+        .split("|")
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (cells.length) out.push(cells.join(" · "));
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n").trim();
 }
 interface MetricRow {
   id: string;
@@ -643,7 +674,12 @@ function BlockCommitment({
   });
   const themes = (sol.data?.sh_value_themes_from_solutioning ?? "")
     .split(/[,\n]/g).map((t) => t.trim()).filter(Boolean);
-  const narrative = (sol.data?.sh_value_from_solutioning ?? "").trim();
+  // 13-Jun — prefer the live value_definition (reflects post-lock edits)
+  // over the frozen handoff snapshot, then scrub any markdown-table junk
+  // so the narrative reads as clean prose.
+  const narrative = scrubMarkdownTables(
+    (sol.data?.value_definition || sol.data?.sh_value_from_solutioning || "").trim(),
+  );
   const primary = metrics.data?.items?.[0] ?? null;
   const goLive = sol.data?.sh_go_live_date ?? account.gate_signed_date ?? null;
   return (
@@ -1332,8 +1368,19 @@ export default function CSOnboardingTab() {
       }
       return { prev };
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["cs-onboarding", account.id] });
+    // 13-Jun fix — the checklist boxes were ticking, then auto-unchecking
+    // after a beat. Cause: onSuccess invalidated cs-onboarding, which
+    // refetched; on the transaction-mode pooler that read often landed
+    // BEFORE the PATCH committed (read-after-write lag), so the row came
+    // back without the just-set key and the optimistic tick reverted.
+    // Rapid clicks made it worse (an in-flight refetch clobbered newer
+    // ticks). Fix: the PATCH already returns the full updated record —
+    // write THAT into the cache (authoritative) and don't refetch
+    // cs-onboarding at all. No round-trip race.
+    onSuccess: (fresh) => {
+      if (fresh) qc.setQueryData(["cs-onboarding", account.id], fresh);
+      // account query drives nav visibility for the Entry A/B path; it
+      // doesn't feed the checklist, so refreshing it can't revert a tick.
       qc.invalidateQueries({ queryKey: ["account", account.id] });
     },
     onError: (e: ApiError, _body, ctx) => {

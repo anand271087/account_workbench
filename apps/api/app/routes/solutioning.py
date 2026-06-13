@@ -339,7 +339,13 @@ async def lock_solutioning(
     # they've already been populated (re-lock after unlock leaves the prior
     # snapshot in place — Sales's edits to sh_* shouldn't be clobbered).
     if not row.sh_value_from_solutioning:
-        row.sh_value_from_solutioning = row.value_definition
+        # 13-Jun — scrub markdown-table junk that older VPD extractions
+        # left in value_definition so the snapshot Sales/CS sees is clean.
+        from app.services.claude import _scrub_markdown_table_syntax
+
+        row.sh_value_from_solutioning = _scrub_markdown_table_syntax(
+            row.value_definition or ""
+        ) or None
     if not row.sh_value_themes_from_solutioning:
         row.sh_value_themes_from_solutioning = ", ".join(row.value_themes or [])
     if not row.sh_value_received_at:
