@@ -459,6 +459,123 @@ async def create_account(
 
 
 # ============================================================
+# CSV export — MUST be declared BEFORE /{account_id}: FastAPI matches
+# routes in declaration order, and the literal path "export.csv" was
+# being captured by the UUID path param (422 uuid_parsing) when this
+# lived below the detail route. Found in the 13-Jun E2E pass.
+# ============================================================
+
+
+@router.get("/export.csv")
+async def export_accounts_csv(
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    q: str | None = Query(None),
+    csm_user_id: UUID | None = Query(None),
+    industry: str | None = Query(None),
+    tier: str | None = Query(None),
+    category: str | None = Query(None),
+    region: str | None = Query(None),
+    renewal_within_days: int | None = Query(None, ge=1, le=730),
+):
+    """CSV export of the current filtered list. BRD AC-5.
+
+    Uses the same scope + filters as the list endpoint. Caps at 10k rows.
+    """
+    from io import StringIO
+    import csv as csvlib
+
+    from fastapi.responses import StreamingResponse
+
+    csm_alias = aliased(User)
+    co_alias = aliased(User)
+    base = (
+        select(
+            Account,
+            csm_alias.full_name.label("csm_full_name"),
+            csm_alias.email.label("csm_email"),
+            co_alias.full_name.label("co_full_name"),
+        )
+        .where(Account.deleted_at.is_(None))
+        .outerjoin(csm_alias, csm_alias.id == Account.csm_user_id)
+        .outerjoin(co_alias, co_alias.id == Account.co_user_id)
+    )
+    role = user.role
+    if role == "commercial_owner":
+        base = base.where(Account.co_user_id == user.id)
+    elif (
+        is_global_admin(role)
+        or role in {"vp_sales", "vp_solutioning", "vp_inside_sales"}
+        or role in {"csm", "cs_team_manager", "solutioning_manager", "inside_sales_manager"}
+    ):
+        pass
+    else:
+        base = base.where(False)
+
+    if q:
+        like = f"%{q.lower()}%"
+        base = base.where(
+            or_(
+                func.lower(Account.name).like(like),
+                func.lower(Account.slug).like(like),
+                func.lower(Account.country).like(like),
+                func.lower(Account.industry).like(like),
+                func.lower(csm_alias.email).like(like),
+            )
+        )
+    if csm_user_id is not None:
+        base = base.where(Account.csm_user_id == csm_user_id)
+    if industry:
+        base = base.where(Account.industry == industry)
+    if tier:
+        base = base.where(Account.tier == tier)
+    if category:
+        base = base.where(Account.category == category)
+    if region:
+        base = base.where(Account.region == region)
+    if renewal_within_days is not None:
+        cutoff = date.today() + timedelta(days=renewal_within_days)
+        base = base.where(Account.renewal_date.is_not(None), Account.renewal_date <= cutoff)
+
+    base = base.order_by(Account.name.asc()).limit(10_000)
+    rows = (await db.execute(base)).all()
+
+    today = date.today()
+    buf = StringIO()
+    w = csvlib.writer(buf)
+    w.writerow([
+        "id", "slug", "name", "industry", "country", "region",
+        "category", "tier", "account_type", "segment",
+        "csm_full_name", "csm_email", "co_full_name",
+        "current_acv", "target_acv",
+        "renewal_date", "days_to_renewal",
+        "health_score", "last_activity_at",
+    ])
+    for r in rows:
+        a: Account = r[0]
+        days = (a.renewal_date - today).days if a.renewal_date else ""
+        w.writerow([
+            str(a.id), a.slug or "", a.name, a.industry or "", a.country or "", a.region or "",
+            a.category or "", a.tier or "", a.account_type or "", a.segment or "",
+            r[1] or "", r[2] or "", r[3] or "",
+            float(a.current_acv) if a.current_acv is not None else "",
+            float(a.target_acv) if a.target_acv is not None else "",
+            a.renewal_date.isoformat() if a.renewal_date else "",
+            days,
+            a.health_score if a.health_score is not None else "",
+            a.last_activity_at.isoformat() if a.last_activity_at else "",
+        ])
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=accounts-{today.isoformat()}.csv"
+        },
+    )
+
+
+# ============================================================
 # Single account detail (AK02)
 # ============================================================
 
@@ -897,115 +1014,6 @@ async def bulk_reassign_owner(
     for aid in body.account_ids:
         invalidate_account(aid)
     return {"updated": res.rowcount or 0}
-
-
-@router.get("/export.csv")
-async def export_accounts_csv(
-    user: CurrentUser,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    q: str | None = Query(None),
-    csm_user_id: UUID | None = Query(None),
-    industry: str | None = Query(None),
-    tier: str | None = Query(None),
-    category: str | None = Query(None),
-    region: str | None = Query(None),
-    renewal_within_days: int | None = Query(None, ge=1, le=730),
-):
-    """CSV export of the current filtered list. BRD AC-5.
-
-    Uses the same scope + filters as the list endpoint. Caps at 10k rows.
-    """
-    from io import StringIO
-    import csv as csvlib
-
-    from fastapi.responses import StreamingResponse
-
-    csm_alias = aliased(User)
-    co_alias = aliased(User)
-    base = (
-        select(
-            Account,
-            csm_alias.full_name.label("csm_full_name"),
-            csm_alias.email.label("csm_email"),
-            co_alias.full_name.label("co_full_name"),
-        )
-        .where(Account.deleted_at.is_(None))
-        .outerjoin(csm_alias, csm_alias.id == Account.csm_user_id)
-        .outerjoin(co_alias, co_alias.id == Account.co_user_id)
-    )
-    role = user.role
-    if role == "commercial_owner":
-        base = base.where(Account.co_user_id == user.id)
-    elif (
-        is_global_admin(role)
-        or role in {"vp_sales", "vp_solutioning", "vp_inside_sales"}
-        or role in {"csm", "cs_team_manager", "solutioning_manager", "inside_sales_manager"}
-    ):
-        pass
-    else:
-        base = base.where(False)
-
-    if q:
-        like = f"%{q.lower()}%"
-        base = base.where(
-            or_(
-                func.lower(Account.name).like(like),
-                func.lower(Account.slug).like(like),
-                func.lower(Account.country).like(like),
-                func.lower(Account.industry).like(like),
-                func.lower(csm_alias.email).like(like),
-            )
-        )
-    if csm_user_id is not None:
-        base = base.where(Account.csm_user_id == csm_user_id)
-    if industry:
-        base = base.where(Account.industry == industry)
-    if tier:
-        base = base.where(Account.tier == tier)
-    if category:
-        base = base.where(Account.category == category)
-    if region:
-        base = base.where(Account.region == region)
-    if renewal_within_days is not None:
-        cutoff = date.today() + timedelta(days=renewal_within_days)
-        base = base.where(Account.renewal_date.is_not(None), Account.renewal_date <= cutoff)
-
-    base = base.order_by(Account.name.asc()).limit(10_000)
-    rows = (await db.execute(base)).all()
-
-    today = date.today()
-    buf = StringIO()
-    w = csvlib.writer(buf)
-    w.writerow([
-        "id", "slug", "name", "industry", "country", "region",
-        "category", "tier", "account_type", "segment",
-        "csm_full_name", "csm_email", "co_full_name",
-        "current_acv", "target_acv",
-        "renewal_date", "days_to_renewal",
-        "health_score", "last_activity_at",
-    ])
-    for r in rows:
-        a: Account = r[0]
-        days = (a.renewal_date - today).days if a.renewal_date else ""
-        w.writerow([
-            str(a.id), a.slug or "", a.name, a.industry or "", a.country or "", a.region or "",
-            a.category or "", a.tier or "", a.account_type or "", a.segment or "",
-            r[1] or "", r[2] or "", r[3] or "",
-            float(a.current_acv) if a.current_acv is not None else "",
-            float(a.target_acv) if a.target_acv is not None else "",
-            a.renewal_date.isoformat() if a.renewal_date else "",
-            days,
-            a.health_score if a.health_score is not None else "",
-            a.last_activity_at.isoformat() if a.last_activity_at else "",
-        ])
-    buf.seek(0)
-    return StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=accounts-{today.isoformat()}.csv"
-        },
-    )
 
 
 async def _get_one_as_listitem(db: AsyncSession, account_id: UUID, user: User) -> AccountListItem:
