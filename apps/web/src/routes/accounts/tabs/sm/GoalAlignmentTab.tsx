@@ -38,7 +38,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 // here with ?goal=<id>&init=<initId>. We read those params, auto-expand
 // the goal, scroll to it, and pass editInitId down so InitiativeRow
 // opens its editor on landing.
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/lib/api";
 import { useNotify, usePrompt } from "@/components/DialogProvider";
@@ -1081,6 +1081,7 @@ function StakeholderBar({
   setEditing: (b: boolean) => void;
   onChanged: () => void;
 }) {
+  const navigate = useNavigate();
   const stk = onboarding?.cs_stakeholders ?? {};
   const champion = stk.champion as Stakeholder | undefined;
   const commercial = stk.commercial as Stakeholder | undefined;
@@ -1141,23 +1142,46 @@ function StakeholderBar({
       <Divider />
       <StakeholderItem label="Budget Owner" name={boD.primary} sub={boD.sub} />
       <Divider />
-      <StakeholderItem
-        label="Power users"
-        name={`${powerUsers.length}/5`}
-        sub={powerNames || "None listed yet"}
-      />
+      {/* 13-Jun — Power users come from Client Contacts (seniority ∈
+          CXO/VP/Director), so they're managed there, not in the SPOC/
+          Budget-Owner edit panel. Show names + a clear who/where hint +
+          a direct route to the contacts page. */}
+      <div
+        className="min-w-0"
+        title="Power users = Client Contacts with seniority CXO, VP or Director. Add or edit them in Client Contacts."
+      >
+        <div
+          className="text-[9.5px] font-bold uppercase tracking-wider"
+          style={{ color: BRAND.t3 }}
+        >
+          Power users · {powerUsers.length}/5
+        </div>
+        <b className="text-[12.5px] block truncate" style={{ color: BRAND.t1 }} title={powerNames || undefined}>
+          {powerNames || "None listed yet"}
+        </b>
+        <button
+          type="button"
+          onClick={() => navigate(`/accounts/${accountId}/contacts`)}
+          className="text-[10px] font-semibold mt-0.5"
+          style={{ color: BRAND.indigo }}
+          title="Power users are senior Client Contacts (CXO / VP / Director). Manage them in Client Contacts."
+        >
+          + Add / edit in Client Contacts →
+        </button>
+      </div>
       <div className="flex-1" />
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="text-[11px] font-semibold px-2.5 py-1 rounded-card border"
+        className="text-[11px] font-semibold px-2.5 py-1 rounded-card border self-start"
         style={{
           borderColor: BRAND.cardBorder,
           color: BRAND.t2,
           background: "#fff",
         }}
+        title="Edit SPOC + Budget Owner"
       >
-        ✏️ Edit
+        ✏️ Edit SPOC / Budget Owner
       </button>
     </div>
   );
