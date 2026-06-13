@@ -43,8 +43,21 @@ class Settings(BaseSettings):
     # In local dev: aws ssm start-session port-fwd to localhost:8087, then
     # set AI_GATEWAY_URL=http://localhost:8087/v1. In prod: Karthick sets up
     # private DNS + IAM role and points AI_GATEWAY_URL at that.
-    ai_gateway_url: str | None = None  # e.g. http://localhost:8087/v1
-    ai_gateway_api_key: SecretStr | None = None  # optional x-bf-ak pin
+    # 13-Jun TEMPORARY default — point the in-VPC Bifrost ALB so the dev
+    # server uses real AI without the team having to set AI_GATEWAY_URL
+    # yet. The Beroe dev box is inside the VPC, so it reaches this internal
+    # ALB directly (no SSM tunnel needed). Any env that sets AI_GATEWAY_URL
+    # explicitly still wins (local dev uses http://localhost:8087/v1 via the
+    # tunnel; tests set it empty in conftest). REMOVE once the team sets the
+    # gateway URL in the dev server's environment.
+    ai_gateway_url: str | None = (
+        "http://internal-Internal-facing-ALB-bifrost-dev-1209860262.eu-west-1.elb.amazonaws.com:8087/v1"
+    )
+    # 13-Jun TEMPORARY default — Bifrost gateway access key, forwarded as
+    # the `x-bf-ak` header (see services/llm.py). Required by the dev ALB;
+    # without it the gateway rejects the call. Env still overrides. REMOVE
+    # once the team sets AI_GATEWAY_API_KEY in the dev server's environment.
+    ai_gateway_api_key: SecretStr | None = SecretStr("beroe-bedrock-dev-for-csm")  # x-bf-ak
     ai_gateway_model: str = "bedrock/eu.anthropic.claude-opus-4-5-20251101-v1:0"
 
     # ---- Redis / Celery ----
