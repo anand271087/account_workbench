@@ -1083,6 +1083,31 @@ const ContractAuditSection = memo(function ContractAuditSection({
     onError: (e: ApiError) =>
       notify({ title: "Unlock failed", body: e.message, tone: "error" }),
   });
+  // 12-Jun bug 241 — Re-Align on Contract Audit, same mechanism as CS
+  // Handoff. POSTs to the existing /cs-onboarding/realign endpoint with
+  // block="Commercial" (owner = Contract Ops). That route cascades the
+  // unlock (gate_unlocked = true, note becomes the unlock reason) so the
+  // audit fields open for corrections WITHOUT needing the admin-only
+  // /sign/unlock path. The pending re-alignment banner surfaces on the
+  // CS Handoff tab automatically.
+  const realignMutation = useMutation({
+    mutationFn: (note: string) =>
+      api.post(`/api/v1/accounts/${account.id}/cs-onboarding/realign`, {
+        block: "Commercial",
+        note,
+      }),
+    onSuccess: () => {
+      onMutate();
+      qc.invalidateQueries({ queryKey: ["cs-onboarding", account.id] });
+      notify({
+        title: "Re-alignment sent",
+        body: "Commercial block sent back to Contract Ops — audit fields unlocked for corrections.",
+        tone: "success",
+      });
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Re-align failed", body: e.message, tone: "error" }),
+  });
 
   if (!showCard) return null;
 
@@ -1180,6 +1205,22 @@ const ContractAuditSection = memo(function ContractAuditSection({
       tone: "warning",
     });
     if (reason && reason.trim().length >= 10) unlockMutation.mutate(reason.trim());
+  }
+
+  // 12-Jun bug 241 — Re-Align prompt. Min 5 chars matches the backend
+  // RealignOpenIn validator.
+  async function onRealign() {
+    const note = await promptDlg({
+      title: "Re-Align Contract Audit",
+      body: "Sends the Commercial block back to Contract Ops with your note and unlocks the audit fields for corrections. The note is recorded as the unlock reason in the audit log.",
+      placeholder: "e.g. ACV doesn't match the signed order form — please re-verify.",
+      minLength: 5,
+      maxLength: 2000,
+      multiline: true,
+      confirmLabel: "Send Re-Align",
+      tone: "warning",
+    });
+    if (note && note.trim().length >= 5) realignMutation.mutate(note.trim());
   }
 
   function toggleModule(m: ModuleName) {
@@ -1470,17 +1511,31 @@ const ContractAuditSection = memo(function ContractAuditSection({
           </button>
         </div>
       )}
-      {locked && gate.can_unlock && (
-        <div className="mt-3">
+      {locked && (
+        <div className="mt-3 flex gap-2 flex-wrap">
+          {/* 12-Jun bug 241 — Re-Align available to every CS-onboarding
+              writer (endpoint enforces RBAC server-side); admin unlock
+              stays as the second, stricter escape hatch. */}
           <button
             type="button"
-            onClick={onUnlock}
-            disabled={unlockMutation.isPending}
-            className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold border bg-white text-beroe-amber"
-            style={{ borderColor: `${C.AMBER}50` }}
+            onClick={onRealign}
+            disabled={realignMutation.isPending}
+            className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold border bg-white disabled:opacity-50"
+            style={{ borderColor: `${C.AMBER}50`, color: "#b85b00" }}
           >
-            🔓 Unlock for corrections (admin)
+            ↩ Re-Align — send back to Contract Ops
           </button>
+          {gate.can_unlock && (
+            <button
+              type="button"
+              onClick={onUnlock}
+              disabled={unlockMutation.isPending}
+              className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold border bg-white text-beroe-amber"
+              style={{ borderColor: `${C.AMBER}50` }}
+            >
+              🔓 Unlock for corrections (admin)
+            </button>
+          )}
         </div>
       )}
     </Card>
