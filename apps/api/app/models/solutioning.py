@@ -38,7 +38,10 @@ class AccountSolutioning(Base):
     trial_client_type: Mapped[str | None] = mapped_column(String, nullable=True)
     trial_type: Mapped[str | None] = mapped_column(String, nullable=True)
     trial_payment_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 12-Jun bug 236 — trial_date is the START date (label-only change);
+    # trial_end_date added in migration 0078.
     trial_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trial_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     trial_modules_tested: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'")
     )

@@ -1,6 +1,10 @@
 // Mirrors apps/api/app/schemas/document.py.
 
-export type DocKind = "mom" | "vpd" | "recording" | "transcript" | "email" | "other" | "contract";
+// 12-Jun bugs 231/235 — l1_call + l2_call (Pre-Sales) and trial_summary
+// (Solutioning) added in migration 0078.
+export type DocKind =
+  | "mom" | "vpd" | "recording" | "transcript" | "email" | "other" | "contract"
+  | "l1_call" | "l2_call" | "trial_summary";
 export type AiStatus = "pending" | "processing" | "complete" | "failed";
 
 export interface ExtractedEntities {
@@ -84,6 +88,9 @@ export const DOC_KIND_LABELS: Record<DocKind, string> = {
   email: "Email",
   other: "Other",
   contract: "Contract",
+  l1_call: "L1 Call Notes",
+  l2_call: "L2 Call Notes",
+  trial_summary: "Trial Summary",
 };
 
 export const AI_STATUS_LABELS: Record<AiStatus, string> = {

@@ -52,7 +52,9 @@ export interface Solutioning {
   trial_client_type: TrialClientType | null;
   trial_type: TrialType | null;
   trial_payment_type: TrialPaymentType | null;
+  // 12-Jun bug 236 — trial_date = START date; trial_end_date new (0078).
   trial_date: string | null;
+  trial_end_date: string | null;
   trial_modules_tested: Record<string, Record<string, unknown>>;
   trial_outcome: string | null;
   trial_feedback: string | null;
@@ -99,6 +101,7 @@ export interface SolutioningUpdate {
   trial_type?: TrialType | null;
   trial_payment_type?: TrialPaymentType | null;
   trial_date?: string | null;
+  trial_end_date?: string | null;
   trial_modules_tested?: Record<string, Record<string, unknown>> | null;
   trial_outcome?: string | null;
   trial_feedback?: string | null;

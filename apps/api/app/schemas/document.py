@@ -8,7 +8,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DocKind = Literal["mom", "vpd", "recording", "transcript", "email", "other", "contract"]
+# 12-Jun bugs 231/235 — l1_call + l2_call (Pre-Sales call notes) and
+# trial_summary (Solutioning) added in migration 0078.
+DocKind = Literal[
+    "mom", "vpd", "recording", "transcript", "email", "other", "contract",
+    "l1_call", "l2_call", "trial_summary",
+]
 AiStatus = Literal["pending", "processing", "complete", "failed"]
 
 

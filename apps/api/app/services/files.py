@@ -28,6 +28,11 @@ _BUCKET_FOR_KIND: dict[str, str] = {
     "email": "meeting_records",
     "other": "meeting_records",
     "contract": "contracts",
+    # 12-Jun bugs 231/235 — L1/L2 call notes ride the meeting-records
+    # bucket; Trial Summary is a Solutioning artifact like the VPD.
+    "l1_call": "meeting_records",
+    "l2_call": "meeting_records",
+    "trial_summary": "vpd",
 }
 
 

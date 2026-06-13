@@ -240,6 +240,26 @@ export default function PreSalesTab() {
         headerAction={<BriefOverlayButton accountId={account.id} accountName={account.name} />}
       />
 
+      {/* 12-Jun bugs 231 + 232 — L1 / L2 call notes get their own upload
+          cards, same pipeline as the MoM (AI summary + Pre-Sales field
+          extraction + auto-apply). Side-by-side to keep the page short. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <KindUploadCard
+          accountId={account.id}
+          kind="l1_call"
+          title="L1 Call — Notes & Files"
+          description="First-level discovery call. AI summarises and extracts Pre-Sales fields, same as a MoM."
+          emptyHint="No L1 call notes yet. Drag a file or use Paste text."
+        />
+        <KindUploadCard
+          accountId={account.id}
+          kind="l2_call"
+          title="L2 Call — Notes & Files"
+          description="Second-level / deep-dive call. AI summarises and extracts Pre-Sales fields, same as a MoM."
+          emptyHint="No L2 call notes yet. Drag a file or use Paste text."
+        />
+      </div>
+
       {/* Standalone Brief tab removed (05-Jun) — entire brief feature
           lives inside the BriefOverlayButton popup above. */}
 

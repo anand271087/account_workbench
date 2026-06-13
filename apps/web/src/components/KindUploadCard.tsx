@@ -110,7 +110,15 @@ export function KindUploadCard({
       if (d.deleted_at) return false;
       if (d.ai_status === "pending" || d.ai_status === "processing") return true;
       const recent = Date.now() - new Date(d.uploaded_at).getTime() < EXTRACTION_WINDOW_MS;
-      if (kind === "mom" && d.ai_status === "complete" && !d.mom_extracted_at && recent) return true;
+      // 12-Jun bug 232 — l1_call / l2_call run the same mom-extraction
+      // pass in the worker, so they share the polling window.
+      if (
+        (kind === "mom" || kind === "l1_call" || kind === "l2_call") &&
+        d.ai_status === "complete" &&
+        !d.mom_extracted_at &&
+        recent
+      )
+        return true;
       if (
         kind === "vpd" &&
         d.ai_status === "complete" &&
@@ -133,7 +141,9 @@ export function KindUploadCard({
   // write the draft + auto-create contacts + show a confirmation toast.
   // Per-doc localStorage flag survives reloads so we never double-apply.
   useEffect(() => {
-    if (kind !== "mom" || !data?.items) return;
+    // 12-Jun bug 232 — auto-apply also fires for L1/L2 call uploads;
+    // the worker persists the same mom_extracted_fields shape on them.
+    if (!["mom", "l1_call", "l2_call"].includes(kind) || !data?.items) return;
     const pending = data.items.filter(
       (d) =>
         !d.deleted_at &&
