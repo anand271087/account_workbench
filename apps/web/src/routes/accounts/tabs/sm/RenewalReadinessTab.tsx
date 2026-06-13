@@ -28,8 +28,6 @@ import type {
   Play,
   PlayListResponse,
 } from "@/types/play";
-import { type Activity, type ActivityListResponse } from "@/types/signal";
-
 const BRAND = {
   indigo: "#4A00F8",
   midnight: "#001137",
@@ -85,11 +83,8 @@ export default function RenewalReadinessTab() {
     queryFn: () =>
       api.get<PlayListResponse>(`/api/v1/accounts/${account.id}/plays`),
   });
-  const actsQ = useQuery<ActivityListResponse>({
-    queryKey: ["activities", account.id],
-    queryFn: () =>
-      api.get<ActivityListResponse>(`/api/v1/accounts/${account.id}/activities`),
-  });
+  // 12-Jun bug 253 — activities query removed. Top Wins now derives from
+  // initiative completion % (Value Tracking), not from activity types.
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["delivery-renewal", account.id] });
@@ -115,7 +110,6 @@ export default function RenewalReadinessTab() {
   const dr = drQ.data;
   const goals = goalsQ.data?.items ?? [];
   const plays = playsQ.data?.items ?? [];
-  const activities = actsQ.data?.items ?? [];
 
   return (
     <div className="space-y-3">
@@ -123,7 +117,6 @@ export default function RenewalReadinessTab() {
       <Track1Defend
         readiness={dr.readiness}
         goals={goals}
-        activities={activities}
         canWrite={dr.is_editable}
         accountId={account.id}
         onChanged={invalidate}
@@ -220,49 +213,61 @@ function VerdictBanner({ readiness }: { readiness: Readiness }) {
 function Track1Defend({
   readiness,
   goals,
-  activities,
   canWrite,
   accountId,
   onChanged,
 }: {
   readiness: Readiness;
   goals: CSGoal[];
-  activities: Activity[];
   canWrite: boolean;
   accountId: string;
   onChanged: () => void;
 }) {
   const qc = useQueryClient();
-  const frozen = goals.filter((g) => g.validation_status === "accepted");
 
-  const { totalDelivered, totalTarget } = useMemo(() => {
-    let d = 0;
-    let t = 0;
-    for (const g of frozen) {
-      t += parseUsd(g.target_value);
+  // 12-Jun bug 253 — Value Delivered is NOT a monetary rollup; it's the
+  // overall delivery % from Value Tracking. Mirror ValueTrackingTabV2's
+  // math exactly: effective_pct = 100 if status==='delivered' else
+  // completion_pct (clamped 0-100); overall = average across initiatives.
+  //
+  // 12-Jun bug 251 — pending goals included in the rollup too (was
+  // frozen-only). Every goal + its initiatives count toward the
+  // portfolio roll-up regardless of validation status.
+  const { overallPct, initCount, goalCount } = useMemo(() => {
+    const pcts: number[] = [];
+    for (const g of goals) {
       for (const i of g.initiatives) {
-        d += parseUsd(i.value_delivered);
+        const v =
+          i.status === "delivered"
+            ? 100
+            : Math.min(100, Math.max(0, i.completion_pct ?? 0));
+        pcts.push(v);
       }
     }
-    return { totalDelivered: d, totalTarget: t };
-  }, [frozen]);
+    const overall =
+      pcts.length === 0
+        ? 0
+        : Math.round(pcts.reduce((s, p) => s + p, 0) / pcts.length);
+    return { overallPct: overall, initCount: pcts.length, goalCount: goals.length };
+  }, [goals]);
 
-  // Top wins = activities tagged with QBR / Product / Project hits (best
-  // available proxy for prototype's `valueImpact > 0`).
-  const topWins = useMemo(
-    () =>
-      [...activities]
-        .filter((a) =>
-          ["qbr", "exec_visit", "product", "csm_call"].includes(a.type),
-        )
-        .sort(
-          (a, b) =>
-            new Date(b.occurred_at ?? b.created_at).getTime() -
-            new Date(a.occurred_at ?? a.created_at).getTime(),
-        )
-        .slice(0, 3),
-    [activities],
-  );
+  // 12-Jun bug 253 — Top Wins = initiatives with ≥80% value delivered
+  // (was: an activity-type proxy on QBR / product / exec-visit events).
+  const topWins = useMemo(() => {
+    const wins: { id: string; name: string; pct: number }[] = [];
+    goals.forEach((g, gi) => {
+      g.initiatives.forEach((i, ii) => {
+        const pct =
+          i.status === "delivered"
+            ? 100
+            : Math.min(100, Math.max(0, i.completion_pct ?? 0));
+        if (pct >= 80) {
+          wins.push({ id: `${g.id ?? gi}:${ii}`, name: i.name, pct });
+        }
+      });
+    });
+    return wins.sort((a, b) => b.pct - a.pct).slice(0, 3);
+  }, [goals]);
 
   const patch = useMutation({
     mutationFn: (newReadiness: Readiness) =>
@@ -365,17 +370,17 @@ function Track1Defend({
             className="text-[10.5px] font-bold uppercase tracking-wider"
             style={{ color: "#146a45" }}
           >
-            Total value delivered
+            Overall value delivered
           </div>
           <div
             className="text-[24px] font-black mt-0.5"
             style={{ color: "#146a45" }}
           >
-            {fmtUsd(totalDelivered)}
+            {overallPct}%
           </div>
           <div className="text-[11px] mt-0.5" style={{ color: "#2fb87a" }}>
-            of {fmtUsd(totalTarget)} committed · across {frozen.length} frozen
-            goals
+            from Value Tracking · {goalCount} goal{goalCount === 1 ? "" : "s"} ·{" "}
+            {initCount} initiative{initCount === 1 ? "" : "s"}
           </div>
         </div>
         {topWins.length > 0 && (
@@ -390,7 +395,7 @@ function Track1Defend({
               className="text-[10px] font-bold mb-1"
               style={{ color: "#146a45" }}
             >
-              Top wins
+              Top wins (≥80% delivered)
             </div>
             {topWins.map((w) => (
               <div
@@ -398,8 +403,8 @@ function Track1Defend({
                 className="text-[11px]"
                 style={{ color: "#1a4035" }}
               >
-                ✓{" "}
-                {w.title.length > 40 ? w.title.slice(0, 40) + "…" : w.title}
+                ✓ {w.name.length > 40 ? w.name.slice(0, 40) + "…" : w.name}{" "}
+                <b>({w.pct}%)</b>
               </div>
             ))}
           </div>
