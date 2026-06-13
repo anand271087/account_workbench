@@ -284,10 +284,13 @@ def can_write_documents(role: str, *, is_assigned: bool, is_team: bool, kind: st
         return False
     if role == "solutioning_manager":
         return True
-    if kind == "vpd":
-        # Only globals + solutioning_manager can write VPDs (matrix V for everyone else).
+    # 12-Jun bug 235 — trial_summary is a Solutioning artifact; same
+    # write set as the VPD (globals + solutioning_manager only).
+    if kind in ("vpd", "trial_summary"):
+        # Only globals + solutioning_manager can write these (matrix V for everyone else).
         return False
-    # MOM and other doc kinds — same as MOM rules.
+    # MOM and other doc kinds (incl. l1_call / l2_call, bug 231) — same
+    # as MOM rules.
     if role == "csm":
         return is_assigned
     if role == "cs_team_manager":

@@ -186,11 +186,13 @@ async def _process(job_id: UUID) -> dict:
             except Exception:
                 logger.exception("VPD candidate-metrics extraction failed (non-fatal)")
 
-        # MoM-only: extract structured fields (engagement / brief / contacts)
-        # and persist on the document row. The frontend polling loop picks
-        # this up and one-shot applies it as a dirty draft on Pre-Sales +
-        # Brief — no user click needed.
-        if doc.kind == "mom":
+        # MoM + L1/L2 call notes (12-Jun bug 232): extract structured
+        # fields (engagement / brief / contacts) and persist on the
+        # document row. The frontend polling loop picks this up and
+        # one-shot applies it as a dirty draft on Pre-Sales + Brief —
+        # no user click needed. L1/L2 uploads carry the same discovery
+        # content as a MoM, so the same extractor + prompt applies.
+        if doc.kind in ("mom", "l1_call", "l2_call"):
             try:
                 extracted = extract_from_mom(doc.id, text)
                 # 05-Jun — extracted lead names (sdr_lead / discovery_lead /

@@ -276,6 +276,17 @@ export default function SolutioningTab() {
         emptyHint="No VPDs yet. Drag a .docx, .pdf or .txt onto the card above."
       />
 
+      {/* 12-Jun bug 235 — Trial Summary documents get their own upload
+          card next to the VPD. Same pipeline (AI summary + notes); same
+          write set as the VPD (Solutioning-owned artifact). */}
+      <KindUploadCard
+        accountId={account.id}
+        kind="trial_summary"
+        title="Trial Summary"
+        description="Upload the trial / pilot summary document. AI summarises it; the structured Trial Summary fields below stay the editable source of truth."
+        emptyHint="No Trial Summary docs yet. Drag a .docx, .pdf or .txt onto the card above."
+      />
+
       {/* 27-May Row 81 — Autofill Success Metrics from VPD.
           09-Jun · Unified VPD review — retired. The candidate metrics
           now extract automatically in the worker step (same time as
@@ -751,12 +762,26 @@ function TrialSummarySection({
             {TRIAL_PAYMENT_TYPE_OPTIONS.map((t) => <option key={t}>{t}</option>)}
           </select>
         </Field>
-        <Field label="Trial Date">
+        {/* 12-Jun bug 236 — Trial duration as Start + End dates.
+            trial_date keeps its column and becomes the START date. */}
+        <Field label="Trial Start Date">
           <input
             type="date"
             value={form.trial_date ?? ""}
             onChange={(e) =>
               setForm({ ...form, trial_date: e.target.value || null })
+            }
+            disabled={!editable}
+            className={inputCls(editable)}
+          />
+        </Field>
+        <Field label="Trial End Date">
+          <input
+            type="date"
+            value={form.trial_end_date ?? ""}
+            min={form.trial_date ?? undefined}
+            onChange={(e) =>
+              setForm({ ...form, trial_end_date: e.target.value || null })
             }
             disabled={!editable}
             className={inputCls(editable)}
@@ -1085,9 +1110,9 @@ function diff(next: Solutioning, prev: Solutioning): SolutioningUpdate {
   const keys: (keyof SolutioningUpdate)[] = [
     "proposed_solution", "engagement_type", "engagement_duration_months",
     "value_themes", "value_definition", "estimated_value_musd",
-    // Trial Summary (03-Jun bug 7)
+    // Trial Summary (03-Jun bug 7; trial_end_date 12-Jun bug 236)
     "trial_client_type", "trial_type", "trial_payment_type", "trial_date",
-    "trial_modules_tested", "trial_outcome", "trial_feedback",
+    "trial_end_date", "trial_modules_tested", "trial_outcome", "trial_feedback",
     // Sales Hand-off context (M13)
     "sh_value_validation", "sh_validation_notes", "sh_go_live_date",
     "sh_first_checkpoint", "sh_stakeholder_signoff", "sh_commercial_context",

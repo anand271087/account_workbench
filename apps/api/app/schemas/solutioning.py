@@ -39,7 +39,9 @@ class SolutioningOut(BaseModel):
     trial_client_type: str | None = None
     trial_type: str | None = None
     trial_payment_type: str | None = None
+    # 12-Jun bug 236 — trial_date = start; trial_end_date new (0078).
     trial_date: date | None = None
+    trial_end_date: date | None = None
     # 05-Jun — was `dict = Field(default_factory=dict)` but `from_attributes=True`
     # short-circuits the default when the ORM column is NULL — Pydantic gets
     # `None` and rejects, blanking the entire response with a 500 (infinite
@@ -93,6 +95,7 @@ class SolutioningUpdate(BaseModel):
     trial_type: Literal["Trial", "Pilot"] | None = None
     trial_payment_type: Literal["Complimentary", "Pro Bono", "Paid"] | None = None
     trial_date: date | None = None
+    trial_end_date: date | None = None
     trial_modules_tested: dict | None = None
     trial_outcome: str | None = Field(None, max_length=4000)
     trial_feedback: str | None = Field(None, max_length=4000)

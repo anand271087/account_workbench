@@ -184,6 +184,8 @@ async def patch_solutioning(
                 "trial_type",
                 "trial_payment_type",
                 "trial_date",
+                # 12-Jun bug 236 — trial end date (0078).
+                "trial_end_date",
                 "trial_modules_tested",
                 "trial_outcome",
                 "trial_feedback",
