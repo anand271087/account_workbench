@@ -45,6 +45,7 @@ import {
 import type { Solutioning, SolutioningUpdate, ShValidation } from "@/types/solutioning";
 import { SH_VALIDATION_LABELS } from "@/types/solutioning";
 import type { Document } from "@/types/document";
+import type { MetricListResponse } from "@/types/metric";
 
 // ─────────────────────────────────────────────────────────────
 // Brand-locked palette (off-palette prototype hex mapped to tokens).
@@ -406,6 +407,13 @@ function SalesHandoffSection({
         onMutate={onMutate}
       />
 
+      {/* 12-Jun bug 240 — Read-only roster of Success Metrics in scope
+          for this hand-over. Stakeholder ask: Sales sees what
+          Solutioning agreed to deliver, without leaving the Hand-off
+          tab. Edits stay in Success Management → Value Tracking. */}
+      <GroupHead>Success Metrics</GroupHead>
+      <HandoffMetricsRoster accountId={account.id} />
+
       {/* Engagement Timeline */}
       <GroupHead>Engagement Timeline</GroupHead>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-2.5">
@@ -570,6 +578,83 @@ function SalesHandoffSection({
 // ─────────────────────────────────────────────────────────────
 // Client stakeholders roster — SPOC + Budget Owner + 5 power users
 // ─────────────────────────────────────────────────────────────
+// 12-Jun bug 240 — Read-only Success Metrics roster on the Sales Hand-off
+// tab. Lists every active metric on the account with status pill. Sales
+// reads this at hand-over to know what's been committed; edits stay in
+// Success Management → Value Tracking. No write path here on purpose.
+function HandoffMetricsRoster({ accountId }: { accountId: string }) {
+  const q = useQuery<MetricListResponse>({
+    queryKey: ["metrics", accountId],
+    queryFn: () => api.get<MetricListResponse>(`/api/v1/accounts/${accountId}/metrics`),
+    staleTime: 60_000,
+  });
+  const items = q.data?.items ?? [];
+
+  if (q.isLoading) {
+    return (
+      <div className="text-[11.5px] text-text-muted italic mb-2.5">
+        Loading…
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <div className="text-[11.5px] text-text-muted italic mb-2.5">
+        No Success Metrics on this account yet. Solutioning sets these from
+        the VPD upload before hand-over.
+      </div>
+    );
+  }
+
+  const STATUS_DOT: Record<string, string> = {
+    green: "#40CC8F",
+    amber: "#EF9637",
+    red: "#FD576B",
+    grey: "#94a3b8",
+  };
+  const STATUS_TONE: Record<string, { bg: string; text: string }> = {
+    green: { bg: "bg-beroe-green/15", text: "text-beroe-green" },
+    amber: { bg: "bg-beroe-amber/15", text: "text-beroe-amber" },
+    red: { bg: "bg-beroe-red/10", text: "text-beroe-red" },
+    grey: { bg: "bg-beroe-bg", text: "text-text-muted" },
+  };
+
+  return (
+    <div className="space-y-1.5 mb-2.5">
+      {items.map((m) => {
+        const tone = STATUS_TONE[m.status] ?? STATUS_TONE.grey;
+        return (
+          <div
+            key={m.id}
+            className="flex items-center gap-2 text-[12px] px-2.5 py-1.5 rounded-[8px] border border-beroe-card-border bg-white"
+          >
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ background: STATUS_DOT[m.status] ?? STATUS_DOT.grey }}
+            />
+            <span className="font-semibold flex-1 truncate" title={m.name}>
+              {m.name}
+            </span>
+            <span className="text-text-muted text-[11px] truncate" title={m.target_value ?? undefined}>
+              {m.metric_type === "qualitative" ? "Qualitative" : "Target"}
+              {m.target_value ? ` · ${m.target_value}` : ""}
+            </span>
+            <span
+              className={cn(
+                "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                tone.bg,
+                tone.text,
+              )}
+            >
+              {m.status}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ClientStakeholdersRoster({
   accountId,
   spoc,
