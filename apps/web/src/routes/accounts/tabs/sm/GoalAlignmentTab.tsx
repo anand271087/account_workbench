@@ -1108,8 +1108,25 @@ function StakeholderBar({
     );
   }
 
-  const sp = champion?.name ?? "—";
-  const bo = commercial?.name ?? "—";
+  // 13-Jun — when the stored "name" is actually an email (bad data /
+  // import), still show something sensible: prefer a non-email name,
+  // else show the email as the primary. Email sub-line only shows when
+  // it differs from the primary, so we don't print it twice.
+  const stkDisplay = (s?: Stakeholder) => {
+    const nm = (s?.name ?? "").trim();
+    const em = (s?.email ?? "").trim();
+    const primary = nm || em || "—";
+    const sub = em && em !== primary ? em : null;
+    return { primary, sub };
+  };
+  const spD = stkDisplay(champion);
+  const boD = stkDisplay(commercial);
+  // 13-Jun — show power-user NAMES (was a bare 1/5 count, so the user
+  // couldn't see who they were). Fall back to email/title when unnamed.
+  const powerNames = powerUsers
+    .map((c) => c.name?.trim() || c.email?.trim() || c.title?.trim())
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <div
@@ -1120,13 +1137,14 @@ function StakeholderBar({
       }}
     >
       <span className="text-[16px]">👥</span>
-      <StakeholderItem label="SPOC" name={sp} />
+      <StakeholderItem label="SPOC" name={spD.primary} sub={spD.sub} />
       <Divider />
-      <StakeholderItem label="Budget Owner" name={bo} />
+      <StakeholderItem label="Budget Owner" name={boD.primary} sub={boD.sub} />
       <Divider />
       <StakeholderItem
         label="Power users"
         name={`${powerUsers.length}/5`}
+        sub={powerNames || "None listed yet"}
       />
       <div className="flex-1" />
       <button
@@ -1145,18 +1163,37 @@ function StakeholderBar({
   );
 }
 
-function StakeholderItem({ label, name }: { label: string; name: string }) {
+function StakeholderItem({
+  label,
+  name,
+  sub,
+}: {
+  label: string;
+  name: string;
+  // 13-Jun — optional secondary line: email for SPOC/Budget Owner, or the
+  // roster of power-user names so they're actually visible (was count-only).
+  sub?: string | null;
+}) {
   return (
-    <div>
+    <div className="min-w-0">
       <div
         className="text-[9.5px] font-bold uppercase tracking-wider"
         style={{ color: BRAND.t3 }}
       >
         {label}
       </div>
-      <b className="text-[12.5px]" style={{ color: BRAND.t1 }}>
+      <b className="text-[12.5px] block truncate" style={{ color: BRAND.t1 }} title={name}>
         {name}
       </b>
+      {sub && (
+        <div
+          className="text-[10px] truncate"
+          style={{ color: BRAND.t3 }}
+          title={sub}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
 }
