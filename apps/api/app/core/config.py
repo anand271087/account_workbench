@@ -10,12 +10,15 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 13-Jun TEMPORARY — the in-VPC Bifrost ALB + its x-bf-ak key. Used both
-# as the field default and by the override validator below. REMOVE the
-# whole temporary block once the team sets AI_GATEWAY_URL +
+# 13-Jun TEMPORARY — the in-VPC Bifrost gateway + its x-bf-ak key. Used
+# both as the field default and by the override validator below. REMOVE
+# the whole temporary block once the team sets AI_GATEWAY_URL +
 # AI_GATEWAY_API_KEY in the dev server's environment.
+# 13-Jun update — admin switched the access path from the ALB to a VPC
+# endpoint (vpce). Both reach the same Bifrost service; the vpce is the
+# blessed in-VPC route. Name kept as *_ALB_URL to avoid churn.
 _TEMP_BIFROST_ALB_URL = (
-    "http://internal-Internal-facing-ALB-bifrost-dev-1209860262.eu-west-1.elb.amazonaws.com:8087/v1"
+    "http://vpce-04247d1cd6a62b773-m69o2hhr.vpce-svc-0df92a69e4c0af3c8.eu-west-1.vpce.amazonaws.com:8087/v1"
 )
 _TEMP_BIFROST_KEY = "beroe-bedrock-dev-for-csm"
 
