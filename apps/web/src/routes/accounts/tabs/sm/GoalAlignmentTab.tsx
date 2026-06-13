@@ -1687,6 +1687,7 @@ function GoalAlignmentBody({
 }) {
   const status = statusOf(goal);
   const isFlagged = status === "flagged";
+  const prompt = usePrompt();
 
   const patch = useMutation({
     mutationFn: (body: CSGoalUpdate) =>
@@ -1749,19 +1750,43 @@ function GoalAlignmentBody({
 
   const freeze = () =>
     patch.mutate({ validation_status: "accepted", alignment_status: "aligned" });
-  const flag = () =>
-    patch.mutate({
-      validation_status: isFlagged ? "pending" : "flagged",
-      flag_note: isFlagged
-        ? null
-        : (goal.flag_note ?? "Flagged for discussion"),
+  // 12-Jun bug 248-b — Re-Align: send the goal back for alignment with a
+  // required note (vs the old canned-note flag). Reuses the `flagged`
+  // validation state; the note lands in flag_note + the goal's history.
+  // Toggling on an already-flagged goal clears it (back to pending).
+  async function realign() {
+    if (isFlagged) {
+      patch.mutate({ validation_status: "pending", flag_note: null });
+      return;
+    }
+    const note = await prompt({
+      title: "Re-Align this goal",
+      body: "Send this goal back for alignment with a note for whoever owns it (Solutioning / Sales). Recorded in the goal's history.",
+      placeholder: "e.g. Target value doesn't match the signed VPD — please reconfirm.",
+      minLength: 5,
+      maxLength: 2000,
+      multiline: true,
+      confirmLabel: "Send Re-Align",
+      tone: "warning",
     });
-  function removeWithPrompt() {
-    const reason = prompt(
-      "Remove this goal? Add a brief reason (≥5 chars, kept in audit trail):",
-    );
-    if (!reason || reason.trim().length < 5) return;
-    remove.mutate(reason.trim());
+    if (note && note.trim().length >= 5) {
+      patch.mutate({ validation_status: "flagged", flag_note: note.trim() });
+    }
+  }
+  async function removeWithPrompt() {
+    // 12-Jun bug 248-b — was window.prompt; usePrompt now owns `prompt`
+    // in this scope, so use the dialog (consistent UX + enforces minLength).
+    const reason = await prompt({
+      title: "Remove this goal?",
+      body: "Add a brief reason (kept in the audit trail).",
+      placeholder: "e.g. Duplicate of another goal; superseded by the VPD refresh.",
+      minLength: 5,
+      maxLength: 600,
+      multiline: true,
+      confirmLabel: "Remove",
+      tone: "error",
+    });
+    if (reason && reason.trim().length >= 5) remove.mutate(reason.trim());
   }
 
   return (
@@ -1778,7 +1803,7 @@ function GoalAlignmentBody({
             color: "#8a4510",
           }}
         >
-          <b>🚩 Flagged for discussion:</b> {goal.flag_note || "(no note)"}
+          <b>↩ Re-alignment requested:</b> {goal.flag_note || "(no note)"}
         </div>
       )}
 
@@ -1838,7 +1863,7 @@ function GoalAlignmentBody({
       >
         <button
           type="button"
-          onClick={flag}
+          onClick={realign}
           className="text-[11px] font-semibold px-2.5 py-1.5 rounded-card border"
           style={{
             borderColor: BRAND.cardBorder,
@@ -1846,7 +1871,7 @@ function GoalAlignmentBody({
             background: "#fff",
           }}
         >
-          {isFlagged ? "Un-flag" : "🚩 Flag for discussion"}
+          {isFlagged ? "Clear re-align" : "↩ Re-Align"}
         </button>
         <button
           type="button"
