@@ -99,8 +99,12 @@ export default function SuccessManagementLayout() {
   // -----------------------------------------------------------
   const subTabs: SMSubTab[] = [
     {
+      // 12-Jun bug 248 — Renamed per stakeholder ask: "Section to be
+      // renamed as 'Success Metrics Validation and Alignment'". URL
+      // path stays `/goal-alignment` for back-compat with bookmarks +
+      // existing deep-links from Value Tracking.
       to: "goal-alignment",
-      label: "Goal Validation and Alignment",
+      label: "Success Metrics Validation and Alignment",
       icon: "🎯",
       badge: entryReady ? (goalCount > 0 ? "pg" : "pa") : "pgr",
       locked: !entryReady,

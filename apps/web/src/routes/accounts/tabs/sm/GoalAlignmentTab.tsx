@@ -41,6 +41,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/lib/api";
+import { useNotify, usePrompt } from "@/components/DialogProvider";
 import { useAccountFromLayout } from "../../AccountProfileLayout";
 import {
   CATEGORY_LABELS,
@@ -1416,6 +1417,43 @@ function GoalCard({
   const isFlagged = status === "flagged";
   const prog = progressOf(goal);
 
+  // 12-Jun bug 249 — Stakeholder ask: "Option to edit the goal heading
+  // captured from Solutioning." Inline pencil next to the title opens
+  // a usePrompt() with the current value, then PATCHes the goal title.
+  // Disabled on frozen goals (locked-once-validated invariant).
+  const qc = useQueryClient();
+  const prompt = usePrompt();
+  const notify = useNotify();
+  const accountId = goal.account_id;
+  const renameTitle = useMutation({
+    mutationFn: (next: string) =>
+      api.patch<CSGoal>(`/api/v1/cs-goals/${goal.id}`, { title: next }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cs-goals", accountId] });
+      qc.invalidateQueries({ queryKey: ["cs-goals", accountId, false] });
+      qc.invalidateQueries({ queryKey: ["activity", accountId] });
+      onChanged();
+    },
+    onError: (e: ApiError) =>
+      notify({ title: "Couldn't rename goal", body: e.message, tone: "error" }),
+  });
+  const openTitleEditor = async () => {
+    if (isFrozen) return;
+    const next = await prompt({
+      title: "Edit goal heading",
+      body: "Renames just the title — alignment status + initiatives stay as they were.",
+      initial: goal.title,
+      placeholder: "Goal title",
+      minLength: 3,
+      maxLength: 200,
+      confirmLabel: "Save",
+    });
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === goal.title) return;
+    renameTitle.mutate(trimmed);
+  };
+
   const cardStyle: React.CSSProperties = isFrozen
     ? {
         borderColor: `${BRAND.green}40`,
@@ -1463,12 +1501,32 @@ function GoalCard({
         >
           {CATEGORY_EMOJI[goal.category] ?? "📌"}
         </div>
-        <div>
+        <div className="min-w-0">
           <div
-            className="text-[13px] font-bold leading-snug"
+            className="text-[13px] font-bold leading-snug flex items-center gap-1.5 group"
             style={{ color: BRAND.t1 }}
           >
-            {goal.title}
+            <span className="truncate" title={goal.title}>
+              {goal.title}
+            </span>
+            {/* 12-Jun bug 249 — inline-edit pencil. Hidden on frozen
+                goals (post-validation lock). Stops click propagation so
+                the card doesn't toggle expand when editing. */}
+            {!isFrozen && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openTitleEditor();
+                }}
+                className="opacity-0 group-hover:opacity-100 text-[12px] leading-none px-1 rounded hover:bg-slate-100 transition-opacity"
+                title="Edit goal heading"
+                aria-label="Edit goal heading"
+                disabled={renameTitle.isPending}
+              >
+                ✏️
+              </button>
+            )}
           </div>
           <div className="text-[10.5px]" style={{ color: BRAND.t3 }}>
             {CATEGORY_LABELS[goal.category]}
