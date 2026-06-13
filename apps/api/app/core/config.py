@@ -7,8 +7,17 @@ if a required key is missing — never silent fallbacks for secrets.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 13-Jun TEMPORARY — the in-VPC Bifrost ALB + its x-bf-ak key. Used both
+# as the field default and by the override validator below. REMOVE the
+# whole temporary block once the team sets AI_GATEWAY_URL +
+# AI_GATEWAY_API_KEY in the dev server's environment.
+_TEMP_BIFROST_ALB_URL = (
+    "http://internal-Internal-facing-ALB-bifrost-dev-1209860262.eu-west-1.elb.amazonaws.com:8087/v1"
+)
+_TEMP_BIFROST_KEY = "beroe-bedrock-dev-for-csm"
 
 
 class Settings(BaseSettings):
@@ -50,14 +59,12 @@ class Settings(BaseSettings):
     # explicitly still wins (local dev uses http://localhost:8087/v1 via the
     # tunnel; tests set it empty in conftest). REMOVE once the team sets the
     # gateway URL in the dev server's environment.
-    ai_gateway_url: str | None = (
-        "http://internal-Internal-facing-ALB-bifrost-dev-1209860262.eu-west-1.elb.amazonaws.com:8087/v1"
-    )
+    ai_gateway_url: str | None = _TEMP_BIFROST_ALB_URL
     # 13-Jun TEMPORARY default — Bifrost gateway access key, forwarded as
     # the `x-bf-ak` header (see services/llm.py). Required by the dev ALB;
     # without it the gateway rejects the call. Env still overrides. REMOVE
     # once the team sets AI_GATEWAY_API_KEY in the dev server's environment.
-    ai_gateway_api_key: SecretStr | None = SecretStr("beroe-bedrock-dev-for-csm")  # x-bf-ak
+    ai_gateway_api_key: SecretStr | None = SecretStr(_TEMP_BIFROST_KEY)  # x-bf-ak
     ai_gateway_model: str = "bedrock/eu.anthropic.claude-opus-4-5-20251101-v1:0"
 
     # ---- Redis / Celery ----
@@ -149,6 +156,37 @@ class Settings(BaseSettings):
     # test then hits the configured AI_GATEWAY_URL directly.
     bifrost_host: str = "localhost"
     bifrost_port: int = 8087
+
+    @model_validator(mode="after")
+    def _temp_redirect_dead_localhost_gateway(self) -> "Settings":
+        """13-Jun TEMPORARY — force the in-VPC Bifrost ALB when the env has a
+        stale localhost gateway that can't work here.
+
+        The dev server has AI_GATEWAY_URL=http://localhost:8087/v1 set in its
+        environment (an env var beats the field default), but NO SSM tunnel
+        runs there (bifrost_ssm_target is empty), so localhost:8087 is dead →
+        every AI call falls back to stub.
+
+        Trigger (exactly the dev box's broken state):
+          • ai_gateway_url points at localhost / 127.0.0.1, AND
+          • no bifrost_ssm_target is configured (so no tunnel will be started).
+        In that case ONLY, redirect to the ALB + pin the x-bf-ak key.
+
+        Safe by construction:
+          • Local dev sets bifrost_ssm_target (tunnel runs) → NOT triggered,
+            keeps using localhost:8087.
+          • Tests set AI_GATEWAY_URL="" (falsy, not localhost) → NOT triggered.
+          • Once the team sets AI_GATEWAY_URL to a real (non-localhost) host →
+            NOT triggered, their value wins.
+
+        REMOVE this validator + the _TEMP_* constants once the dev env is set.
+        """
+        url = (self.ai_gateway_url or "").strip()
+        is_localhost = "localhost" in url or "127.0.0.1" in url
+        if is_localhost and not self.bifrost_ssm_target:
+            self.ai_gateway_url = _TEMP_BIFROST_ALB_URL
+            self.ai_gateway_api_key = SecretStr(_TEMP_BIFROST_KEY)
+        return self
 
     @property
     def bifrost_configured(self) -> bool:
