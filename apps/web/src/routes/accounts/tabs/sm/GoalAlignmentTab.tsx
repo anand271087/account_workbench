@@ -1381,19 +1381,28 @@ function StakeholderEditBlock({
       >
         {label}
       </div>
+      {/* 13-Jun — explicit field labels. Previously these inputs only had
+          placeholder text ("Name"/"Email") which vanishes on typing, so
+          users put the email in the Name field. Visible labels prevent it. */}
+      <label className="block text-[9px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: BRAND.t3 }}>
+        Name
+      </label>
       <input
         type="text"
         value={stake.name ?? ""}
         onChange={(e) => set({ ...stake, name: e.target.value })}
-        placeholder="Name"
+        placeholder="e.g. Anand Kumar"
         className="w-full px-2.5 py-1.5 text-[12px] rounded-card border mb-1.5"
         style={{ borderColor: BRAND.cardBorder }}
       />
+      <label className="block text-[9px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: BRAND.t3 }}>
+        Email
+      </label>
       <input
-        type="text"
+        type="email"
         value={stake.email ?? ""}
         onChange={(e) => set({ ...stake, email: e.target.value })}
-        placeholder="Email"
+        placeholder="e.g. anand@company.com"
         className="w-full px-2.5 py-1.5 text-[12px] rounded-card border"
         style={{ borderColor: BRAND.cardBorder }}
       />
