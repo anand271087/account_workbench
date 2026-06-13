@@ -10,7 +10,7 @@ import { api, ApiError } from "@/lib/api";
 import { useFavoriteAccounts } from "@/lib/use-favorites";
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
-import type { AccountDetail } from "@/types/account";
+import type { AccountDetail, ActivityFeedResponse } from "@/types/account";
 import type { Appetite } from "@/types/play";
 import { MODE_CONF } from "@/types/play";
 
@@ -178,16 +178,18 @@ export default function AccountProfileLayout() {
   return (
     <AppShell>
       <div className="bg-white border-b border-beroe-card-border">
-        {/* Breadcrumb */}
-        <div className="px-6 pt-4 pb-1 text-[11px] text-text-muted">
+        {/* Breadcrumb + Last-updated (12-Jun bug 245) */}
+        <div className="px-6 pt-4 pb-1 text-[11px] text-text-muted flex items-center gap-2">
           <button
             onClick={() => navigate("/accounts")}
             className="hover:text-text-secondary"
           >
             Accounts
           </button>
-          <span className="mx-1.5">›</span>
+          <span className="mx-0.5">›</span>
           <span className="text-text-secondary">{data.name}</span>
+          <span className="flex-1" />
+          <LastUpdatedChip accountId={data.id} fallbackIso={data.updated_at} />
         </div>
 
         {/* Compact Account Header — verbatim port of prototype line 2802-2814
@@ -368,6 +370,61 @@ function LogoBox({
       {initials(name)}
     </div>
   );
+}
+
+// 12-Jun bug 245 — "Last updated" chip on every account page. Reads the
+// most recent audit_log entry via the activity feed (page_size=1) and
+// falls back to accounts.updated_at when the feed is empty. Rendered in
+// the breadcrumb row of this layout, so EVERY sub-tab inherits it with
+// zero per-tab wiring.
+function LastUpdatedChip({
+  accountId,
+  fallbackIso,
+}: {
+  accountId: string;
+  fallbackIso: string | null;
+}) {
+  const q = useQuery<ActivityFeedResponse>({
+    queryKey: ["activity", accountId, "latest"],
+    queryFn: () =>
+      api.get<ActivityFeedResponse>(
+        `/api/v1/accounts/${accountId}/activity?page=1&page_size=1`,
+      ),
+    staleTime: 30_000,
+  });
+  const top = q.data?.items?.[0];
+  const iso = top?.changed_at ?? fallbackIso;
+  if (!iso) return null;
+  const what = top?.field_name
+    ? top.field_name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
+    : null;
+  const who = top?.changed_by_full_name ?? null;
+  return (
+    <span
+      className="text-[10.5px] text-text-muted whitespace-nowrap truncate max-w-[420px]"
+      title={new Date(iso).toLocaleString()}
+    >
+      Last updated {relTime(iso)}
+      {what && (
+        <>
+          {" "}· <b className="font-semibold text-text-secondary">{what}</b>
+        </>
+      )}
+      {who && <> by {who}</>}
+    </span>
+  );
+}
+
+function relTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 // M33 — Period selector. Pill group exactly matching the prototype's
