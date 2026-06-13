@@ -2804,6 +2804,11 @@ function _initialDraft(row: InitiativeRow | null): Initiative {
   return row ? { ...row.init } : _newInitiative("");
 }
 
+// 12-Jun bug 254 — Stakeholder ask: "Instead of picking the goal, the
+// user should create the play and goal selection to be made as dropdown
+// option." Modal flattened from 2-step (pick-goal → fields) to a single
+// screen with fields up top + a goal dropdown above Save. No goals on
+// the account → amber empty-state with shortcut to Goal Alignment.
 function AddInitiativeFromPlaysModal({
   accountId,
   goals,
@@ -2817,7 +2822,6 @@ function AddInitiativeFromPlaysModal({
 }) {
   const navigate = useNavigate();
   const notify = useNotify();
-  const [step, setStep] = useState<1 | 2>(1);
   const [pickedGoalId, setPickedGoalId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Initiative>(_newInitiative(""));
   const [saving, setSaving] = useState(false);
@@ -2825,7 +2829,10 @@ function AddInitiativeFromPlaysModal({
   const pickedGoal = goals.find((g) => g.id === pickedGoalId) ?? null;
 
   async function onSave() {
-    if (!pickedGoal) return;
+    if (!pickedGoal) {
+      notify({ title: "Pick a goal first", tone: "warning" });
+      return;
+    }
     if (!draft.name.trim()) {
       notify({ title: "Title is required", tone: "warning" });
       return;
@@ -2850,117 +2857,76 @@ function AddInitiativeFromPlaysModal({
     }
   }
 
+  if (goals.length === 0) {
+    return (
+      <ModalShell onClose={onClose} title="Add play">
+        <div
+          className="px-3 py-4 rounded-md text-[11.5px] italic"
+          style={{ background: "#fef3c7", color: "#854F0B" }}
+        >
+          This account has no goals yet. Create one in <b>Goal Alignment</b>{" "}
+          first, then come back here.
+          <div className="mt-2">
+            <button
+              onClick={() => {
+                onClose();
+                navigate(`/accounts/${accountId}/success-management/goal-alignment`);
+              }}
+              className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-blue bg-beroe-blue text-white font-semibold"
+            >
+              Go to Goal Alignment →
+            </button>
+          </div>
+        </div>
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={onClose}
+            className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
+          >
+            Cancel
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
+
   return (
-    <ModalShell onClose={onClose} title={step === 1 ? "Pick a goal" : "Add play"}>
-      {step === 1 ? (
-        <div>
-          <div className="text-[11.5px] text-text-muted mb-3">
-            Which success metric does this play live under? Every play is an
-            initiative on a goal.
-          </div>
-          {goals.length === 0 ? (
-            <div
-              className="px-3 py-4 rounded-md text-[11.5px] italic"
-              style={{ background: "#fef3c7", color: "#854F0B" }}
-            >
-              This account has no goals yet. Create one in{" "}
-              <b>Goal Alignment</b> first, then come back here.
-              <div className="mt-2">
-                <button
-                  onClick={() => {
-                    onClose();
-                    navigate(`/accounts/${accountId}/success-management/goal-alignment`);
-                  }}
-                  className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-blue bg-beroe-blue text-white font-semibold"
-                >
-                  Go to Goal Alignment →
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[340px] overflow-y-auto">
-              {goals.map((g) => {
-                const selected = g.id === pickedGoalId;
-                return (
-                  <label
-                    key={g.id}
-                    className="block cursor-pointer rounded-md border p-3 transition-colors"
-                    style={{
-                      borderColor: selected ? "#4A00F8" : "#e4eaf6",
-                      background: selected ? "#f5f3ff" : "#fff",
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        checked={selected}
-                        onChange={() => setPickedGoalId(g.id)}
-                        className="flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-bold text-text-primary">
-                          {g.title}
-                        </div>
-                        <div className="text-[10.5px] text-text-muted mt-0.5">
-                          Category: <b>{g.category}</b>
-                          {g.target_value && <> · Target: <b>{g.target_value}</b></>}
-                          {g.target_date && <> · Due: <b>{g.target_date}</b></>}
-                          <> · {g.initiatives?.length ?? 0} existing initiative{(g.initiatives?.length ?? 0) === 1 ? "" : "s"}</>
-                        </div>
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-          <div className="flex justify-end gap-2 mt-4">
-            <button
-              onClick={onClose}
-              className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => setStep(2)}
-              disabled={!pickedGoalId || goals.length === 0}
-              className="text-[12px] px-4 py-1.5 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
-            >
-              Next →
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <div className="text-[10.5px] text-text-muted mb-3">
-            Adding to: <b className="text-text-primary">{pickedGoal?.title}</b>
-          </div>
-          <InitiativeFormFields draft={draft} setDraft={setDraft} />
-          <div className="flex justify-between gap-2 mt-4">
-            <button
-              onClick={() => setStep(1)}
-              className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
-            >
-              ← Back
-            </button>
-            <div className="flex gap-2">
-              <button
-                onClick={onClose}
-                className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={onSave}
-                disabled={saving || !draft.name.trim()}
-                className="text-[12px] px-4 py-1.5 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save play"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <ModalShell onClose={onClose} title="Add play">
+      <InitiativeFormFields draft={draft} setDraft={setDraft} />
+
+      {/* Goal selector — flat dropdown at the bottom of the form, the
+          last thing the user picks before Save. */}
+      <ModalField label="Goal *">
+        <select
+          value={pickedGoalId ?? ""}
+          onChange={(e) => setPickedGoalId(e.target.value || null)}
+          className="w-full px-3 py-1.5 rounded-md border border-beroe-card-border text-[12.5px] bg-white"
+        >
+          <option value="">— Select a goal —</option>
+          {goals.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.title}
+              {g.target_value ? ` · target ${g.target_value}` : ""}
+            </option>
+          ))}
+        </select>
+      </ModalField>
+
+      <div className="flex justify-end gap-2 mt-4">
+        <button
+          onClick={onClose}
+          className="text-[12px] px-3 py-1.5 rounded-md border border-beroe-card-border bg-white font-semibold"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          disabled={saving || !draft.name.trim() || !pickedGoalId}
+          className="text-[12px] px-4 py-1.5 rounded-md bg-beroe-blue text-white font-semibold disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save play"}
+        </button>
+      </div>
     </ModalShell>
   );
 }
