@@ -4,7 +4,7 @@
 // (Solutioning) added in migration 0078.
 export type DocKind =
   | "mom" | "vpd" | "recording" | "transcript" | "email" | "other" | "contract"
-  | "l1_call" | "l2_call" | "trial_summary";
+  | "l1_call" | "l2_call" | "trial_summary" | "initiative_doc";
 export type AiStatus = "pending" | "processing" | "complete" | "failed";
 
 export interface ExtractedEntities {
@@ -91,6 +91,7 @@ export const DOC_KIND_LABELS: Record<DocKind, string> = {
   l1_call: "L1 Call Notes",
   l2_call: "L2 Call Notes",
   trial_summary: "Trial Summary",
+  initiative_doc: "Initiative Document",
 };
 
 export const AI_STATUS_LABELS: Record<AiStatus, string> = {
