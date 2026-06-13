@@ -11,8 +11,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
+# 13-Jun bug fix — the SQLAlchemy ENUM validates the Python value against
+# THIS list before the DB round-trip (LookupError otherwise). Migration
+# 0078 added l1_call / l2_call / trial_summary to the DB enum + the Pydantic
+# DocKind Literal, but this ORM definition was missed → uploads of the new
+# kinds 500'd with "not among the defined enum values". Keep in lockstep
+# with schemas/document.py::DocKind and the DB doc_kind enum.
 DocKind = ENUM(
     "mom", "vpd", "recording", "transcript", "email", "other", "contract",
+    "l1_call", "l2_call", "trial_summary",
     name="doc_kind", create_type=False,
 )
 AiStatus = ENUM("pending", "processing", "complete", "failed", name="ai_status", create_type=False)
