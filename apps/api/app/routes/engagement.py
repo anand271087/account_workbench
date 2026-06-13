@@ -160,3 +160,62 @@ async def quality_check(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Text cannot be empty")
     ai_quota.consume(user.id, label="quality_check")
     return quality_check_engagement_objective(body.text)
+
+
+@ai_router.get("/health")
+async def ai_health(user: CurrentUser) -> dict:
+    """Diagnostic — is the LLM backend (Bifrost gateway) actually reachable?
+
+    13-Jun: the dev server was returning is_stub=true on every AI call.
+    The only signal callers had was the is_stub flag, with no "why". This
+    endpoint surfaces the actual config + a live round-trip so the gateway
+    can be verified FROM the running server (the Bifrost ALB is VPC-internal
+    and not reachable from a laptop). Admin-only; does one tiny completion.
+
+    Returns:
+      configured        — does is_configured() see a backend?
+      backend           — "bifrost:<model>" / "anthropic:<model>" / "stub"
+      gateway_url        — the configured AI_GATEWAY_URL (so you can confirm
+                           it points at the internal ALB)
+      live_call_ok       — did a real 1-token completion succeed?
+      live_call_error    — the exception type + message if it failed
+      sample             — first 80 chars of the live response (proof it's real)
+    """
+    from app.core.rbac import is_global_admin
+
+    if not is_global_admin(user.role):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+
+    from app.core.config import get_settings
+    from app.services import llm
+
+    settings = get_settings()
+    result: dict = {
+        "configured": llm.is_configured(),
+        "backend": llm.backend_label(),
+        "gateway_url": settings.ai_gateway_url,
+        "gateway_model": settings.ai_gateway_model,
+        "bifrost_ssm_target": settings.bifrost_ssm_target,
+        "live_call_ok": False,
+        "live_call_error": None,
+        "sample": None,
+    }
+    if not llm.is_configured():
+        result["live_call_error"] = "No backend configured (AI_GATEWAY_URL + ANTHROPIC_API_KEY both unset)"
+        return result
+    try:
+        import asyncio
+
+        text = await asyncio.to_thread(
+            llm.chat_text,
+            system="You are a health probe. Reply with exactly: OK",
+            user_content="ping",
+            max_tokens=8,
+            temperature=0.0,
+            timeout=20.0,
+        )
+        result["live_call_ok"] = bool(text and text.strip())
+        result["sample"] = (text or "")[:80]
+    except Exception as e:  # noqa: BLE001 — surface the real failure
+        result["live_call_error"] = f"{type(e).__name__}: {str(e)[:300]}"
+    return result
