@@ -30,6 +30,8 @@ import {
   type TrialPaymentType,
 } from "@/types/solutioning";
 import type { ExtractedVpd } from "@/types/vpd_extraction";
+import type { MetricListResponse } from "@/types/metric";
+import { Link } from "react-router-dom";
 
 // 03-Jun bug — Engagement Shape (Engagement Type + Duration) removed in
 // favour of the richer Trial Summary section below.
@@ -312,16 +314,27 @@ export default function SolutioningTab() {
             tested, outcome, and overall feedback. */}
         <TrialSummarySection form={form} setForm={setForm} />
 
+        {/* 12-Jun bug 237 — Proposed Solution rendered as bullets. Same
+            mono + pre-wrap styling as the Value Definition box below so
+            "- bullet" lines align cleanly and stay readable. Claude's VPD
+            extract prompt already returns this field as a bullet list;
+            the textarea now visually honours that. */}
         <Section
           title="Proposed solution"
-          subtitle="What Beroe will deliver — bespoke summary auto-extracted from the latest VPD upload."
+          subtitle="Bullets — what Beroe will deliver. AI-extracted from the latest VPD; refine each bullet on its own line (- or •)."
         >
           <textarea
-            rows={4}
+            rows={6}
             value={form.proposed_solution ?? ""}
+            placeholder={"- Bullet 1 — what we'll deliver\n- Bullet 2\n- Bullet 3"}
             onChange={(e) => setForm({ ...form, proposed_solution: e.target.value })}
             disabled={!form.is_editable}
-            className={inputCls(form.is_editable)}
+            className={cn(
+              "w-full text-[13px] leading-relaxed rounded-md px-3 py-2 border focus:outline-none font-mono whitespace-pre-wrap",
+              form.is_editable
+                ? "bg-white border-beroe-card-border focus:border-beroe-blue"
+                : "bg-beroe-bg text-text-secondary border-beroe-card-border cursor-not-allowed",
+            )}
           />
         </Section>
 
@@ -355,7 +368,9 @@ export default function SolutioningTab() {
             <textarea
               rows={6}
               value={form.value_definition ?? ""}
-              placeholder="Auto-extracted from the latest VPD upload — review and refine."
+              placeholder={
+                "- Bullet 1 — how the value is measured\n- Bullet 2\n- Bullet 3"
+              }
               onChange={(e) =>
                 setForm({ ...form, value_definition: e.target.value })
               }
@@ -372,6 +387,13 @@ export default function SolutioningTab() {
             />
           </div>
         </div>
+
+        {/* 12-Jun bug 238 — Extracted Success Metrics rendered AFTER
+            Value Definition (stakeholder ask). Read-only roster — the
+            CSM edits values in Success Management → Value Tracking;
+            this block surfaces what's in scope so the Solutioning view
+            tells the full picture. */}
+        <ExtractedMetricsBlock accountId={account.id} />
 
         <Section title="Value themes" subtitle="Short tags — what kinds of value the engagement will deliver.">
           <div className="flex flex-wrap gap-1 mb-2">
@@ -934,6 +956,93 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
       </div>
       {children}
     </div>
+  );
+}
+
+// 12-Jun bug 238 — Stakeholder asked for the Success Metrics extracted
+// from the VPD to surface AFTER Value Definition on the Solutioning tab.
+// Read-only roster — edits stay in Success Management → Value Tracking;
+// this block tells the reader what's in scope without leaving the page.
+// Empty / loading / error states all render quietly (no console noise).
+function ExtractedMetricsBlock({ accountId }: { accountId: string }) {
+  const q = useQuery<MetricListResponse>({
+    queryKey: ["metrics", accountId],
+    queryFn: () => api.get<MetricListResponse>(`/api/v1/accounts/${accountId}/metrics`),
+  });
+
+  const items = q.data?.items ?? [];
+
+  return (
+    <Section
+      title="Success Metrics"
+      subtitle="Read-only — extracted from the latest VPD upload. Edit in Success Management → Value Tracking."
+    >
+      {q.isLoading ? (
+        <div className="text-[12px] text-text-muted italic">Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="text-[12px] text-text-muted italic">
+          No Success Metrics yet. Upload a VPD above and review the candidate
+          metrics, or add them manually in{" "}
+          <Link
+            to={`/accounts/${accountId}/success-management/value-tracking`}
+            className="text-beroe-blue hover:underline font-semibold"
+          >
+            Value Tracking
+          </Link>
+          .
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            {items.map((m) => {
+              const tone =
+                m.status === "green"
+                  ? { bg: "bg-beroe-green/15", text: "text-beroe-green", dot: "#40CC8F" }
+                  : m.status === "amber"
+                    ? { bg: "bg-beroe-amber/15", text: "text-beroe-amber", dot: "#EF9637" }
+                    : m.status === "red"
+                      ? { bg: "bg-beroe-red/10", text: "text-beroe-red", dot: "#FD576B" }
+                      : { bg: "bg-beroe-bg", text: "text-text-muted", dot: "#94a3b8" };
+              return (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-2 text-[12px] px-2.5 py-1.5 rounded-md border border-beroe-card-border bg-white"
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: tone.dot }}
+                  />
+                  <span className="font-semibold flex-1 truncate" title={m.name}>
+                    {m.name}
+                  </span>
+                  <span className="text-text-muted text-[11px] truncate" title={m.target_value ?? undefined}>
+                    {m.metric_type === "qualitative" ? "Qualitative" : "Target"}
+                    {m.target_value ? ` · ${m.target_value}` : ""}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                      tone.bg,
+                      tone.text,
+                    )}
+                  >
+                    {m.status}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2">
+            <Link
+              to={`/accounts/${accountId}/success-management/value-tracking`}
+              className="text-[11px] text-beroe-blue hover:underline font-semibold"
+            >
+              Edit in Value Tracking →
+            </Link>
+          </div>
+        </>
+      )}
+    </Section>
   );
 }
 
