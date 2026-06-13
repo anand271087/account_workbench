@@ -36,6 +36,12 @@ _load_env()
 # Tests should be fast, free, and not flaky on Anthropic availability.
 # (The real Claude path is exercised by manual end-to-end runs.)
 os.environ["ANTHROPIC_API_KEY"] = "sk-ant-stub-test-key"
+# 13-Jun — config.py now defaults ai_gateway_url to the in-VPC Bifrost ALB
+# (temporary, see config). Tests must NOT inherit that or every AI call
+# would hang trying to reach a VPC-internal address from CI. Empty string
+# = treated as unset, so the stub path is used. Remove alongside the
+# config default once the team sets the gateway URL on the server.
+os.environ["AI_GATEWAY_URL"] = ""
 
 
 # ---------- App + client ----------
