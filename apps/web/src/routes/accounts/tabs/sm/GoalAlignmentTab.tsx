@@ -32,7 +32,7 @@
 //   • Stakeholders → M14 cs_stakeholders (champion=SPOC, commercial=Budget Owner)
 //   • Power users  → client_contacts filtered to seniority ∈ {cxo,vp,director}
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 // 10-Jun · Deep-link support — Value Tracking's "✏️ Edit" sends users
 // here with ?goal=<id>&init=<initId>. We read those params, auto-expand
@@ -422,6 +422,18 @@ interface ProtoInit {
   completionPct: number | null;
   targetText: string;
   deliveredText: string;
+  // 12-Jun bug 250 — evidence/supporting docs attached to this initiative.
+  // Stored in value_fields.attachments so they survive the JSONB round-trip.
+  attachments: InitiativeAttachment[];
+}
+
+// 12-Jun bug 250 — lightweight pointer to a doc uploaded via the regular
+// /documents pipeline (kind=initiative_doc). File lives in Storage + the
+// documents table; the initiative just keeps the reference.
+interface InitiativeAttachment {
+  document_id: string;
+  filename: string;
+  uploaded_at: string;
 }
 function parseUsdNum(s: string | null | undefined): number {
   if (!s) return 0;
@@ -465,6 +477,10 @@ function readInit(it: Initiative, idx: number): ProtoInit {
       typeof it.completion_pct === "number" ? it.completion_pct : null,
     targetText,
     deliveredText,
+    // 12-Jun bug 250 — read attachments from value_fields (default []).
+    attachments: Array.isArray(vf.attachments)
+      ? (vf.attachments as InitiativeAttachment[])
+      : [],
   };
 }
 function writeInit(p: ProtoInit): Initiative {
@@ -500,6 +516,8 @@ function writeInit(p: ProtoInit): Initiative {
       updatedAt: p.updatedAt,
       evidenceConfirmed: p.evidenceConfirmed,
       evidenceUrl: p.evidenceUrl,
+      // 12-Jun bug 250 — persist attachments through the JSONB round-trip.
+      attachments: p.attachments ?? [],
     },
     client_data: [],
     value_history: [],
@@ -3062,6 +3080,7 @@ function InitiativeRow({
       <InitiativeEditRow
         init={init}
         cat={cat}
+        accountId={accountId}
         onClose={() => setEditing(false)}
         onSave={(next) => {
           onSave(next);
@@ -3528,6 +3547,7 @@ function TouchpointModal({
 function InitiativeEditRow({
   init,
   cat: _cat,
+  accountId,
   onClose,
   onSave,
 }: {
@@ -3536,13 +3556,77 @@ function InitiativeEditRow({
   // pipeline replaced the category-aware list). Kept on the signature
   // so existing callers don't break.
   cat: CSGoalCategory;
+  // 12-Jun bug 250 — needed to upload initiative evidence docs.
+  accountId: string;
   onClose: () => void;
   onSave: (next: ProtoInit) => void;
 }) {
   const [draft, setDraft] = useState<ProtoInit>(init);
+  const notify = useNotify();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   function commit<K extends keyof ProtoInit>(k: K, v: ProtoInit[K]) {
     setDraft({ ...draft, [k]: v });
+  }
+
+  // 12-Jun bug 250 — upload an evidence file via the regular documents
+  // pipeline (kind=initiative_doc), then keep a {document_id, filename}
+  // pointer on the draft. Parent saves the goal, persisting it in the
+  // initiative's value_fields.attachments.
+  async function onAttach(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("kind", "initiative_doc");
+      fd.append("file", file);
+      const res = await api.postForm<{ document?: { id: string }; id?: string }>(
+        `/api/v1/accounts/${accountId}/documents`,
+        fd,
+      );
+      const docId = res.document?.id ?? res.id;
+      if (!docId) throw new Error("Upload did not return a document id");
+      setDraft((d) => ({
+        ...d,
+        attachments: [
+          ...(d.attachments ?? []),
+          {
+            document_id: docId,
+            filename: file.name,
+            uploaded_at: new Date().toISOString(),
+          },
+        ],
+      }));
+      notify({
+        title: "Attached",
+        body: `${file.name} — remember to click Done to save.`,
+        tone: "success",
+      });
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Upload failed";
+      notify({ title: "Attach failed", body: msg, tone: "error" });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  function removeAttachment(docId: string) {
+    setDraft((d) => ({
+      ...d,
+      attachments: (d.attachments ?? []).filter((a) => a.document_id !== docId),
+    }));
+  }
+
+  async function openAttachment(docId: string) {
+    try {
+      const r = await api.get<{ url: string }>(
+        `/api/v1/documents/${docId}/download-url`,
+      );
+      if (r.url) window.open(r.url, "_blank", "noopener");
+    } catch {
+      notify({ title: "Couldn't open document", tone: "error" });
+    }
   }
 
   return (
@@ -3681,6 +3765,69 @@ function InitiativeEditRow({
           Cancel
         </button>
       </div>
+
+      {/* 12-Jun bug 250 — Documents attached to this initiative. Upload via
+          the regular documents pipeline (kind=initiative_doc); the pointer
+          persists in value_fields.attachments on Done. */}
+      <div className="mt-2 pt-2 border-t" style={{ borderColor: BRAND.cardBorder }}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: BRAND.t3 }}>
+            Documents
+          </span>
+          <input
+            ref={fileRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onAttach(f);
+            }}
+          />
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileRef.current?.click()}
+            className="text-[10.5px] font-semibold px-2 py-1 rounded-card border disabled:opacity-50"
+            style={{ borderColor: BRAND.indigo + "40", background: "#f3f0ff", color: BRAND.indigo }}
+          >
+            {uploading ? "Uploading…" : "📎 Attach document"}
+          </button>
+        </div>
+        {(draft.attachments ?? []).length === 0 ? (
+          <div className="text-[10.5px]" style={{ color: BRAND.t3 }}>
+            No documents attached yet.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {(draft.attachments ?? []).map((a) => (
+              <div
+                key={a.document_id}
+                className="flex items-center gap-2 text-[11px] px-2 py-1 rounded-card border bg-white"
+                style={{ borderColor: BRAND.cardBorder }}
+              >
+                <button
+                  type="button"
+                  onClick={() => void openAttachment(a.document_id)}
+                  className="flex-1 text-left truncate font-semibold"
+                  style={{ color: BRAND.indigo }}
+                  title={a.filename}
+                >
+                  📄 {a.filename}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(a.document_id)}
+                  className="text-[10px] px-1.5 py-0.5 rounded border"
+                  style={{ borderColor: BRAND.cardBorder, color: BRAND.t3 }}
+                  title="Remove (click Done to save)"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -3714,6 +3861,7 @@ function AddInitiativeForm({
     completionPct: null,
     targetText: "",
     deliveredText: "",
+    attachments: [],
   });
   const [draft, setDraft] = useState<ProtoInit>(blankDraft);
 

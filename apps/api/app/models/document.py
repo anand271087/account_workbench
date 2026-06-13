@@ -20,6 +20,8 @@ from app.db.base import Base
 DocKind = ENUM(
     "mom", "vpd", "recording", "transcript", "email", "other", "contract",
     "l1_call", "l2_call", "trial_summary",
+    # 13-Jun bug 250 — evidence files attached to a goal initiative (0080).
+    "initiative_doc",
     name="doc_kind", create_type=False,
 )
 AiStatus = ENUM("pending", "processing", "complete", "failed", name="ai_status", create_type=False)

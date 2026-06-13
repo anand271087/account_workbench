@@ -33,6 +33,8 @@ _BUCKET_FOR_KIND: dict[str, str] = {
     "l1_call": "meeting_records",
     "l2_call": "meeting_records",
     "trial_summary": "vpd",
+    # 13-Jun bug 250 — initiative evidence rides the meeting-records bucket.
+    "initiative_doc": "meeting_records",
 }
 
 
