@@ -293,7 +293,7 @@ export default function HomeTab() {
             </p>
             <div className="mt-1.5">
               <Link
-                to={`/accounts/${aid}/success-management/checkpoints`}
+                to={`/accounts/${aid}/success-management/business-review`}
                 className="text-[11px] text-beroe-amber font-bold hover:underline"
               >
                 Review Checkpoints →
@@ -332,7 +332,7 @@ export default function HomeTab() {
               </p>
               <div className="mt-1.5">
                 <Link
-                  to={`/accounts/${aid}/success-management/checkpoints`}
+                  to={`/accounts/${aid}/success-management/business-review`}
                   className="text-[11px] text-beroe-blue font-bold hover:underline"
                 >
                   Capture sign-off →
@@ -729,7 +729,7 @@ export default function HomeTab() {
               <b className="text-beroe-amber">{overdueCp}</b> overdue
               checkpoint{overdueCp === 1 ? "" : "s"} — fix in{" "}
               <Link
-                to={`/accounts/${aid}/success-management/checkpoints`}
+                to={`/accounts/${aid}/success-management/business-review`}
                 className="text-beroe-blue hover:underline font-semibold"
               >
                 Checkpoints →
@@ -806,7 +806,7 @@ function computePriorities(args: {
       key: "cp_overdue",
       text: `${overdue.type} overdue by ${days}d — schedule or escalate`,
       cta: "Fix checkpoint",
-      to: "success-management/checkpoints",
+      to: "success-management/business-review",
       col: "#CF4548",
     });
   }
@@ -817,7 +817,7 @@ function computePriorities(args: {
       key: "cp_signoff",
       text: `${held.type} held but not signed off — get client confirmation`,
       cta: "Complete sign-off",
-      to: "success-management/checkpoints",
+      to: "success-management/business-review",
       col: "#F0BC41",
     });
   }
@@ -852,7 +852,10 @@ function computePriorities(args: {
       key: "no_cps",
       text: "No checkpoints scheduled — set up the cadence",
       cta: "Schedule checkpoints",
-      to: "success-management/checkpoints",
+      // 14-Jun fix — Checkpoints were folded into the Business Review tab;
+      // the old /success-management/business-review route doesn't exist, so the
+      // CTA fell through and landed back on Home.
+      to: "success-management/business-review",
       col: "#F0BC41",
     });
   }
@@ -1511,8 +1514,6 @@ function AcvHealthPulseRow({
     ? parseFloat(apptQ.data.breakdown.projected_acv_usd) - current
     : 0);
   const pipeline = plays > 0 ? plays : 0;
-  const hs = account.health_score ?? 0;
-  const healthCol = hs >= 70 ? "#6EC457" : hs >= 40 ? "#F0BC41" : "#CF4548";
   const productPct = Math.min(
     100,
     Math.round(
@@ -1522,6 +1523,15 @@ function AcvHealthPulseRow({
   // Inverse-scaled signal score for the Health card breakdown.
   const sigPts = apptQ.data?.breakdown?.sig_pts ?? 15;
   const signalsScore = Math.round((sigPts / 25) * 100);
+  // 14-Jun — health_score is a stored column that was never computed and
+  // is empty on imported accounts (showed "—"/0). When it's unset, derive
+  // the headline from the two components shown beneath it — the 50/50
+  // Product + Signals blend the labels already promise — so the circle is
+  // self-consistent with its breakdown. A real stored value still wins.
+  const storedHs = account.health_score ?? 0;
+  const computedHs = Math.round(0.5 * productPct + 0.5 * signalsScore);
+  const hs = storedHs > 0 ? storedHs : computedHs;
+  const healthCol = hs >= 70 ? "#6EC457" : hs >= 40 ? "#F0BC41" : "#CF4548";
   const dtr = account.days_to_renewal;
 
   return (
