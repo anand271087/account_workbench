@@ -49,6 +49,19 @@ lookup_geographies = Table(
     Column("region", String, nullable=False),
 )
 
+# 14-Jun PERF — categories + geographies are tiny, near-static lookups but
+# they're fetched on every page that renders the account-list filters and
+# the Pre-Sales form (~1.8s per call on the cross-region DB). Cache the
+# read results in-process for 60s; writes (propose/approve/reject) clear
+# the category cache so new/approved entries appear immediately.
+import time as _time
+_LOOKUP_TTL = 60.0
+_cat_cache: dict[bool, tuple[float, list]] = {}
+_geo_cache: list[tuple[float, list]] = []  # 1-slot holder ([] or [(ts, data)])
+
+def _clear_category_cache() -> None:
+    _cat_cache.clear()
+
 
 @router.get("/categories", response_model=list[CategoryOut])
 async def list_categories(
@@ -56,11 +69,17 @@ async def list_categories(
     db: Annotated[AsyncSession, Depends(get_db)],
     include_pending: bool = True,
 ) -> list[CategoryOut]:
+    now = _time.time()
+    cached = _cat_cache.get(include_pending)
+    if cached and now - cached[0] < _LOOKUP_TTL:
+        return cached[1]
     stmt = select(lookup_categories).order_by(lookup_categories.c.name.asc())
     if not include_pending:
         stmt = stmt.where(lookup_categories.c.approved.is_(True))
     rows = (await db.execute(stmt)).mappings().all()
-    return [CategoryOut.model_validate(dict(r)) for r in rows]
+    result = [CategoryOut.model_validate(dict(r)) for r in rows]
+    _cat_cache[include_pending] = (now, result)
+    return result
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
@@ -92,6 +111,7 @@ async def propose_category(
         )
     ).mappings().one()
     await db.commit()
+    _clear_category_cache()
     return CategoryOut.model_validate(dict(new_row))
 
 
@@ -115,6 +135,7 @@ async def approve_category(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Category not found")
     await db.commit()
+    _clear_category_cache()
     return CategoryOut.model_validate(dict(row))
 
 
@@ -172,6 +193,7 @@ async def reject_category(
         lookup_categories.delete().where(lookup_categories.c.id == category_id)
     )
     await db.commit()
+    _clear_category_cache()
 
 
 @router.get("/geographies", response_model=list[GeographyOut])
@@ -179,12 +201,18 @@ async def list_geographies(
     _user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[GeographyOut]:
+    now = _time.time()
+    if _geo_cache and now - _geo_cache[0][0] < _LOOKUP_TTL:
+        return _geo_cache[0][1]
     rows = (
         await db.execute(
             select(lookup_geographies).order_by(lookup_geographies.c.name.asc())
         )
     ).mappings().all()
-    return [GeographyOut.model_validate(dict(r)) for r in rows]
+    result = [GeographyOut.model_validate(dict(r)) for r in rows]
+    _geo_cache.clear()
+    _geo_cache.append((now, result))
+    return result
 
 
 # Tiny SQLA shim: lower(name) for case-insensitive uniqueness check
