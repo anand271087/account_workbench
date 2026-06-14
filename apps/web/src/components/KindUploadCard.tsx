@@ -810,13 +810,30 @@ function DocumentRow({
 }
 
 function StatusPill({ status }: { status: AiStatus }) {
+  // 14-Jun — "Queued" (pending) had NO animation, so it looked frozen and
+  // users thought nothing was happening until it jumped to Ready. Both
+  // in-progress states (pending + processing) now pulse AND carry a
+  // pulsing dot, so it's obviously "working".
+  const inProgress = status === "pending" || status === "processing";
   const tone =
     status === "complete" ? "bg-beroe-green/20 text-beroe-green"
       : status === "failed" ? "bg-beroe-red/15 text-beroe-red"
-        : status === "processing" ? "bg-beroe-blue/15 text-beroe-blue animate-pulse"
-          : "bg-beroe-amber/20 text-beroe-amber";
+        : status === "processing" ? "bg-beroe-blue/20 text-beroe-blue"
+          : "bg-beroe-amber/25 text-beroe-amber";
   return (
-    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full", tone)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+        tone,
+        inProgress && "animate-pulse",
+      )}
+    >
+      {inProgress && (
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-current opacity-75 animate-ping" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+        </span>
+      )}
       {AI_STATUS_LABELS[status]}
     </span>
   );
