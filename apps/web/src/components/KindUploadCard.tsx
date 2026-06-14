@@ -82,6 +82,34 @@ export function KindUploadCard({
   const [dragOver, setDragOver] = useState(false);
   const [extractionToast, setExtractionToast] = useState<string | null>(null);
 
+  // 14-Jun — a document is "live" (status still changing) while the worker
+  // is summarising OR still writing its structured-extraction commits, so
+  // the status pill should keep refreshing until it settles. VPD writes
+  // TWO commits (vpd_extracted_at, then cs_goals_extracted_at), so we wait
+  // for both. Window-bounded so a permanently-stuck doc doesn't poll forever.
+  const EXTRACTION_WINDOW_MS = 180_000;
+  const isDocLive = (d: Document): boolean => {
+    if (d.deleted_at) return false;
+    if (d.ai_status === "pending" || d.ai_status === "processing") return true;
+    const recent =
+      Date.now() - new Date(d.uploaded_at).getTime() < EXTRACTION_WINDOW_MS;
+    if (
+      (kind === "mom" || kind === "l1_call" || kind === "l2_call") &&
+      d.ai_status === "complete" &&
+      !d.mom_extracted_at &&
+      recent
+    )
+      return true;
+    if (
+      kind === "vpd" &&
+      d.ai_status === "complete" &&
+      (!d.vpd_extracted_at || !d.cs_goals_extracted_at) &&
+      recent
+    )
+      return true;
+    return false;
+  };
+
   const queryKey = ["documents", accountId, kind];
   const { data, isLoading } = useQuery<DocumentListResponse>({
     queryKey,
@@ -89,52 +117,21 @@ export function KindUploadCard({
       api.get<DocumentListResponse>(
         `/api/v1/accounts/${accountId}/documents?kind=${kind}`,
       ),
+    // 14-Jun fix — was a manual setInterval + invalidateQueries which
+    // didn't reliably refetch (the pill stuck on "Queued" until a manual
+    // refresh). React Query's native refetchInterval is the robust path:
+    // poll every 1.5s while any doc is still processing/extracting, then
+    // stop. refetchIntervalInBackground keeps it ticking even if the tab
+    // loses focus mid-upload.
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      return items.some(isDocLive) ? 1500 : false;
+    },
+    refetchIntervalInBackground: true,
   });
 
-  // Auto-refetch when anything's processing — even if we didn't kick it off
-  // in this session (cross-tab pickups also flip pills here). We also keep
-  // polling for ~3 min after AI summary completes on an MoM/VPD until the
-  // worker writes every structured-extraction result, so the "Extracting
-  // fields…" chip eventually flips to "Fields populated" without a manual
-  // refresh.
-  //
-  // For VPD specifically the worker writes TWO commits sequentially:
-  //   1) vpd_extracted_at      → Solutioning candidate fields
-  //   2) cs_goals_extracted_at → candidate Goals (M15.1)
-  // We MUST keep polling until BOTH are set; otherwise the "Review N
-  // candidate goals" CTA never appears (bug: new accounts where the
-  // second commit lands after the first 1.5s refetch).
-  const EXTRACTION_WINDOW_MS = 180_000;
-  const liveCount =
-    data?.items.filter((d) => {
-      if (d.deleted_at) return false;
-      if (d.ai_status === "pending" || d.ai_status === "processing") return true;
-      const recent = Date.now() - new Date(d.uploaded_at).getTime() < EXTRACTION_WINDOW_MS;
-      // 12-Jun bug 232 — l1_call / l2_call run the same mom-extraction
-      // pass in the worker, so they share the polling window.
-      if (
-        (kind === "mom" || kind === "l1_call" || kind === "l2_call") &&
-        d.ai_status === "complete" &&
-        !d.mom_extracted_at &&
-        recent
-      )
-        return true;
-      if (
-        kind === "vpd" &&
-        d.ai_status === "complete" &&
-        (!d.vpd_extracted_at || !d.cs_goals_extracted_at) &&
-        recent
-      )
-        return true;
-      return false;
-    }).length ?? 0;
-
-  useEffect(() => {
-    if (liveCount === 0) return;
-    const id = window.setInterval(() => qc.invalidateQueries({ queryKey }), 1500);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveCount, accountId, kind]);
+  // Count of docs still processing — drives the live banner below.
+  const liveCount = (data?.items ?? []).filter(isDocLive).length;
 
   // Auto-apply MoM extraction: when a doc lands with mom_extracted_fields
   // and we haven't already consumed it for THIS doc (localStorage flag),
