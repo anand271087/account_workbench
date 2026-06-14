@@ -741,14 +741,27 @@ function DocumentRow({
         <div className="flex gap-3 shrink-0">
           {/* 04-Jun bug — Download the source file via a signed 5-min URL
               from /api/v1/documents/:id/download-url. Click triggers a
-              fresh fetch each time (URLs expire). */}
+              fresh fetch each time (URLs expire).
+              14-Jun fix — was window.open(url), which OPENS the file in a
+              new tab (browser renders .txt/.pdf inline instead of saving).
+              Append Supabase's `download=<filename>` param (forces
+              Content-Disposition: attachment) and click a hidden anchor
+              with the download attr so it saves to disk. */}
           <button
             onClick={async () => {
               try {
                 const r = await api.get<{ url: string }>(
                   `/api/v1/documents/${doc.id}/download-url`,
                 );
-                window.open(r.url, "_blank");
+                const sep = r.url.includes("?") ? "&" : "?";
+                const href = `${r.url}${sep}download=${encodeURIComponent(doc.filename)}`;
+                const a = document.createElement("a");
+                a.href = href;
+                a.download = doc.filename;
+                a.rel = "noopener";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
               } catch (e) {
                 alert(
                   "Couldn't fetch the download link: " +
