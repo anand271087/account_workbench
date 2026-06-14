@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import asc, cast, desc, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, defer
 
 from app.core.deps import CurrentUser
 from app.core.rbac import (
@@ -105,6 +105,26 @@ async def list_accounts(
         .where(Account.deleted_at.is_(None))
         .outerjoin(csm_alias, csm_alias.id == Account.csm_user_id)
         .outerjoin(co_alias, co_alias.id == Account.co_user_id)
+        # 14-Jun PERF — the list renders scalar columns only, but
+        # select(Account) hydrated every heavy JSONB blob per row
+        # (platform_intel analytics, success_contract, VDD, delivery_renewal,
+        # …). On 200 rows that's the bulk of the ~4s list latency. Defer
+        # them so they never leave the DB for the list. AccountListItem
+        # touches none of these — verified field-by-field.
+        .options(
+            defer(Account.platform_intel),
+            defer(Account.success_contract),
+            defer(Account.value_delivery_document),
+            defer(Account.delivery_renewal),
+            defer(Account.handover_quality_check),
+            defer(Account.cs_handover_checklist),
+            defer(Account.cs_stakeholders),
+            defer(Account.cs_handoff),
+            defer(Account.gate_module_configs),
+            defer(Account.gate_contract_extras),
+            defer(Account.plan_mode_history),
+            defer(Account.escalations),
+        )
     )
 
     # Visibility scope (matrix-aligned).
@@ -499,6 +519,22 @@ async def export_accounts_csv(
         .where(Account.deleted_at.is_(None))
         .outerjoin(csm_alias, csm_alias.id == Account.csm_user_id)
         .outerjoin(co_alias, co_alias.id == Account.co_user_id)
+        # 14-Jun PERF — CSV writes scalar columns only; defer the heavy
+        # JSONB blobs (same set as the list query) to cut export latency.
+        .options(
+            defer(Account.platform_intel),
+            defer(Account.success_contract),
+            defer(Account.value_delivery_document),
+            defer(Account.delivery_renewal),
+            defer(Account.handover_quality_check),
+            defer(Account.cs_handover_checklist),
+            defer(Account.cs_stakeholders),
+            defer(Account.cs_handoff),
+            defer(Account.gate_module_configs),
+            defer(Account.gate_contract_extras),
+            defer(Account.plan_mode_history),
+            defer(Account.escalations),
+        )
     )
     role = user.role
     if role == "commercial_owner":
