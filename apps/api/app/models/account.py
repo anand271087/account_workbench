@@ -21,6 +21,12 @@ class Account(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    # 14-Jun — 'manual' (Create Account modal) or 'import' (bulk XLSX).
+    # Drives the CS Onboarding default entry type (manual→A, import→B).
+    # Migration 0081.
+    created_via: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'manual'")
+    )
     industry: Mapped[str | None] = mapped_column(String, nullable=True)
     region: Mapped[str | None] = mapped_column(String, nullable=True)
     country: Mapped[str | None] = mapped_column(String, nullable=True)

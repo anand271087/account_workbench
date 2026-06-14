@@ -1391,12 +1391,19 @@ export default function CSOnboardingTab() {
     },
   });
 
-  // Auto-default entry: signed → A, else → B (one-shot)
+  // Auto-default entry (one-shot, only when none set yet):
+  //   • signed account            → A (clean Sales handoff)
+  //   • else created via Create   → A (will go through the normal flow)
+  //   • else bulk-imported (XLSX)  → B (mid-contract pickup)
+  // 14-Jun — switched from purely gate_signed to creation-origin so
+  // manually-created accounts start on A and imported ones on B.
   useEffect(() => {
     if (!data || data.cs_entry_type || !data.is_editable || patch.isPending) return;
-    patch.mutate({ cs_entry_type: account.gate_signed ? "A" : "B" });
+    const next =
+      account.gate_signed || account.created_via !== "import" ? "A" : "B";
+    patch.mutate({ cs_entry_type: next });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, account.gate_signed]);
+  }, [data, account.gate_signed, account.created_via]);
 
   const [realignModalOpen, setRealignModalOpen] = useState(false);
   const [editingRealign, setEditingRealign] = useState(false);

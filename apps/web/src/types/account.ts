@@ -137,6 +137,9 @@ export interface AccountDetail {
   // CS Onboarding (M14)
   cs_entry_type: "A" | "B" | null;
   can_view_cs_onboarding: boolean;
+  // 14-Jun — creation origin: "manual" (Create Account modal) or "import"
+  // (bulk XLSX). CS Onboarding defaults entry A (manual) vs B (import).
+  created_via: "manual" | "import";
 }
 
 export interface ActivityItem {

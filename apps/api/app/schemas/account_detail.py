@@ -119,6 +119,10 @@ class AccountDetail(BaseModel):
     cs_entry_type: str | None = None
     can_view_cs_onboarding: bool = True
 
+    # 14-Jun — how the account was created: 'manual' (Create Account modal)
+    # or 'import' (bulk XLSX). CS Onboarding defaults entry A vs B from it.
+    created_via: str = "manual"
+
     model_config = {"from_attributes": True}
 
 
