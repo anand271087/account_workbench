@@ -35,6 +35,8 @@ _CACHE: dict[UUID, tuple[float, dict]] = {}
 _TTL_SECONDS = 30.0
 _FIELDS = (
     "id", "name", "slug", "industry", "region", "country",
+    # 14-Jun — creation origin ('manual'/'import'); drives CS entry default.
+    "created_via",
     # M16.1 — header chips applied from MoM extraction. `headquarters`
     # dropped 12-Jun (migration 0075).
     "annual_revenue_text", "sf_link",

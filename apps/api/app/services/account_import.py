@@ -366,7 +366,9 @@ async def apply_import(
 
         # Build the new account row.
         slug = await _unique_slug(db, _slugify(norm))
-        new_acc = Account(name=norm, slug=slug)
+        # 14-Jun — mark bulk-imported accounts so CS Onboarding defaults
+        # them to Entry B (mid-contract pickup); Create-Account stays 'manual'.
+        new_acc = Account(name=norm, slug=slug, created_via="import")
         for attr, val in row.fields.items():
             setattr(new_acc, attr, val)
         # Hard default for the boolean-not-null columns when source was blank.
